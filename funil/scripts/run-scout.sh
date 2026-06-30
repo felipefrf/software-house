@@ -1,6 +1,6 @@
 #!/bin/bash
 # Roda Scout diariamente via cron
-# Crontab: 0 9 * * * /path/to/ai-agency/scripts/run-scout.sh
+# Crontab: 0 9 * * * /path/to/funil/scripts/run-scout.sh
 
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

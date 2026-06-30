@@ -5,7 +5,7 @@ Sistema de prospecção de médicos e advogados em Salvador (BA) para vendevolvi
 ## Estrutura
 
 ```
-ai-agency/
+funil/
 ├── prompts/
 │   ├── scout.md         # Prompt do agente Scout (busca)
 │   └── diagnoser.md     # Prompt do agente Diagnoser (diagnóstico + mensagem)
@@ -63,7 +63,7 @@ python scripts/scout.py --niche all --limit 50 --min-score 7
 ```bash
 crontab -e
 # Adicione:
-0 9 * * * /caminho/para/ai-agency/scripts/run-scout.sh
+0 9 * * * /caminho/para/funil/scripts/run-scout.sh
 ```
 
 ## Fluxo de trabalho

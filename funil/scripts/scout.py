@@ -45,7 +45,7 @@ def load_env(env_path: Path) -> None:
         os.environ.setdefault(key, value)
 
 
-# Carrega .env do diretório raiz do projeto (ai-agency/.env)
+# Carrega .env do diretório raiz do projeto (funil/.env)
 load_env(Path(__file__).resolve().parent.parent / ".env")
 
 STATE_DIR = Path(__file__).resolve().parent.parent / "state"
@@ -54,16 +54,16 @@ LEADS_CSV = STATE_DIR / "leads.csv"
 # Nichos e keywords para busca no Instagram
 NICHE_KEYWORDS = {
     "medico": [
-        "dermatologista salvador",
-        "psiquiatra salvador",
-        "ortopedista salvador",
-        "cardiologista salvador",
-        "nutricionista salvador",
-        "fisioterapeuta salvador",
-        "dentista salvador",
-        "psicologo salvador",
-        "endocrinologista salvador",
-        "pediatra salvador",
+        "dermatologista salvador bahia",
+        "psiquiatra salvador bahia",
+        "ortopedista salvador bahia",
+        "cardiologista salvador bahia",
+        "endocrinologista salvador bahia",
+        "pediatra salvador bahia",
+        "dentista salvador bahia",
+        "nutricionista salvador bahia",
+        "fisioterapeuta salvador bahia",
+        "clinica salvador bahia",
     ],
     "advogado": [
         "advogado trabalhista salvador",
@@ -249,6 +249,31 @@ def process_leads(
 
         # Skip > 100k followers
         if followers > 100000:
+            continue
+
+        # Filtro anti "El Salvador" país / outras cidades homônimas
+        bio_lower_full = bio.lower()
+        name_lower = full_name.lower()
+        handle_lower = handle.lower()
+        reject_signals = [
+            "el salvador",                # país
+            "aguascalientes",             # México
+            "san salvador",               # El Salvador capital
+            "san salvador",
+            "mexico", "méxico", "mexicano",
+            "españa", "espanha", "madrid",
+            "guatemala", "honduras", "nicaragua",
+        ]
+        combined = f"{bio_lower_full} {name_lower} {handle_lower}"
+        if any(sig in combined for sig in reject_signals):
+            continue
+        # Sem sinal de Brasil/Salvador-Bahia também rejeita (evita falsos positivos)
+        include_signals = [
+            "salvador", "bahia", "ba", "ssa",
+            "brasil", "br", "@71", "(71)",
+            "barra", "pituba", "itapuã", "itororó",
+        ]
+        if not any(sig in combined for sig in include_signals):
             continue
 
         # Skip profiles with no recent activity (heuristic)
