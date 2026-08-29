@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Império Logística — Direções visuais</title>
+  <style>
+    :root {
+      --canvas: #f4f6f3;
+      --surface: #ffffff;
+      --surface-2: #eef2ef;
+      --ink: #142322;
+      --muted: #687473;
+      --line: #dce3df;
+      --primary: #0f766e;
+      --primary-soft: #dff3ee;
+      --signal: #ff6846;
+      --signal-soft: #fff0eb;
+      --warning: #f1c75b;
+      --blue: #3478f6;
+      --radius: 12px;
+      --shadow: 0 18px 54px rgba(21, 43, 41, .08);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--canvas);
+      color: var(--ink);
+      font-family: "Avenir Next", Avenir, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 14px;
+    }
+    button, input { font: inherit; }
+    button { color: inherit; }
+    .screen { min-height: 100vh; display: none; }
+    body[data-variant="calm"] .calm,
+    body[data-variant="ledger"] .ledger,
+    body[data-variant="route"] .route { display: grid; }
+    .prototype {
+      align-items: center;
+      background: #173b37;
+      color: #fff;
+      display: flex;
+      font: 700 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      height: 26px;
+      justify-content: center;
+      letter-spacing: .12em;
+      position: fixed;
+      inset: 0 0 auto 0;
+      z-index: 20;
+    }
+    body.capture .prototype { display: none; }
+    body:not(.capture) .screen { padding-top: 26px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums; }
+    .eyebrow { color: var(--muted); font: 700 10px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .12em; text-transform: uppercase; }
+    .logo-mark { width: 28px; height: 28px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 3px; transform: rotate(45deg); }
+    .logo-mark span { background: currentColor; border-radius: 2px; }
+    .nav-icon { width: 18px; height: 18px; display: inline-grid; place-items: center; color: var(--muted); }
+    .nav-icon::before { content: ""; width: 7px; height: 7px; border: 1.6px solid currentColor; border-radius: 2px; box-shadow: 5px 5px 0 -1px var(--surface), 5px 5px 0 0 currentColor; }
+    .badge { align-items: center; border-radius: 999px; display: inline-flex; gap: 6px; font-size: 11px; font-weight: 700; padding: 5px 9px; white-space: nowrap; }
+    .badge::before { background: currentColor; border-radius: 50%; content: ""; height: 6px; width: 6px; }
+    .ok { background: #e2f5e9; color: #217449; }
+    .warn { background: #fff2d1; color: #87610a; }
+    .danger { background: var(--signal-soft); color: #bd492f; }
+    .route-badge { background: #e6eefc; color: #245fb8; }
+    .ghost { background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; font-weight: 700; }
+    .primary { background: var(--ink); border: 0; border-radius: 8px; color: #fff; padding: 9px 14px; font-weight: 800; }
+    .avatar { align-items: center; background: var(--ink); border-radius: 50%; color: #fff; display: flex; font-size: 11px; font-weight: 800; height: 30px; justify-content: center; width: 30px; }
+    .status-dot { background: currentColor; border-radius: 50%; display: inline-block; height: 7px; width: 7px; }
+
+    /* Variant A: calm control */
+    .calm { grid-template-columns: 208px minmax(780px, 1fr) 330px; background: #f6f7f5; }
+    .calm .side { background: #f0f2f0; border-right: 1px solid var(--line); padding: 22px 14px; }
+    .brand { align-items: center; display: flex; gap: 12px; font-size: 15px; font-weight: 900; padding: 0 8px 28px; }
+    .brand .logo-mark { color: var(--primary); height: 22px; width: 22px; }
+    .nav-group { margin-bottom: 24px; }
+    .nav-title { color: #8c9694; font-size: 10px; font-weight: 700; padding: 0 10px 8px; text-transform: uppercase; }
+    .nav-item { align-items: center; border-radius: 8px; display: flex; gap: 10px; margin: 2px 0; padding: 9px 10px; }
+    .nav-item.active { background: #fff; box-shadow: 0 1px 2px rgba(19, 35, 34, .07); font-weight: 800; }
+    .nav-item.active .nav-icon { color: var(--primary); }
+    .side-footer { bottom: 18px; position: absolute; width: 176px; }
+    .integration { background: #e7eeeb; border-radius: 10px; padding: 12px; }
+    .integration strong { display: block; font-size: 11px; margin-bottom: 4px; }
+    .integration span { color: var(--muted); font-size: 10px; }
+    .calm .main { min-width: 0; padding: 20px 24px 28px; }
+    .topbar { align-items: center; display: flex; gap: 14px; justify-content: space-between; }
+    .crumb { color: var(--muted); font-size: 12px; }
+    .crumb strong { color: var(--ink); }
+    .search { align-items: center; background: #fff; border: 1px solid var(--line); border-radius: 8px; color: #8b9594; display: flex; height: 36px; padding: 0 12px; width: 320px; }
+    .search::before { border: 1.5px solid currentColor; border-radius: 50%; content: ""; height: 10px; margin-right: 9px; width: 10px; }
+    .page-head { align-items: flex-end; display: flex; justify-content: space-between; margin: 30px 0 20px; }
+    h1, h2, h3, p { margin: 0; }
+    .page-head h1 { font-size: 30px; letter-spacing: -.035em; }
+    .page-head p { color: var(--muted); margin-top: 6px; }
+    .metrics { display: grid; gap: 10px; grid-template-columns: repeat(4, 1fr); margin-bottom: 10px; }
+    .metric { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
+    .metric .value { font-size: 28px; font-weight: 850; letter-spacing: -.04em; margin-top: 8px; }
+    .metric .hint { color: var(--muted); font-size: 11px; margin-top: 3px; }
+    .metric.critical { background: #fff8f5; border-color: #f5d5cb; }
+    .metric.critical .value { color: #bf4e36; }
+    .panel { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+    .panel-head { align-items: center; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; min-height: 58px; padding: 13px 16px; }
+    .panel-head h2 { font-size: 15px; }
+    .filters { display: flex; gap: 7px; }
+    .filter { background: #fff; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); padding: 6px 9px; font-size: 11px; }
+    .filter.active { background: var(--ink); border-color: var(--ink); color: #fff; }
+    .operation-list { display: grid; }
+    .operation { align-items: center; border-bottom: 1px solid var(--line); display: grid; gap: 14px; grid-template-columns: 70px minmax(210px, 1.1fr) minmax(165px, .8fr) 125px 28px; min-height: 82px; padding: 12px 16px; position: relative; }
+    .operation:last-child { border-bottom: 0; }
+    .operation.selected { background: #f0f8f5; }
+    .operation.selected::before { background: var(--primary); content: ""; inset: 0 auto 0 0; position: absolute; width: 3px; }
+    .time { font-size: 19px; font-weight: 850; }
+    .event-name { font-size: 13px; font-weight: 800; }
+    .place, .meta { color: var(--muted); font-size: 11px; margin-top: 5px; }
+    .crew { align-items: center; display: flex; gap: 8px; }
+    .crew .avatar { background: #dceae6; color: var(--primary); height: 26px; width: 26px; }
+    .next { font-size: 11px; font-weight: 750; line-height: 1.35; }
+    .arrow { color: var(--muted); font-size: 19px; }
+    .calm .context { background: #fff; border-left: 1px solid var(--line); padding: 20px; }
+    .context-head { align-items: center; display: flex; justify-content: space-between; }
+    .context-head h2 { font-size: 14px; }
+    .close { color: var(--muted); }
+    .context-event { padding: 28px 0 20px; }
+    .context-event h3 { font-size: 22px; letter-spacing: -.025em; margin: 8px 0 7px; }
+    .context-event p { color: var(--muted); font-size: 12px; }
+    .next-action { background: #f3c85d; border-radius: 12px; margin: 4px 0 22px; padding: 16px; }
+    .next-action .eyebrow { color: #64501b; }
+    .next-action strong { display: block; font-size: 15px; line-height: 1.3; margin: 7px 0 13px; }
+    .next-action button { background: #182522; border: 0; border-radius: 7px; color: white; padding: 8px 10px; font-size: 11px; font-weight: 800; }
+    .timeline { margin: 8px 0 22px 7px; }
+    .milestone { border-left: 1px solid var(--line); padding: 0 0 20px 22px; position: relative; }
+    .milestone:last-child { border-left-color: transparent; }
+    .milestone::before { background: #fff; border: 2px solid #aeb8b5; border-radius: 50%; content: ""; height: 9px; left: -6px; position: absolute; top: 2px; width: 9px; }
+    .milestone.done::before { background: var(--primary); border-color: var(--primary); }
+    .milestone.current::before { background: var(--signal); border-color: #fff; box-shadow: 0 0 0 3px #ffd9d0; }
+    .milestone small { color: var(--muted); font: 10px ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .milestone strong { display: block; font-size: 12px; margin-top: 3px; }
+    .data-pair { border-top: 1px solid var(--line); display: grid; grid-template-columns: 1fr 1fr; padding: 14px 0; }
+    .data-pair span { color: var(--muted); font-size: 10px; }
+    .data-pair strong { display: block; font-size: 11px; margin-top: 3px; }
+
+    /* Variant B: dispatch ledger */
+    .ledger { background: #f2f3f0; grid-template-columns: 76px 1fr; }
+    .ledger .rail { align-items: center; background: #183f48; color: #fff; display: flex; flex-direction: column; padding: 20px 10px; }
+    .ledger .rail .logo-mark { color: #f3c85d; height: 24px; width: 24px; }
+    .rail-nav { display: grid; gap: 12px; margin-top: 56px; }
+    .rail-nav span { align-items: center; border-radius: 10px; color: #91abb0; display: flex; font-size: 10px; font-weight: 800; height: 42px; justify-content: center; width: 42px; }
+    .rail-nav .active { background: #fff; color: #183f48; }
+    .ledger .workspace { padding: 18px 22px 24px; }
+    .ledger-top { align-items: center; display: flex; justify-content: space-between; }
+    .ledger-top h1 { font-size: 23px; letter-spacing: -.03em; }
+    .ledger-top .date { align-items: center; background: #fff; border: 1px solid #cfd7d3; border-radius: 9px; display: flex; gap: 10px; padding: 9px 12px; }
+    .dispatch-strip { background: #fff; border: 1px solid #cfd7d3; border-radius: 12px; display: grid; grid-template-columns: 240px repeat(4, 1fr); margin: 18px 0 12px; overflow: hidden; }
+    .dispatch-title { background: #e8eeeb; padding: 17px; }
+    .dispatch-title h2 { font-size: 15px; margin-top: 5px; }
+    .dispatch-stat { border-left: 1px solid #dce2df; padding: 15px; }
+    .dispatch-stat strong { display: block; font-size: 23px; margin-top: 5px; }
+    .ledger-grid { display: grid; gap: 12px; grid-template-columns: minmax(700px, 1fr) 300px; }
+    .ledger-card { background: #fff; border: 1px solid #cfd7d3; border-radius: 12px; overflow: hidden; }
+    .ledger-card-head { align-items: center; border-bottom: 1px solid #dce2df; display: flex; justify-content: space-between; padding: 14px 16px; }
+    .ledger-table-head, .ledger-row { align-items: center; display: grid; grid-template-columns: 72px 1.3fr .8fr .7fr .75fr 24px; padding: 0 16px; }
+    .ledger-table-head { background: #f5f6f4; color: #7c8785; font-size: 9px; font-weight: 800; height: 34px; text-transform: uppercase; }
+    .ledger-row { border-top: 1px solid #e3e7e5; min-height: 76px; }
+    .ledger-row.selected { background: #edf7f5; box-shadow: inset 4px 0 #0b7d73; }
+    .ledger-row .clock { font: 800 17px ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .ledger-row .title { font-size: 12px; font-weight: 800; }
+    .ledger-row .sub { color: #71807d; font-size: 10px; margin-top: 5px; }
+    .plate { background: #edf0ee; border-radius: 5px; display: inline-block; font: 700 9px ui-monospace, SFMono-Regular, Menlo, monospace; margin-top: 5px; padding: 3px 5px; }
+    .critical-panel { background: #fff; border: 1px solid #cfd7d3; border-radius: 12px; padding: 16px; }
+    .critical-panel h2 { font-size: 14px; }
+    .alert-block { background: #fff0ea; border-left: 3px solid #e75838; border-radius: 7px; margin: 15px 0; padding: 13px; }
+    .alert-block strong { display: block; font-size: 12px; line-height: 1.3; }
+    .alert-block p { color: #8e5447; font-size: 10px; line-height: 1.4; margin-top: 5px; }
+    .window { border-top: 1px solid #e0e5e2; padding: 14px 0; }
+    .window .bar { background: #e8ecea; border-radius: 4px; height: 7px; margin-top: 9px; overflow: hidden; }
+    .window .bar span { background: #f1c75b; display: block; height: 100%; width: 76%; }
+    .window-row { align-items: baseline; display: flex; justify-content: space-between; }
+    .window-row strong { font-size: 12px; }
+    .window-row span { color: #687473; font-size: 10px; }
+    .route-mini { border-top: 1px solid #e0e5e2; padding-top: 15px; }
+    .route-line { align-items: center; display: flex; margin-top: 10px; }
+    .route-line i { background: #0f766e; border-radius: 50%; height: 8px; width: 8px; }
+    .route-line span { background: #cfdad6; height: 2px; flex: 1; }
+    .route-line i:last-child { background: #fff; border: 2px solid #92a29e; height: 10px; width: 10px; }
+
+    /* Variant C: route canvas */
+    .route { background: #eef3f1; grid-template-rows: 64px 1fr; }
+    .route .header { align-items: center; background: #fff; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; padding: 0 22px; }
+    .route .header .brand { padding: 0; }
+    .header-center { align-items: center; display: flex; gap: 8px; }
+    .header-center button { background: transparent; border: 0; border-radius: 7px; color: var(--muted); padding: 8px 11px; }
+    .header-center .active { background: #edf4f1; color: var(--ink); font-weight: 800; }
+    .header-actions { align-items: center; display: flex; gap: 9px; }
+    .route .board { display: grid; grid-template-columns: minmax(780px, 1fr) 340px; min-height: 0; }
+    .map-canvas { overflow: hidden; padding: 24px; position: relative; }
+    .map-canvas::before { background-image: linear-gradient(#dfe7e3 1px, transparent 1px), linear-gradient(90deg, #dfe7e3 1px, transparent 1px); background-size: 34px 34px; content: ""; inset: 0; opacity: .65; position: absolute; }
+    .map-head { align-items: flex-start; display: flex; justify-content: space-between; position: relative; z-index: 1; }
+    .map-head h1 { font-size: 32px; letter-spacing: -.04em; }
+    .map-head p { color: var(--muted); margin-top: 6px; }
+    .map-actions { background: #fff; border: 1px solid var(--line); border-radius: 9px; display: flex; padding: 3px; }
+    .map-actions button { background: transparent; border: 0; border-radius: 6px; color: var(--muted); padding: 7px 10px; }
+    .map-actions .active { background: var(--ink); color: #fff; }
+    .journey { height: 500px; margin-top: 18px; position: relative; z-index: 1; }
+    .journey-line { border-top: 3px dashed #9eb5ae; left: 7%; position: absolute; right: 8%; top: 52%; transform: rotate(-4deg); }
+    .stop { background: #fff; border: 1px solid #d4ded9; border-radius: 12px; box-shadow: 0 14px 30px rgba(20, 44, 40, .08); padding: 14px; position: absolute; width: 210px; }
+    .stop::after { background: #fff; border: 4px solid var(--primary); border-radius: 50%; bottom: -31px; content: ""; height: 12px; left: 25px; position: absolute; width: 12px; }
+    .stop h3 { font-size: 13px; margin: 7px 0 4px; }
+    .stop p { color: var(--muted); font-size: 10px; line-height: 1.4; }
+    .stop-one { left: 3%; top: 41%; }
+    .stop-two { left: 35%; top: 24%; }
+    .stop-two::after { border-color: #3478f6; }
+    .stop-three { right: 4%; top: 42%; }
+    .stop-three::after { border-color: #f1b735; }
+    .moving { background: var(--ink); border-radius: 8px; color: white; font: 800 10px ui-monospace, SFMono-Regular, Menlo, monospace; left: 57%; padding: 8px 10px; position: absolute; top: 50%; transform: translateY(-50%) rotate(-4deg); }
+    .route .focus { background: #fff; border-left: 1px solid var(--line); padding: 20px; }
+    .focus-top { align-items: center; display: flex; justify-content: space-between; }
+    .focus-card { background: #173f3a; border-radius: 14px; color: white; margin: 20px 0 12px; overflow: hidden; }
+    .focus-card > div { padding: 17px; }
+    .focus-card .eyebrow { color: #9bc5bd; }
+    .focus-card h2 { font-size: 20px; line-height: 1.15; margin: 8px 0 7px; }
+    .focus-card p { color: #c4d7d3; font-size: 11px; }
+    .focus-card .eta { background: #0f766e; display: grid; grid-template-columns: 1fr 1fr; }
+    .focus-card .eta div + div { border-left: 1px solid rgba(255,255,255,.22); padding-left: 14px; }
+    .focus-card .eta strong { display: block; font-size: 22px; margin-top: 4px; }
+    .task { align-items: center; border: 1px solid var(--line); border-radius: 10px; display: grid; gap: 11px; grid-template-columns: 28px 1fr auto; margin-top: 8px; padding: 11px; }
+    .task .number { align-items: center; background: #edf2f0; border-radius: 7px; display: flex; font: 800 10px ui-monospace, SFMono-Regular, Menlo, monospace; height: 28px; justify-content: center; }
+    .task strong { display: block; font-size: 11px; }
+    .task span { color: var(--muted); font-size: 9px; }
+
+    @media (max-width: 1100px) {
+      .calm { grid-template-columns: 74px minmax(650px, 1fr) 290px; }
+      .calm .side { padding-inline: 10px; }
+      .calm .brand strong, .calm .nav-item span, .calm .nav-title, .calm .side-footer { display: none; }
+      .calm .brand { justify-content: center; padding-inline: 0; }
+      .calm .nav-item { justify-content: center; }
+      .metrics { grid-template-columns: repeat(2, 1fr); }
+      .operation { grid-template-columns: 62px 1fr 120px 24px; }
+      .operation .crew { display: none; }
+      .ledger-grid { grid-template-columns: 1fr 270px; }
+      .ledger-row, .ledger-table-head { grid-template-columns: 68px 1.2fr .7fr .7fr 22px; }
+      .ledger-row > :nth-child(4), .ledger-table-head > :nth-child(4) { display: none; }
+    }
+
+    @media (max-width: 700px) {
+      .prototype { font-size: 8px; }
+      .calm { display: block !important; }
+      body:not([data-variant="calm"]) .calm { display: none !important; }
+      .calm .side, .calm .context { display: none; }
+      .calm .main { padding: 16px 14px 92px; }
+      .topbar .crumb, .search { display: none; }
+      .topbar::before { content: "IMPÉRIO / LOGÍSTICA"; font: 800 10px ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .1em; }
+      .page-head { align-items: flex-start; margin: 20px 0 14px; }
+      .page-head h1 { font-size: 27px; }
+      .page-head p { max-width: 230px; font-size: 12px; line-height: 1.35; }
+      .page-head .ghost { display: none; }
+      .metrics { display: flex; gap: 8px; margin: 0 -14px 10px; overflow-x: auto; padding: 0 14px 4px; }
+      .metric { flex: 0 0 142px; padding: 13px; }
+      .metric .value { font-size: 24px; }
+      .panel { border-radius: 12px; }
+      .panel-head { align-items: flex-start; flex-direction: column; gap: 10px; }
+      .filters { width: 100%; }
+      .filter { flex: 1; }
+      .operation { align-items: flex-start; gap: 8px 11px; grid-template-columns: 56px 1fr auto; min-height: 100px; padding: 14px; }
+      .operation .crew, .operation > :nth-child(4) { display: none; }
+      .operation .arrow { grid-column: 3; grid-row: 1 / span 2; }
+      .time { font-size: 17px; }
+      .mobile-action { align-items: center; background: #fff; border-top: 1px solid var(--line); bottom: 0; display: flex !important; gap: 10px; inset-inline: 0; padding: 12px 14px calc(12px + env(safe-area-inset-bottom)); position: fixed; z-index: 12; }
+      .mobile-action button { background: var(--ink); border: 0; border-radius: 9px; color: #fff; flex: 1; font-weight: 800; padding: 13px; }
+      .mobile-action .mini { background: #eef3f1; color: var(--ink); flex: 0 0 48px; }
+      .ledger, .route { display: none !important; }
+    }
+    .mobile-action { display: none; }
+  </style>
+</head>
+<body data-variant="calm">
+  <div class="prototype">PROTÓTIPO VISUAL · DADOS DE EXEMPLO · ALTERE ?variant=calm, ledger OU route</div>
+
+  <section class="screen calm" aria-label="Direção A: Clareza operacional">
+    <aside class="side">
+      <div class="brand"><span class="logo-mark"><span></span><span></span><span></span><span></span></span><strong>Império</strong></div>
+      <nav>
+        <div class="nav-group">
+          <div class="nav-item active"><i class="nav-icon"></i><span>Hoje</span></div>
+          <div class="nav-item"><i class="nav-icon"></i><span>Operações</span></div>
+          <div class="nav-item"><i class="nav-icon"></i><span>Calendário</span></div>
+        </div>
+        <div class="nav-group">
+          <div class="nav-title">Recursos</div>
+          <div class="nav-item"><i class="nav-icon"></i><span>Equipes</span></div>
+          <div class="nav-item"><i class="nav-icon"></i><span>Frota</span></div>
+          <div class="nav-item"><i class="nav-icon"></i><span>Ocorrências</span></div>
+        </div>
+        <div class="nav-group">
+          <div class="nav-title">Sistema</div>
+          <div class="nav-item"><i class="nav-icon"></i><span>Integrações</span></div>
+          <div class="nav-item"><i class="nav-icon"></i><span>Cadastros</span></div>
+        </div>
+      </nav>
+      <div class="side-footer"><div class="integration"><strong>EstoqueNOW</strong><span>Última leitura 08:42</span></div></div>
+    </aside>
+
+    <main class="main">
+      <div class="topbar">
+        <div class="crumb">Logística / <strong>Torre de controle</strong></div>
+        <div class="search">Buscar evento, equipe ou veículo</div>
+        <div class="avatar">FM</div>
+      </div>
+      <header class="page-head">
+        <div><div class="eyebrow">Sexta-feira, 28 de agosto</div><h1>Operação de hoje</h1><p>Priorize bloqueios e mantenha cada equipe no próximo marco.</p></div>
+        <button class="ghost">Ver calendário</button>
+      </header>
+      <div class="metrics">
+        <div class="metric"><div class="eyebrow">Operações</div><div class="value">12</div><div class="hint">8 em andamento</div></div>
+        <div class="metric"><div class="eyebrow">No horário</div><div class="value">9</div><div class="hint">75% do turno</div></div>
+        <div class="metric critical"><div class="eyebrow">Pedem atenção</div><div class="value">2</div><div class="hint">1 bloqueio crítico</div></div>
+        <div class="metric"><div class="eyebrow">Retornos</div><div class="value">3</div><div class="hint">Até 19:30</div></div>
+      </div>
+      <section class="panel">
+        <div class="panel-head"><h2>Despachos do período</h2><div class="filters"><button class="filter active">Todos</button><button class="filter">Atenção 2</button><button class="filter">Em rota 3</button></div></div>
+        <div class="operation-list">
+          <article class="operation selected"><div><div class="eyebrow">Saída</div><div class="time mono">09:20</div></div><div><span class="badge danger">Atenção</span><div class="event-name">Festival de Inverno — Estrutura principal</div><div class="place">Parque de Exposições · Salvador</div></div><div class="crew"><span class="avatar">LA</span><div><div class="event-name">Lívia Alves</div><div class="meta">Equipe Norte · 5 pessoas</div></div></div><div><div class="eyebrow">Próximo marco</div><div class="next">Liberar carga e registrar saída</div></div><div class="arrow">›</div></article>
+          <article class="operation"><div><div class="eyebrow">Saída</div><div class="time mono">10:05</div></div><div><span class="badge route-badge">Em rota</span><div class="event-name">Congresso Bahia 2026 — Lounge</div><div class="place">Centro de Convenções · Salvador</div></div><div class="crew"><span class="avatar">RC</span><div><div class="event-name">Rafael Costa</div><div class="meta">Equipe Sul · 4 pessoas</div></div></div><div><div class="eyebrow">Próximo marco</div><div class="next">Confirmar chegada ao local</div></div><div class="arrow">›</div></article>
+          <article class="operation"><div><div class="eyebrow">Saída</div><div class="time mono">11:40</div></div><div><span class="badge warn">Preparação</span><div class="event-name">Casamento Marina & Pedro</div><div class="place">Solar do Unhão · Salvador</div></div><div class="crew"><span class="avatar">CS</span><div><div class="event-name">Camila Souza</div><div class="meta">Equipe Centro · 6 pessoas</div></div></div><div><div class="eyebrow">Próximo marco</div><div class="next">Concluir checklist de carga</div></div><div class="arrow">›</div></article>
+          <article class="operation"><div><div class="eyebrow">Retorno</div><div class="time mono">13:15</div></div><div><span class="badge ok">Montagem</span><div class="event-name">Encontro de Franquias — Auditório</div><div class="place">Hotel Atlântico · Lauro de Freitas</div></div><div class="crew"><span class="avatar">MB</span><div><div class="event-name">Mateus Brito</div><div class="meta">Equipe Leste · 3 pessoas</div></div></div><div><div class="eyebrow">Próximo marco</div><div class="next">Coletar aceite do responsável</div></div><div class="arrow">›</div></article>
+        </div>
+      </section>
+    </main>
+
+    <aside class="context">
+      <div class="context-head"><h2>Operação selecionada</h2><span class="close">×</span></div>
+      <div class="context-event"><div class="eyebrow">Pedido #1048</div><h3>Festival de Inverno</h3><p>Parque de Exposições · Portão C</p></div>
+      <div class="next-action"><div class="eyebrow">Ação necessária</div><strong>Janela de carga encerra em 38 minutos.</strong><button>Abrir operação</button></div>
+      <div class="timeline">
+        <div class="milestone done"><small>08:12</small><strong>Preparação iniciada</strong></div>
+        <div class="milestone current"><small>Agora</small><strong>Conferência da saída</strong></div>
+        <div class="milestone"><small>09:20</small><strong>Deslocamento</strong></div>
+        <div class="milestone"><small>10:05</small><strong>Chegada e montagem</strong></div>
+      </div>
+      <div class="data-pair"><div><span>Veículo</span><strong>VUC 03 · RPK-4E21</strong></div><div><span>Motorista</span><strong>João Nascimento</strong></div></div>
+      <div class="data-pair"><div><span>Equipe</span><strong>Norte · 5 pessoas</strong></div><div><span>Contato local</span><strong>Ana · (71) 9••••-0182</strong></div></div>
+    </aside>
+    <div class="mobile-action"><button class="mini">Hoje</button><button>Abrir operação selecionada</button></div>
+  </section>
+
+  <section class="screen ledger" aria-label="Direção B: Mesa de despacho">
+    <aside class="rail"><span class="logo-mark"><span></span><span></span><span></span><span></span></span><div class="rail-nav"><span class="active">HO</span><span>OP</span><span>EQ</span><span>FR</span><span>OC</span></div></aside>
+    <main class="workspace">
+      <div class="ledger-top"><div><div class="eyebrow">Central logística</div><h1>Mesa de despacho</h1></div><div class="date"><span class="mono">28 AGO 2026</span><button class="primary">Nova operação</button></div></div>
+      <section class="dispatch-strip"><div class="dispatch-title"><div class="eyebrow">Turno da manhã</div><h2>Capacidade operacional</h2></div><div class="dispatch-stat"><div class="eyebrow">Eventos</div><strong>12</strong></div><div class="dispatch-stat"><div class="eyebrow">Equipes livres</div><strong>3</strong></div><div class="dispatch-stat"><div class="eyebrow">Veículos ativos</div><strong>7</strong></div><div class="dispatch-stat"><div class="eyebrow">Bloqueios</div><strong style="color:#c14d33">2</strong></div></section>
+      <div class="ledger-grid">
+        <section class="ledger-card"><div class="ledger-card-head"><div><div class="eyebrow">Execução</div><h2>Ordem do turno</h2></div><div class="filters"><button class="filter active">Horário</button><button class="filter">Status</button><button class="filter">Equipe</button></div></div><div class="ledger-table-head"><span>Hora</span><span>Evento / local</span><span>Equipe</span><span>Veículo</span><span>Status</span><span></span></div>
+          <div class="ledger-row selected"><div class="clock">09:20</div><div><div class="title">Festival de Inverno</div><div class="sub">Parque de Exposições · Portão C</div></div><div><div class="title">Equipe Norte</div><div class="sub">Lívia + 4</div></div><div><div class="title">VUC 03</div><span class="plate">RPK-4E21</span></div><div><span class="badge danger">Bloqueio</span></div><div>›</div></div>
+          <div class="ledger-row"><div class="clock">10:05</div><div><div class="title">Congresso Bahia 2026</div><div class="sub">Centro de Convenções</div></div><div><div class="title">Equipe Sul</div><div class="sub">Rafael + 3</div></div><div><div class="title">Van 02</div><span class="plate">SGH-9A12</span></div><div><span class="badge route-badge">Em rota</span></div><div>›</div></div>
+          <div class="ledger-row"><div class="clock">11:40</div><div><div class="title">Casamento Marina & Pedro</div><div class="sub">Solar do Unhão</div></div><div><div class="title">Equipe Centro</div><div class="sub">Camila + 5</div></div><div><div class="title">VUC 01</div><span class="plate">QXT-7B94</span></div><div><span class="badge warn">Preparação</span></div><div>›</div></div>
+          <div class="ledger-row"><div class="clock">13:15</div><div><div class="title">Encontro de Franquias</div><div class="sub">Hotel Atlântico</div></div><div><div class="title">Equipe Leste</div><div class="sub">Mateus + 2</div></div><div><div class="title">Van 04</div><span class="plate">PLK-3D08</span></div><div><span class="badge ok">Montagem</span></div><div>›</div></div>
+          <div class="ledger-row"><div class="clock">15:00</div><div><div class="title">Formatura Medicina</div><div class="sub">Arena Fonte Nova</div></div><div><div class="title">A designar</div><div class="sub">6 pessoas</div></div><div><div class="title">VUC 05</div><span class="plate">—</span></div><div><span class="badge warn">Planejado</span></div><div>›</div></div>
+        </section>
+        <aside class="critical-panel"><div class="eyebrow">Foco do despacho</div><h2>Festival de Inverno</h2><div class="alert-block"><strong>Local ainda não liberou a doca</strong><p>Contato confirmou espera mínima de 20 min. A janela termina às 10:00.</p></div><div class="window"><div class="window-row"><strong>Janela de carga</strong><span class="mono">38 min</span></div><div class="bar"><span></span></div></div><div class="window"><div class="window-row"><strong>Checklist de saída</strong><span>8 de 10</span></div><div class="bar"><span style="width:80%;background:#0f766e"></span></div></div><div class="route-mini"><div class="eyebrow">Percurso previsto · 45 min</div><div class="route-line"><i></i><span></span><i></i><span></span><i></i></div><div class="window-row" style="margin-top:7px"><span>Galpão</span><span>Parque de Exposições</span></div></div><button class="primary" style="width:100%;margin-top:24px">Resolver bloqueio</button></aside>
+      </div>
+    </main>
+  </section>
+
+  <section class="screen route" aria-label="Direção C: Mapa de marcos">
+    <header class="header"><div class="brand"><span class="logo-mark"><span></span><span></span><span></span><span></span></span><strong>Império Operações</strong></div><nav class="header-center"><button class="active">Ao vivo</button><button>Agenda</button><button>Equipes</button><button>Ocorrências</button></nav><div class="header-actions"><button class="ghost">EstoqueNOW · 08:42</button><span class="avatar">FM</span></div></header>
+    <div class="board">
+      <main class="map-canvas"><div class="map-head"><div><div class="eyebrow">Visão do turno</div><h1>Onde cada operação está</h1><p>Um mapa de marcos, não apenas de endereços.</p></div><div class="map-actions"><button class="active">Fluxo</button><button>Mapa</button><button>Lista</button></div></div>
+        <div class="journey"><div class="journey-line"></div>
+          <article class="stop stop-one"><span class="badge danger">Atenção</span><h3>Festival de Inverno</h3><p>Saída · 09:20<br>Equipe Norte · VUC 03</p></article>
+          <article class="stop stop-two"><span class="badge route-badge">Em rota</span><h3>Congresso Bahia 2026</h3><p>ETA · 10:36<br>Equipe Sul · Van 02</p></article>
+          <div class="moving">3 EM DESLOCAMENTO</div>
+          <article class="stop stop-three"><span class="badge warn">Preparação</span><h3>Casamento Marina & Pedro</h3><p>Saída · 11:40<br>Checklist 6 de 9</p></article>
+        </div>
+      </main>
+      <aside class="focus"><div class="focus-top"><div><div class="eyebrow">Operação em foco</div><h2 style="margin-top:5px">Congresso Bahia 2026</h2></div><span class="close">×</span></div><div class="focus-card"><div><div class="eyebrow">Deslocamento</div><h2>Equipe Sul a caminho</h2><p>Centro de Convenções · Salvador</p></div><div class="eta"><div><div class="eyebrow">Chegada</div><strong class="mono">10:36</strong></div><div><div class="eyebrow">Distância</div><strong>12 km</strong></div></div></div><div class="eyebrow" style="margin:20px 0 10px">Próximas ações</div><div class="task"><span class="number">01</span><div><strong>Confirmar chegada</strong><span>GPS e horário automáticos</span></div><span>›</span></div><div class="task"><span class="number">02</span><div><strong>Validar acesso ao local</strong><span>Motivo obrigatório se bloqueado</span></div><span>›</span></div><div class="task"><span class="number">03</span><div><strong>Iniciar montagem</strong><span>Cronômetro e checklist</span></div><span>›</span></div><div class="data-pair" style="margin-top:18px"><div><span>Contato</span><strong>Marina · Produção</strong></div><div><span>Veículo</span><strong>Van 02</strong></div></div></aside>
+    </div>
+  </section>
+
+  <script>
+    const params = new URLSearchParams(location.search);
+    const variant = ["calm", "ledger", "route"].includes(params.get("variant")) ? params.get("variant") : "calm";
+    document.body.dataset.variant = variant;
+    if (params.get("capture") === "1") document.body.classList.add("capture");
+  </script>
+</body>
+</html>

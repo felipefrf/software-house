@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "node --test --experimental-strip-types src/app/imperio/logistica/estoquenow.test.ts",
+    "smoke:estoquenow": "node --experimental-strip-types src/app/imperio/logistica/smoke-estoquenow.ts"
   },
   "dependencies": {
     "@vercel/analytics": "^2.0.1",

@@ -1,0 +1,2 @@
+- [ ] Credenciais EstoqueNOW ainda não recebidas — bloqueiam smoke test somente leitura e substituição dos dados sintéticos. Configurar `client_id`/`client_secret` por ambiente quando Maiara enviar.
+- [x] Revisão visual Impeccable concluída no protótipo estático — fluxos desktop/mobile revisados, achados corrigidos e `DESIGN.md` gerado; execução automatizada via `file://` permaneceu indisponível.

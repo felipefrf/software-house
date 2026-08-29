@@ -42,6 +42,11 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+body:has(.imperio-shell) > header,
+body:has(.imperio-shell) > footer {
+  display: none;
+}
+
 ::selection {
   background: rgba(10, 36, 115, 0.15);
   color: var(--foreground);

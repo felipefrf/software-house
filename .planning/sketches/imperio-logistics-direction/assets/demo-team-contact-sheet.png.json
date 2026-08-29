@@ -1,0 +1,7 @@
+{
+  "kind": "generated",
+  "generator": "image_gen",
+  "delivery": "Downscaled to 512px for prototype avatar rendering",
+  "purpose": "Synthetic staff portraits for the Império Logística visual prototype",
+  "prompt": "Use case: photorealistic-natural. Asset type: four-person contact sheet for a logistics operations prototype. Create a clean 2x2 contact sheet of four distinct Brazilian event-logistics professionals, each as an individual square shoulder-up portrait: woman field coordinator in her 30s, man driver in his 40s, woman assembly lead in her 30s, man logistics assistant in his 20s. Neutral pale gray-green workplace background, candid high-end documentary staff photography, natural skin texture, realistic workwear in charcoal, sage and muted violet accents. Exact 2x2 grid, four equal square cells, one person centered per cell, consistent crop and lighting, thin neutral gutters only. Soft daylight, calm, capable, approachable. No text, logos, watermark, helmets, glamour retouching, duplicated faces or extra people. Synthetic demo imagery, not real employees."
+}

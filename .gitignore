@@ -49,3 +49,15 @@ yarn-error.log*
 
 # assets não processados
 /site/logos-olimpiadas/
+.vercel
+.env*
+!site/.env.example
+
+# artefatos locais de ferramentas de design e geração
+/.agents/skills/impeccable/
+/.codex/hooks.json
+/.impeccable/config.local.json
+/.impeccable/mocks/decision/
+/.impeccable/quality-bars/
+/.impeccable/questions/
+/propostas/.tmp-*/
