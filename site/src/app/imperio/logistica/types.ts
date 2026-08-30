@@ -1,12 +1,25 @@
 export type Role = "manager" | "worker";
-export type OperationStage = "preparation" | "departure";
+export type OperationStage =
+  | "preparation"
+  | "departure"
+  | "travel"
+  | "arrival"
+  | "assembly"
+  | "delivery"
+  | "disassembly"
+  | "return"
+  | "inspection";
+export type OperationStatus = "active" | "completed" | "cancelled";
 export type ActionState = "pending" | "confirmed";
 
 export type Person = {
   id: string;
   full_name: string;
   role: Role;
+  job_title: string;
   phone: string | null;
+  availability: "available" | "unavailable";
+  must_change_password: boolean;
 };
 
 export type Team = {
@@ -20,14 +33,16 @@ export type Vehicle = {
   id: string;
   name: string;
   plate: string;
+  vehicle_type: string;
   capacity_label: string | null;
-  status: "available" | "maintenance";
+  status: "available" | "in_use" | "maintenance";
 };
 
 export type OperationEvent = {
   id: string;
   device_action_id: string;
   stage: OperationStage;
+  event_type: "stage_completed" | "arrival_blocked";
   state: "confirmed";
   device_captured_at: string;
   server_received_at: string;
@@ -35,6 +50,10 @@ export type OperationEvent = {
   latitude: number;
   longitude: number;
   accuracy: number;
+  duration_seconds: number | null;
+  arrival_access: "released" | "blocked" | null;
+  arrival_reason: string | null;
+  acceptance_name: string | null;
   note: string | null;
   actor_name: string;
   responsible_name: string;
@@ -49,12 +68,45 @@ export type Operation = {
   destination: string;
   scheduled_at: string;
   stage: OperationStage;
+  status: OperationStatus;
+  stage_started_at: string;
+  completed_at: string | null;
+  cancel_reason: string | null;
   manager_id: string;
   team_id: string | null;
   vehicle_id: string | null;
   driver_id: string | null;
   notes: string | null;
+  imported_at: string | null;
+  waiting_since: string | null;
   events: OperationEvent[];
+};
+
+export type Incident = {
+  id: string;
+  operation_id: string;
+  stage: OperationStage;
+  type: "delay" | "damage" | "missing_item" | "access" | "other";
+  severity: "low" | "medium" | "high";
+  impact: string | null;
+  description: string;
+  status: "open" | "handling" | "resolved";
+  latitude: number | null;
+  longitude: number | null;
+  accuracy: number | null;
+  created_at: string;
+  resolved_at: string | null;
+  actor_name: string;
+  responsible_name: string | null;
+  photo_url: string | null;
+};
+
+export type EstoqueNowStatus = {
+  source: "estoquenow" | "mock";
+  configured: boolean;
+  notice: string;
+  last_sync_at: string | null;
+  imported_count: number;
 };
 
 export type LogisticsSnapshot = {
@@ -64,7 +116,8 @@ export type LogisticsSnapshot = {
   teams: Team[];
   vehicles: Vehicle[];
   operations: Operation[];
-  estoquenow: { source: "estoquenow" | "mock"; notice: string };
+  incidents: Incident[];
+  estoquenow: EstoqueNowStatus;
 };
 
 export type PendingAction = {
@@ -77,5 +130,8 @@ export type PendingAction = {
   deviceCapturedAt: string;
   note: string;
   responsibleId: string;
+  arrivalAccess: "released" | "blocked" | "";
+  arrivalReason: string;
+  acceptanceName: string;
   photoDataUrl: string;
 };

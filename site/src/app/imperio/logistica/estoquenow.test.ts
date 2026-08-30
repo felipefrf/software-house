@@ -66,3 +66,24 @@ test("aguarda e repete após 429", async () => {
   assert.equal(tokens, 1);
   assert.equal(reads, 2);
 });
+
+test("pagina a listagem sem duplicar IDs", async () => {
+  const pages: string[] = [];
+  const fetchImpl: typeof fetch = async (input) => {
+    const url = String(input);
+    if (url.endsWith("/oauth2/token"))
+      return Response.json({ access_token: "token", expires_in: 1800 });
+    const page = new URL(url).searchParams.get("page") ?? "";
+    pages.push(page);
+    return Response.json({
+      data:
+        page === "1"
+          ? Array.from({ length: 50 }, (_, index) => ({ id: index + 1 }))
+          : [{ id: 50 }, { id: 51 }],
+    });
+  };
+  const client = new EstoqueNowClient({ clientId: "id", clientSecret: "secret", fetchImpl });
+  const operations = await client.listLogistics("01/08/2026", "31/08/2026");
+  assert.deepEqual(pages, ["1", "2"]);
+  assert.equal(operations.length, 51);
+});
