@@ -51,3 +51,4 @@ yarn-error.log*
 /site/logos-olimpiadas/
 .vercel
 .env*
+!**/.env.example
