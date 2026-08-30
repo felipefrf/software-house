@@ -49,3 +49,5 @@ yarn-error.log*
 
 # assets não processados
 /site/logos-olimpiadas/
+.vercel
+.env*
