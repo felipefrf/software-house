@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { checklistForStage, operationStages } from "@/app/imperio/logistica/action";
 import { readEstoqueNowOperations } from "@/app/imperio/logistica/data";
+import { sourceFieldsDiverged } from "@/app/imperio/logistica/estoquenow";
 import { getAppSnapshot } from "@/app/imperio/logistica/server";
 import type { OperationStage } from "@/app/imperio/logistica/types";
 import {
@@ -22,6 +23,8 @@ const isUuid = (value: string) =>
 
 const isStage = (value: string): value is OperationStage =>
   operationStages.includes(value as OperationStage);
+
+const isOptionalUuid = (value?: string) => !value || isUuid(value);
 
 const validDateInput = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value);
 
@@ -54,7 +57,7 @@ export async function GET() {
 export async function POST(request: Request) {
   const requestUrl = new URL(request.url);
   const origin = request.headers.get("origin");
-  if (origin && origin !== requestUrl.origin) return jsonError("Origem não permitida.", 403);
+  if (origin !== requestUrl.origin) return jsonError("Origem não permitida.", 403);
 
   const action = requestUrl.searchParams.get("action");
   const supabase = await createSupabaseServerClient();
@@ -79,11 +82,13 @@ export async function POST(request: Request) {
 
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) return jsonError("Sessão expirada.", 401);
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("role,must_change_password")
     .eq("id", auth.user.id)
     .single();
+  if (profileError || !profile)
+    return jsonError("Não foi possível validar o perfil autenticado.", 500);
   const manager = profile?.role === "manager";
 
   try {
@@ -91,9 +96,14 @@ export async function POST(request: Request) {
       const body = (await request.json()) as { password?: string };
       if (!body.password || body.password.length < 10)
         return jsonError("Use uma nova senha com pelo menos 10 caracteres.");
+      const admin = createSupabaseAdminClient();
+      if (!admin) return jsonError("Chave secreta do Supabase não configurada.", 503);
       const changed = await supabase.auth.updateUser({ password: body.password });
       if (changed.error) return jsonError("Não foi possível trocar a senha.");
-      const marked = await supabase.rpc("mark_password_changed");
+      const marked = await admin
+        .from("profiles")
+        .update({ must_change_password: false })
+        .eq("id", auth.user.id);
       if (marked.error) return jsonError("Senha alterada; atualize a página para confirmar o perfil.", 500);
       return NextResponse.json({ ok: true });
     }
@@ -152,7 +162,13 @@ export async function POST(request: Request) {
         leaderId?: string;
         memberIds?: string[];
       };
-      if (!body.name || !body.leaderId)
+      if (
+        !body.name ||
+        !body.leaderId ||
+        !isUuid(body.leaderId) ||
+        !Array.isArray(body.memberIds) ||
+        !body.memberIds.every(isUuid)
+      )
         return jsonError("Nome e líder são obrigatórios.");
       const created = await supabase.rpc("create_team", {
         p_name: body.name,
@@ -186,7 +202,11 @@ export async function POST(request: Request) {
     if (action === "set-vehicle-status") {
       if (!manager) return jsonError("Apenas gestores alteram a frota.", 403);
       const body = (await request.json()) as { id?: string; status?: string };
-      if (!body.id || !["available", "in_use", "maintenance"].includes(body.status ?? ""))
+      if (
+        !body.id ||
+        !isUuid(body.id) ||
+        !["available", "in_use", "maintenance"].includes(body.status ?? "")
+      )
         return jsonError("Veículo ou status inválido.");
       const result = await supabase
         .from("vehicles")
@@ -211,6 +231,12 @@ export async function POST(request: Request) {
         return jsonError("Evento, destino e horário são obrigatórios.");
       if (!Number.isFinite(new Date(body.scheduledAt).getTime()))
         return jsonError("Data da operação inválida.");
+      if (
+        !isOptionalUuid(body.teamId) ||
+        !isOptionalUuid(body.vehicleId) ||
+        !isOptionalUuid(body.driverId)
+      )
+        return jsonError("Equipe, veículo ou motorista inválido.");
       const result = await supabase.from("operations").insert({
         source: "manual",
         event_name: body.eventName,
@@ -239,6 +265,14 @@ export async function POST(request: Request) {
       };
       if (!body.id || !body.destination || !body.scheduledAt)
         return jsonError("Operação, destino e horário são obrigatórios.");
+      if (
+        !isUuid(body.id) ||
+        !Number.isFinite(new Date(body.scheduledAt).getTime()) ||
+        !isOptionalUuid(body.teamId) ||
+        !isOptionalUuid(body.vehicleId) ||
+        !isOptionalUuid(body.driverId)
+      )
+        return jsonError("Dados da escala inválidos.");
       const result = await supabase
         .from("operations")
         .update({
@@ -249,15 +283,20 @@ export async function POST(request: Request) {
           driver_id: body.driverId || null,
           notes: body.notes || null,
         })
-        .eq("id", body.id);
+        .eq("id", body.id)
+        .eq("status", "active")
+        .select("id")
+        .maybeSingle();
       if (result.error) throw result.error;
+      if (!result.data)
+        return jsonError("A operação não está mais ativa. Atualize a torre.", 409);
       return NextResponse.json({ ok: true });
     }
 
     if (action === "cancel-operation") {
       if (!manager) return jsonError("Apenas gestores cancelam operações.", 403);
       const body = (await request.json()) as { id?: string; reason?: string };
-      if (!body.id || !body.reason || body.reason.trim().length < 3)
+      if (!body.id || !isUuid(body.id) || !body.reason || body.reason.trim().length < 3)
         return jsonError("Informe a operação e o motivo do cancelamento.");
       const result = await supabase
         .from("operations")
@@ -311,15 +350,45 @@ export async function POST(request: Request) {
           },
         ];
       });
+      let insertedCount = 0;
+      let divergedCount = 0;
       if (rows.length) {
-        const result = await supabase
-          .from("operations")
-          .upsert(rows, { onConflict: "source,external_id" });
-        if (result.error) throw result.error;
+        for (let index = 0; index < rows.length; index += 100) {
+          const batch = rows.slice(index, index + 100);
+          const externalIds = batch.map((row) => row.external_id);
+          const existing = await supabase
+            .from("operations")
+            .select("external_id,event_name,destination,scheduled_at")
+            .eq("source", "estoquenow")
+            .in("external_id", externalIds);
+          if (existing.error) throw existing.error;
+          const incoming = new Map(batch.map((row) => [row.external_id, row]));
+          divergedCount += (existing.data ?? []).filter((operation) => {
+            const source = incoming.get(operation.external_id ?? "");
+            return source && sourceFieldsDiverged(operation, source);
+          }).length;
+          const inserted = await supabase
+            .from("operations")
+            .upsert(batch, {
+              onConflict: "source,external_id",
+              ignoreDuplicates: true,
+            })
+            .select("external_id");
+          if (inserted.error) throw inserted.error;
+          insertedCount += inserted.data?.length ?? 0;
+          const refreshed = await supabase
+            .from("operations")
+            .update({ imported_at: importedAt })
+            .eq("source", "estoquenow")
+            .in("external_id", externalIds);
+          if (refreshed.error) throw refreshed.error;
+        }
       }
       return NextResponse.json({
         ok: true,
-        imported: rows.length,
+        imported: insertedCount,
+        preserved: rows.length - insertedCount,
+        diverged: divergedCount,
         skipped: external.length - rows.length,
       });
     }
@@ -344,7 +413,6 @@ export async function POST(request: Request) {
       } catch {
         return jsonError("Checklist inválido.");
       }
-      if (!photo) return jsonError("Envie uma foto JPEG, PNG ou WebP de até 6 MB.");
       if (
         !isUuid(operationId) ||
         !isUuid(deviceActionId) ||
@@ -352,6 +420,24 @@ export async function POST(request: Request) {
         !isStage(stageValue)
       )
         return jsonError("Ação incompleta.");
+
+      const existing = await supabase
+        .from("operation_events")
+        .select("id,operation_id,stage")
+        .eq("device_action_id", deviceActionId)
+        .maybeSingle();
+      if (existing.error)
+        return jsonError("Não foi possível verificar o reenvio da ação.", 500);
+      if (existing.data) {
+        if (
+          existing.data.operation_id !== operationId ||
+          existing.data.stage !== stageValue
+        )
+          return jsonError("O identificador da ação já pertence a outro registro.", 409);
+        return NextResponse.json({ state: "confirmed", event: existing.data });
+      }
+
+      if (!photo) return jsonError("Envie uma foto JPEG, PNG ou WebP de até 6 MB.");
       const required = checklistForStage(stageValue);
       if (!required.every((item) => checklist[item] === true))
         return jsonError("Conclua todo o checklist desta etapa.");
@@ -386,8 +472,10 @@ export async function POST(request: Request) {
       const photoPath = `${operationId}/${deviceActionId}.${extensionFor(photo)}`;
       const uploaded = await supabase.storage
         .from("operation-evidence")
-        .upload(photoPath, photo, { contentType: photo.type, upsert: true });
-      if (uploaded.error) return jsonError("Não foi possível armazenar a foto.", 500);
+        .upload(photoPath, photo, { contentType: photo.type, upsert: false });
+      if (uploaded.error && uploaded.error.status !== 409)
+        return jsonError("Não foi possível armazenar a foto.", 500);
+      const uploadedByThisRequest = !uploaded.error;
       const confirmed = await supabase.rpc("confirm_operation_action", {
         p_operation_id: operationId,
         p_device_action_id: deviceActionId,
@@ -405,7 +493,8 @@ export async function POST(request: Request) {
         p_acceptance_name: acceptanceName || null,
       });
       if (confirmed.error) {
-        await supabase.storage.from("operation-evidence").remove([photoPath]);
+        if (uploadedByThisRequest)
+          await supabase.storage.from("operation-evidence").remove([photoPath]);
         return jsonError(
           "A etapa mudou ou você não tem permissão. Atualize antes de reenviar.",
           409,
@@ -430,6 +519,8 @@ export async function POST(request: Request) {
         return jsonError("Tipo de ocorrência inválido.");
       if (!["low", "medium", "high"].includes(severity) || description.length < 3)
         return jsonError("Informe severidade e descrição.");
+      if (responsibleId && !isUuid(responsibleId))
+        return jsonError("Responsável inválido.");
       if (["damage", "missing_item"].includes(incidentType) && !photo)
         return jsonError("Avaria ou falta exige foto.");
 
@@ -485,7 +576,11 @@ export async function POST(request: Request) {
     if (action === "update-incident-status") {
       if (!manager) return jsonError("Apenas gestores tratam ocorrências.", 403);
       const body = (await request.json()) as { id?: string; status?: string };
-      if (!body.id || !["open", "handling", "resolved"].includes(body.status ?? ""))
+      if (
+        !body.id ||
+        !isUuid(body.id) ||
+        !["open", "handling", "resolved"].includes(body.status ?? "")
+      )
         return jsonError("Ocorrência ou status inválido.");
       const result = await supabase
         .from("incidents")

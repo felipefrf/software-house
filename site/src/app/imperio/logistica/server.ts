@@ -153,6 +153,26 @@ export async function getAppSnapshot(): Promise<LogisticsSnapshot> {
       estoquenow: getEstoqueNowStatus(),
     };
 
+  const currentProfileResult = await supabase
+    .from("profiles")
+    .select("id,full_name,role,job_title,phone,availability,must_change_password")
+    .eq("id", auth.user.id)
+    .single();
+  if (currentProfileResult.error || !currentProfileResult.data)
+    throw new Error("Não foi possível carregar o perfil autenticado.");
+  const currentProfile = currentProfileResult.data as Person;
+  if (currentProfile.must_change_password)
+    return {
+      configured: true,
+      user: currentProfile,
+      people: [currentProfile],
+      teams: [],
+      vehicles: [],
+      operations: [],
+      incidents: [],
+      estoquenow: getEstoqueNowStatus(),
+    };
+
   const [profilesResult, teamsResult, membersResult, vehiclesResult, operationsResult, eventsResult, incidentsResult] =
     await Promise.all([
       supabase
@@ -218,22 +238,37 @@ export async function getAppSnapshot(): Promise<LogisticsSnapshot> {
       responsible: Relation;
     }
   >;
-  const events = await Promise.all(
-    rawEvents.map(async ({ operation_id, photo_path, actor, responsible, ...event }) => {
-      const photo = photo_path
-        ? await supabase.storage
-            .from("operation-evidence")
-            .createSignedUrl(photo_path, 3600)
-        : null;
-      return {
-        operationId: operation_id,
-        event: {
-          ...event,
-          actor_name: relationName(actor) ?? "Não informado",
-          responsible_name: relationName(responsible) ?? "Não informado",
-          photo_url: photo?.data?.signedUrl ?? null,
-        } satisfies OperationEvent,
-      };
+  const rawIncidents = (incidentsResult.data ?? []) as unknown as Array<
+    Omit<Incident, "actor_name" | "responsible_name" | "photo_url"> & {
+      photo_path: string | null;
+      actor: Relation;
+      responsible: Relation;
+    }
+  >;
+  const photoPaths = [
+    ...new Set(
+      [...rawEvents, ...rawIncidents]
+        .map((item) => item.photo_path)
+        .filter((path): path is string => Boolean(path)),
+    ),
+  ];
+  const signed = photoPaths.length
+    ? await supabase.storage
+        .from("operation-evidence")
+        .createSignedUrls(photoPaths, 3600)
+    : null;
+  const signedUrls = new Map(
+    (signed?.data ?? []).map((item) => [item.path, item.signedUrl]),
+  );
+  const events = rawEvents.map(
+    ({ operation_id, photo_path, actor, responsible, ...event }) => ({
+      operationId: operation_id,
+      event: {
+        ...event,
+        actor_name: relationName(actor) ?? "Não informado",
+        responsible_name: relationName(responsible) ?? "Não informado",
+        photo_url: photo_path ? signedUrls.get(photo_path) ?? null : null,
+      } satisfies OperationEvent,
     }),
   );
 
@@ -246,27 +281,13 @@ export async function getAppSnapshot(): Promise<LogisticsSnapshot> {
     }),
   );
 
-  const rawIncidents = (incidentsResult.data ?? []) as unknown as Array<
-    Omit<Incident, "actor_name" | "responsible_name" | "photo_url"> & {
-      photo_path: string | null;
-      actor: Relation;
-      responsible: Relation;
-    }
-  >;
-  const incidents = await Promise.all(
-    rawIncidents.map(async ({ photo_path, actor, responsible, ...incident }) => {
-      const photo = photo_path
-        ? await supabase.storage
-            .from("operation-evidence")
-            .createSignedUrl(photo_path, 3600)
-        : null;
-      return {
-        ...incident,
-        actor_name: relationName(actor) ?? "Não informado",
-        responsible_name: relationName(responsible),
-        photo_url: photo?.data?.signedUrl ?? null,
-      } satisfies Incident;
-    }),
+  const incidents = rawIncidents.map(
+    ({ photo_path, actor, responsible, ...incident }) => ({
+      ...incident,
+      actor_name: relationName(actor) ?? "Não informado",
+      responsible_name: relationName(responsible),
+      photo_url: photo_path ? signedUrls.get(photo_path) ?? null : null,
+    } satisfies Incident),
   );
 
   const imported = operations.filter(
@@ -280,7 +301,7 @@ export async function getAppSnapshot(): Promise<LogisticsSnapshot> {
 
   return {
     configured: true,
-    user: people.find((person) => person.id === auth.user?.id) ?? null,
+    user: currentProfile,
     people,
     teams,
     vehicles,

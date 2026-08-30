@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   checklistForStage,
   isChecklistComplete,
+  localOutboxKey,
   nextStage,
   operationDateTimeInput,
   operationStages,
@@ -16,6 +17,14 @@ test("exige todos os itens da etapa", () => {
   checks[checklistForStage("preparation")[0]!] = false;
   assert.equal(isChecklistComplete(checks, "preparation"), false);
   assert.equal(isChecklistComplete({}), false);
+});
+
+test("isola a fila local por usuário", () => {
+  assert.notEqual(localOutboxKey("worker-a"), localOutboxKey("worker-b"));
+  assert.equal(
+    localOutboxKey("worker-a"),
+    "imperio-logistics-outbox-v2:worker-a",
+  );
 });
 
 test("percorre todas as etapas e encerra após inspeção", () => {

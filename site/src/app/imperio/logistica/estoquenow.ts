@@ -17,6 +17,17 @@ export type EstoqueNowOperation = {
 type JsonObject = Record<string, unknown>;
 type FetchLike = typeof fetch;
 
+type SourceFields = {
+  event_name: string;
+  destination: string;
+  scheduled_at: string;
+};
+
+export const sourceFieldsDiverged = (current: SourceFields, incoming: SourceFields) =>
+  current.event_name !== incoming.event_name ||
+  current.destination !== incoming.destination ||
+  new Date(current.scheduled_at).getTime() !== new Date(incoming.scheduled_at).getTime();
+
 const DEFAULT_BASE_URL = "https://api.estoquenow.com.br";
 const REQUEST_TIMEOUT_MS = 8_000;
 const PAGE_SIZE = 50;
@@ -202,7 +213,12 @@ export class EstoqueNowClient {
         end_date: endDate,
       });
       const batch = normalizeLogistics(await this.request(`/v1/logistic?${query}`));
-      for (const operation of batch) operations.set(operation.id, operation);
+      for (const [index, operation] of batch.entries()) {
+        const id = operation.id.startsWith("logistica-")
+          ? `logistica-${page}-${index + 1}`
+          : operation.id;
+        operations.set(id, { ...operation, id });
+      }
       if (batch.length < PAGE_SIZE) break;
     }
     return [...operations.values()];

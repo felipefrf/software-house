@@ -258,6 +258,8 @@ function StageRail({ operation }: { operation: Operation }) {
         return (
           <li className="min-w-24 text-center" key={stage}>
             <span
+              aria-current={active ? "step" : undefined}
+              aria-label={`${stageLabels[stage]}: ${done ? "concluída" : active ? "etapa atual" : "pendente"}`}
               className={`mx-auto grid size-9 place-items-center rounded-full border-2 text-xs font-bold ${
                 done
                   ? "border-[#2d7461] bg-[#e8f3ef] text-[#2d7461]"
@@ -469,8 +471,7 @@ function OperationsView(props: Props) {
       (sourceFilter === "all" || operation.source === sourceFilter),
   );
   const selected =
-    props.snapshot.operations.find((operation) => operation.id === props.selectedId) ??
-    filtered[0];
+    filtered.find((operation) => operation.id === props.selectedId) ?? filtered[0];
 
   const create = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -635,7 +636,7 @@ function CalendarView({ snapshot, setSelectedId }: Props) {
               <div className="mt-3 space-y-2">
                 {operations.map((operation) => (
                   <button key={operation.id} onClick={() => setSelectedId(operation.id)} className="w-full rounded-lg bg-[#eef4f0] p-2 text-left text-xs">
-                    <strong className="block">{new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit" }).format(new Date(operation.scheduled_at))}</strong>
+                    <strong className="block">{new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" }).format(new Date(operation.scheduled_at))}</strong>
                     <span className="mt-1 block">{operation.event_name}</span>
                     <small className="text-[#617068]">{stageLabels[operation.stage]}</small>
                   </button>
@@ -779,10 +780,12 @@ function IntegrationsView(props: Props) {
   const sync = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
+    let result = "Importação somente leitura concluída.";
     void props.run(async () => {
-      await postJson<{ imported: number; skipped: number }>("sync-estoquenow", { startDate: formValue(form, "startDate"), endDate: formValue(form, "endDate") });
+      const imported = await postJson<{ imported: number; preserved: number; diverged: number; skipped: number }>("sync-estoquenow", { startDate: formValue(form, "startDate"), endDate: formValue(form, "endDate") });
+      result = `${imported.imported} importada(s) · ${imported.preserved} preservada(s) · ${imported.diverged} divergente(s) · ${imported.skipped} ignorada(s) por ID ou data inválida.`;
       await props.refresh();
-    }, "Importação somente leitura concluída.");
+    }, () => result);
   };
   return (
     <div>

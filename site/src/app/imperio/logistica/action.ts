@@ -112,3 +112,6 @@ export const operationDateTimeInput = (value: string) => {
 
 export const operationTimestamp = (value: string) =>
   new Date(`${value}:00-03:00`).toISOString();
+
+export const localOutboxKey = (userId: string) =>
+  `imperio-logistics-outbox-v2:${userId}`;

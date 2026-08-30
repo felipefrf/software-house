@@ -9,7 +9,7 @@ import { WebDashboard } from "./web-dashboard";
 
 export type Run = (
   task: () => Promise<void>,
-  success: string,
+  success: string | (() => string),
 ) => Promise<void>;
 
 export const formatDate = (value: string) =>
@@ -154,7 +154,7 @@ export function LogisticsWorkspace({
     setMessage("");
     try {
       await task();
-      setMessage(success);
+      setMessage(typeof success === "function" ? success() : success);
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : "Ação não concluída.",

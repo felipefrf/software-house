@@ -18,6 +18,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   checklistForStage,
   isChecklistComplete,
+  localOutboxKey,
   operationStages,
   stageLabels,
 } from "./action";
@@ -28,8 +29,6 @@ import {
   mapsUrl,
   type Run,
 } from "./workspace";
-
-const OUTBOX_KEY = "imperio-logistics-outbox-v2";
 
 type Props = {
   snapshot: LogisticsSnapshot;
@@ -113,6 +112,8 @@ function StageRail({ operation }: { operation: Operation }) {
           return (
             <li className="w-20 text-center" key={stage}>
               <span
+                aria-current={active ? "step" : undefined}
+                aria-label={`${stageLabels[stage]}: ${done ? "concluída" : active ? "etapa atual" : "pendente"}`}
                 className={`mx-auto grid size-10 place-items-center rounded-full border-2 text-xs font-bold ${
                   done
                     ? "border-[#287258] bg-[#e8f3ef] text-[#287258]"
@@ -190,6 +191,7 @@ export function FieldApp(props: Props) {
   const [location, setLocation] = useState<PendingAction["location"] | null>(null);
   const [arrivalAccess, setArrivalAccess] = useState<"released" | "blocked" | "">("");
   const [incidentPhoto, setIncidentPhoto] = useState("");
+  const outboxKey = localOutboxKey(props.snapshot.user?.id ?? "anonymous");
   const online = useOnline();
   const selected =
     props.snapshot.operations.find((operation) => operation.id === props.selectedId) ??
@@ -202,24 +204,34 @@ export function FieldApp(props: Props) {
   const pendingForSelected = outbox.filter(
     (action) => action.operationId === selected?.id,
   );
+  const responsiblePeople = useMemo(() => {
+    if (!selected) return [];
+    const team = props.snapshot.teams.find((item) => item.id === selected.team_id);
+    const allowed = new Set(
+      [props.snapshot.user?.id, selected.driver_id, ...(team?.member_ids ?? [])].filter(
+        (id): id is string => Boolean(id),
+      ),
+    );
+    return props.snapshot.people.filter((person) => allowed.has(person.id));
+  }, [props.snapshot.people, props.snapshot.teams, props.snapshot.user?.id, selected]);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       try {
         const stored = JSON.parse(
-          localStorage.getItem(OUTBOX_KEY) ?? "[]",
+          localStorage.getItem(outboxKey) ?? "[]",
         ) as PendingAction[];
         setOutbox(stored);
       } catch {
-        localStorage.removeItem(OUTBOX_KEY);
+        localStorage.removeItem(outboxKey);
       }
     });
     return () => cancelAnimationFrame(frame);
-  }, []);
+  }, [outboxKey]);
 
   const saveOutbox = (actions: PendingAction[]) => {
     try {
-      localStorage.setItem(OUTBOX_KEY, JSON.stringify(actions));
+      localStorage.setItem(outboxKey, JSON.stringify(actions));
       setOutbox(actions);
     } catch {
       throw new Error(
@@ -230,7 +242,7 @@ export function FieldApp(props: Props) {
 
   const removeFromOutbox = (deviceActionId: string) => {
     const next = outbox.filter((item) => item.deviceActionId !== deviceActionId);
-    localStorage.setItem(OUTBOX_KEY, JSON.stringify(next));
+    localStorage.setItem(outboxKey, JSON.stringify(next));
     setOutbox(next);
   };
 
@@ -555,7 +567,7 @@ export function FieldApp(props: Props) {
                   defaultValue={selected.driver_id ?? props.snapshot.user?.id}
                   required
                 >
-                  {props.snapshot.people.map((person) => (
+                  {responsiblePeople.map((person) => (
                     <option value={person.id} key={person.id}>
                       {person.full_name} · {person.job_title}
                     </option>
@@ -598,7 +610,7 @@ export function FieldApp(props: Props) {
               <label className="mt-3 block text-sm font-medium">Severidade<select name="severity" className="mt-2 w-full rounded-lg border border-[#cbd4ce] bg-white px-3 py-3" required><option value="low">Baixa</option><option value="medium">Média</option><option value="high">Alta</option></select></label>
               <label className="mt-3 block text-sm font-medium">Descrição<textarea name="description" required minLength={3} rows={3} className="mt-2 w-full rounded-lg border border-[#cbd4ce] px-3 py-3" /></label>
               <label className="mt-3 block text-sm font-medium">Impacto opcional<input name="impact" className="mt-2 w-full rounded-lg border border-[#cbd4ce] px-3 py-3" /></label>
-              <label className="mt-3 block text-sm font-medium">Responsável pelo tratamento<select name="responsibleId" className="mt-2 w-full rounded-lg border border-[#cbd4ce] bg-white px-3 py-3"><option value="">A definir na torre</option>{props.snapshot.people.map((person) => <option value={person.id} key={person.id}>{person.full_name}</option>)}</select></label>
+              <label className="mt-3 block text-sm font-medium">Responsável pelo tratamento<select name="responsibleId" className="mt-2 w-full rounded-lg border border-[#cbd4ce] bg-white px-3 py-3"><option value="">A definir na torre</option>{responsiblePeople.map((person) => <option value={person.id} key={person.id}>{person.full_name}</option>)}</select></label>
               <CapturePhoto value={incidentPhoto} onChange={setIncidentPhoto} run={props.run} label="Adicionar foto da ocorrência" />
               <button disabled={props.busy || !props.snapshot.configured || !online} className="mt-4 w-full rounded-lg border border-[#9f5d53] px-4 py-3 font-semibold text-[#8d443b] disabled:opacity-40">Registrar ocorrência</button>
               {!online && <p className="mt-2 text-xs text-[#80651c]">Ocorrências exigem conexão neste corte. A fila local cobre apenas ações de etapa.</p>}
@@ -624,7 +636,7 @@ export function FieldApp(props: Props) {
           <div className="mb-4"><p className="font-mono text-xs uppercase tracking-[0.16em] text-[#708078]">Este aparelho</p><h2 className="mt-1 text-3xl font-semibold">Fila local</h2><p className="mt-2 text-sm text-[#65746c]">Reenvio idempotente com identificador único. Não representa sync offline completo nem resolução automática de conflitos.</p></div>
           <div className="space-y-3">
             {outbox.map((pending) => (
-              <article key={pending.deviceActionId} className="rounded-xl border border-[#ead9aa] bg-[#fff9e8] p-4 text-sm"><div className="flex items-start justify-between gap-3"><div><strong>{props.snapshot.operations.find((operation) => operation.id === pending.operationId)?.event_name ?? "Operação"}</strong><p className="text-[#75622f]">{stageLabels[pending.stage]} · capturada em {formatDate(pending.deviceCapturedAt)}</p></div><FileClock size={18} /></div><button disabled={!online || props.busy} className="mt-3 font-semibold underline disabled:opacity-40" onClick={() => void props.run(async () => syncAction(pending), "Ação confirmada pelo servidor.")}>Tentar enviar novamente</button></article>
+              <article key={pending.deviceActionId} className="rounded-xl border border-[#ead9aa] bg-[#fff9e8] p-4 text-sm"><div className="flex items-start justify-between gap-3"><div><strong>{props.snapshot.operations.find((operation) => operation.id === pending.operationId)?.event_name ?? "Operação"}</strong><p className="text-[#75622f]">{stageLabels[pending.stage]} · capturada em {formatDate(pending.deviceCapturedAt)}</p></div><FileClock size={18} /></div><div className="mt-3 flex flex-wrap gap-4"><button disabled={!online || props.busy} className="font-semibold underline disabled:opacity-40" onClick={() => void props.run(async () => syncAction(pending), "Ação confirmada pelo servidor.")}>Tentar enviar novamente</button><button className="font-semibold text-[#8a4339] underline" onClick={() => { removeFromOutbox(pending.deviceActionId); props.setMessage("Ação pendente descartada somente deste aparelho."); }}>Descartar deste aparelho</button></div></article>
             ))}
             {!outbox.length && <p className="rounded-xl border border-dashed border-[#cbd5ce] bg-white p-6 text-center text-sm text-[#66756d]">Nenhuma ação pendente neste aparelho.</p>}
           </div>
@@ -636,7 +648,7 @@ export function FieldApp(props: Props) {
           "today",
           "Hoje",
         ], ["evidence", "Evidências"], ["queue", `Fila${outbox.length ? ` (${outbox.length})` : ""}`]] as const).map(([id, label]) => (
-          <button key={id} onClick={() => setTab(id)} className={`px-2 py-4 text-xs font-semibold ${tab === id ? "text-[#5f52bd]" : "text-[#65746c]"}`}>{label}</button>
+          <button key={id} aria-current={tab === id ? "page" : undefined} onClick={() => setTab(id)} className={`px-2 py-4 text-xs font-semibold ${tab === id ? "text-[#5f52bd]" : "text-[#65746c]"}`}>{label}</button>
         ))}
       </nav>
     </section>
