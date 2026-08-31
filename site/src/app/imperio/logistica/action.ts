@@ -1,4 +1,4 @@
-import type { OperationStage } from "./types";
+import type { OperationStage, OperationStatus } from "./types";
 
 export const operationStages: OperationStage[] = [
   "preparation",
@@ -85,6 +85,16 @@ export const isChecklistComplete = (
 export const nextStage = (stage: OperationStage): OperationStage | null => {
   const next = operationStages[operationStages.indexOf(stage) + 1];
   return next ?? null;
+};
+
+export const stageState = (
+  index: number,
+  current: number,
+  status: OperationStatus,
+  confirmed: boolean,
+): "done" | "active" | "pending" => {
+  if (status === "completed" || confirmed || index < current) return "done";
+  return status === "active" && index === current ? "active" : "pending";
 };
 
 const saoPauloParts = (date: Date, withTime = false) =>

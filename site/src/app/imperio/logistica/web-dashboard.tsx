@@ -25,6 +25,7 @@ import {
   operationStages,
   operationTimestamp,
   stageLabels,
+  stageState,
 } from "./action";
 import type {
   Incident,
@@ -249,32 +250,75 @@ function OperationList({
 function StageRail({ operation }: { operation: Operation }) {
   const current = operationStages.indexOf(operation.stage);
   return (
-    <ol className="mt-5 flex gap-2 overflow-x-auto pb-2" aria-label="Etapas da operação">
-      {operationStages.map((stage, index) => {
-        const done = operation.events.some(
-          (event) => event.stage === stage && event.event_type === "stage_completed",
-        );
-        const active = operation.status === "active" && index === current;
-        return (
-          <li className="min-w-24 text-center" key={stage}>
+    <div className="mt-5">
+      <div className="flex items-end justify-between gap-3">
+        <div>
+          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#708078]">
+            Etapa {current + 1} de {operationStages.length}
+          </p>
+          <strong className="text-sm">{stageLabels[operation.stage]}</strong>
+        </div>
+        <span className="text-[10px] text-[#708078]">Deslize para ver todas</span>
+      </div>
+      <div
+        className="mt-3 grid gap-1"
+        style={{ gridTemplateColumns: `repeat(${operationStages.length}, minmax(0, 1fr))` }}
+        aria-hidden="true"
+      >
+        {operationStages.map((stage, index) => {
+          const state = stageState(
+            index,
+            current,
+            operation.status,
+            operation.events.some(
+              (event) =>
+                event.stage === stage && event.event_type === "stage_completed",
+            ),
+          );
+          return (
             <span
-              aria-current={active ? "step" : undefined}
-              aria-label={`${stageLabels[stage]}: ${done ? "concluída" : active ? "etapa atual" : "pendente"}`}
-              className={`mx-auto grid size-9 place-items-center rounded-full border-2 text-xs font-bold ${
-                done
-                  ? "border-[#2d7461] bg-[#e8f3ef] text-[#2d7461]"
-                  : active
-                    ? "border-[#5f52bd] bg-[#5f52bd] text-white ring-4 ring-[#ebe8fb]"
-                    : "border-[#d5dcd8] bg-white text-[#819087]"
-              }`}
-            >
-              {done ? "OK" : index + 1}
-            </span>
-            <span className="mt-2 block text-[11px] font-medium">{stageLabels[stage]}</span>
-          </li>
-        );
-      })}
-    </ol>
+              key={stage}
+              className={`h-1.5 rounded-full ${state === "done" ? "bg-[#2d7461]" : state === "active" ? "bg-[#5f52bd]" : "bg-[#d5dcd8]"}`}
+            />
+          );
+        })}
+      </div>
+      <ol className="mt-3 flex gap-2 overflow-x-auto pb-2" aria-label="Etapas da operação">
+        {operationStages.map((stage, index) => {
+          const state = stageState(
+            index,
+            current,
+            operation.status,
+            operation.events.some(
+              (event) =>
+                event.stage === stage && event.event_type === "stage_completed",
+            ),
+          );
+          const done = state === "done";
+          const active = state === "active";
+          return (
+            <li className="min-w-24 text-center" key={stage}>
+              <span
+                aria-current={active ? "step" : undefined}
+                aria-label={`${stageLabels[stage]}: ${done ? "concluída" : active ? "etapa atual" : "pendente"}`}
+                className={`mx-auto grid size-9 place-items-center rounded-full border-2 text-xs font-bold ${
+                  done
+                    ? "border-[#2d7461] bg-[#e8f3ef] text-[#2d7461]"
+                    : active
+                      ? "border-[#5f52bd] bg-[#5f52bd] text-white ring-4 ring-[#ebe8fb]"
+                      : "border-[#d5dcd8] bg-white text-[#819087]"
+                }`}
+              >
+                {done ? "OK" : index + 1}
+              </span>
+              <span className="mt-2 block text-[11px] font-medium">
+                {stageLabels[stage]}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
   );
 }
 
@@ -284,7 +328,7 @@ function OperationDetail({ snapshot, operation }: { snapshot: LogisticsSnapshot;
     (incident) => incident.operation_id === operation.id && incident.status !== "resolved",
   );
   return (
-    <article className="rounded-xl border border-[#d7dfd9] bg-white p-5">
+    <article className="min-w-0 rounded-xl border border-[#d7dfd9] bg-white p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="font-mono text-xs uppercase tracking-[0.14em] text-[#708078]">
@@ -541,7 +585,7 @@ function OperationsView(props: Props) {
         </div>
       </div>
       <div className="mt-5 grid gap-5 xl:grid-cols-[1fr_430px]">
-        <div className="space-y-5">
+        <div className="min-w-0 space-y-5">
           <OperationList
             operations={filtered}
             selectedId={props.selectedId}
@@ -564,7 +608,7 @@ function OperationsView(props: Props) {
             </form>
           </details>
         </div>
-        <div className="space-y-5">
+        <div className="min-w-0 space-y-5">
           <OperationDetail snapshot={props.snapshot} operation={selected} />
           {selected && selected.status === "active" && (
             <form key={selected.id} onSubmit={update} className="rounded-xl border border-[#d7dfd9] bg-white p-5">
@@ -743,7 +787,7 @@ function EvidenceView({ snapshot }: Props) {
       <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {evidence.map(({ operation, event }) => (
           <article key={event.id} className="overflow-hidden rounded-xl border border-[#d7dfd9] bg-white">
-            {event.photo_url ? <a href={event.photo_url} target="_blank" rel="noreferrer" className="grid h-40 place-items-center bg-[#eaf0ec] text-sm font-semibold"><Camera size={24} /><span>Abrir foto protegida</span></a> : <div className="grid h-28 place-items-center bg-[#edf1ee] text-xs text-[#7a8780]">Foto demonstrativa indisponível</div>}
+            {event.photo_url ? <a href={event.photo_url} target="_blank" rel="noreferrer" className="grid h-40 place-items-end bg-cover bg-center p-4 text-sm font-semibold text-white" style={{ backgroundImage: `linear-gradient(180deg, transparent 35%, rgba(17, 35, 29, .82)), url(${event.photo_url})` }}><span className="flex items-center gap-2"><Camera size={18} />Abrir evidência</span></a> : <div className="grid h-28 place-items-center bg-[#edf1ee] text-xs text-[#7a8780]">Sem foto nesta etapa</div>}
             <div className="p-4"><Pill tone="green">Servidor confirmado</Pill><h3 className="mt-3 font-semibold">{operation.event_name}</h3><p className="text-sm text-[#65746c]">{stageLabels[event.stage]} · {event.actor_name}</p><p className="mt-2 text-xs text-[#7a8780]">{formatDate(event.server_received_at)} · GPS {event.latitude.toFixed(5)}, {event.longitude.toFixed(5)}</p></div>
           </article>
         ))}
@@ -787,6 +831,20 @@ function IntegrationsView(props: Props) {
       await props.refresh();
     }, () => result);
   };
+  const domains = [
+    [
+      "Agenda e pedidos",
+      "EstoqueNOW",
+      props.snapshot.estoquenow.source === "estoquenow"
+        ? "Somente leitura · última importação confirmada"
+        : props.snapshot.estoquenow.configured
+          ? "Somente leitura · aguardando primeira importação"
+          : "Somente leitura · aguardando credenciais",
+    ],
+    ["Pessoas, equipes e frota", "Império", "Cadastro persistente ativo"],
+    ["Etapas, GPS, fotos e ocorrências", "Império", "Registro persistente ativo"],
+    ["Entrega, devolução e inventário", "EstoqueNOW", "Escrita desabilitada"],
+  ];
   return (
     <div>
       <div><p className="font-mono text-xs uppercase tracking-[0.16em] text-[#708078]">Integrações</p><h2 className="mt-1 text-3xl font-semibold tracking-tight">Conexões e fontes de verdade</h2></div>
@@ -795,6 +853,28 @@ function IntegrationsView(props: Props) {
         <form onSubmit={sync} className="rounded-xl border border-[#d7dfd9] bg-white p-5"><h3 className="text-xl font-semibold">Importar período</h3><p className="mt-2 text-sm text-[#65746c]">A lista de logísticas é conciliada por ID externo. Etapa, equipe, veículo e evidências internas são preservados.</p><div className="grid gap-x-4 sm:grid-cols-2"><Input name="startDate" label="Início" type="date" defaultValue={operationDateInput(today)} /><Input name="endDate" label="Fim" type="date" defaultValue={operationDateInput(future)} /></div><button disabled={props.busy || !props.snapshot.configured || !props.snapshot.estoquenow.configured} className="mt-5 w-full rounded-lg bg-[#173d34] px-4 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">Executar importação somente leitura</button></form>
         <article className="rounded-xl border border-[#d7dfd9] bg-white p-5"><Settings2 size={21} /><h3 className="mt-3 text-xl font-semibold">Supabase</h3><Pill tone={props.snapshot.configured ? "green" : "amber"}>{props.snapshot.configured ? "Persistência ativa" : "Modo demonstrativo"}</Pill><p className="mt-3 text-sm text-[#65746c]">Postgres, Auth e Storage são configurados exclusivamente por ambiente. Nenhum segredo é enviado ao navegador.</p></article>
         <article className="rounded-xl border border-[#d7dfd9] bg-white p-5"><MapPin size={21} /><h3 className="mt-3 text-xl font-semibold">Google Maps</h3><Pill tone="green">URL universal ativa</Pill><p className="mt-3 text-sm text-[#65746c]">Abre a rota no app ou navegador. Sem chave paga, mapa embutido ou cálculo próprio de ETA.</p></article>
+        <article className="overflow-hidden rounded-xl border border-[#d7dfd9] bg-white xl:col-span-2">
+          <div className="border-b border-[#e2e8e4] p-5">
+            <p className="font-mono text-xs uppercase tracking-[0.14em] text-[#708078]">Contrato de dados</p>
+            <h3 className="mt-2 text-xl font-semibold">Uma fonte de verdade por domínio</h3>
+          </div>
+          <div className="divide-y divide-[#e5eae7]">
+            {domains.map(([domain, owner, state]) => (
+              <div key={domain} className="grid gap-1 px-5 py-4 text-sm sm:grid-cols-[1.2fr_.7fr_1.5fr]">
+                <strong>{domain}</strong>
+                <span className="text-[#44675c]">{owner}</span>
+                <span className="text-[#65746c]">{state}</span>
+              </div>
+            ))}
+          </div>
+        </article>
+        <article className="rounded-xl border border-[#d7dfd9] bg-white p-5 xl:col-span-2">
+          <h3 className="text-xl font-semibold">Prontidão do conector</h3>
+          <div className="mt-4 grid gap-3 text-sm md:grid-cols-2">
+            {["OAuth e segredo apenas no servidor", "Cache do token com renovação em 401", "Retry limitado para 429", "Conciliação por ID externo preserva dados internos"].map((item) => <p key={item} className="flex items-center gap-2 rounded-lg bg-[#eef5f1] p-3 text-[#285f50]"><CheckCircle2 size={17} />{item}</p>)}
+            <p className="flex items-center gap-2 rounded-lg bg-[#fff6dd] p-3 text-[#705817] md:col-span-2"><AlertTriangle size={17} />Teste ponta a ponta real bloqueado somente pelas credenciais e pelo contrato final dos campos do EstoqueNOW.</p>
+          </div>
+        </article>
       </div>
     </div>
   );

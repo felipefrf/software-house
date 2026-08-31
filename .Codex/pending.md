@@ -1,0 +1,2 @@
+- [ ] Credenciais e contrato real do EstoqueNOW pendentes — bloqueiam smoke test e importação canário. Obter URL, client_id, client_secret e amostra da resposta de logística; validar tudo somente leitura.
+- [ ] Infraestrutura de produção da Império pendente — bloqueia go-live com dados reais. Criar um projeto Supabase Pro, configurar o projeto Vercel Pro, aplicar migrações/pgTAP e validar o fluxo em celular real.

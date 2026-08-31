@@ -207,13 +207,13 @@ export function LogisticsWorkspace({
 
   return (
     <main className="imperio-shell min-h-screen bg-[#f4f6f4] text-[#17231f]">
-      <header className="border-b border-[#d7dfd9] bg-white px-4 py-3 md:px-8">
-        <div className="mx-auto flex max-w-[1500px] flex-wrap items-center justify-between gap-3">
+      <header className="border-b border-[#d7dfd9] bg-white px-4 py-2.5 md:px-8 md:py-3">
+        <div className="mx-auto flex max-w-[1500px] items-center justify-between gap-3">
           <div>
             <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#3d7567]">
               Império Eventos
             </p>
-            <h1 className="text-xl font-semibold tracking-tight">
+            <h1 className="text-lg font-semibold tracking-tight md:text-xl">
               Núcleo de logística
             </h1>
           </div>
@@ -225,17 +225,19 @@ export function LogisticsWorkspace({
               >
                 <button
                   onClick={() => setSurface("web")}
+                  aria-label="Torre web"
                   aria-pressed={surface === "web"}
                   className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium ${surface === "web" ? "bg-white shadow-sm" : "text-[#587067]"}`}
                 >
-                  <Monitor size={16} /> Torre web
+                  <Monitor size={16} /> <span className="hidden sm:inline">Torre web</span>
                 </button>
                 <button
                   onClick={() => setSurface("field")}
+                  aria-label="App de campo"
                   aria-pressed={surface === "field"}
                   className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium ${surface === "field" ? "bg-white shadow-sm" : "text-[#587067]"}`}
                 >
-                  <Smartphone size={16} /> App de campo
+                  <Smartphone size={16} /> <span className="hidden sm:inline">App de campo</span>
                 </button>
               </nav>
             )}
@@ -259,17 +261,19 @@ export function LogisticsWorkspace({
       </header>
 
       <div
-        className={`border-b px-4 py-2 text-center text-xs font-semibold ${
+        className={`border-b px-4 py-2 text-center text-[11px] font-semibold sm:text-xs ${
           snapshot.configured
             ? "border-[#c9ded6] bg-[#eaf4f0] text-[#275f50]"
             : "border-[#ead9aa] bg-[#fff6d9] text-[#765c16]"
         }`}
       >
-        {snapshot.configured
-          ? "Persistência Supabase ativa"
-          : "AMBIENTE DEMONSTRATIVO — nenhum cadastro ou ação é persistido"}
-        {" · "}
-        {snapshot.estoquenow.notice}
+        {snapshot.configured ? (
+          <>
+            AMBIENTE OPERACIONAL · Supabase ativo · {snapshot.estoquenow.source === "estoquenow" ? "EstoqueNOW lido" : "EstoqueNOW aguardando leitura"}
+          </>
+        ) : (
+          <>DADOS DE DEMONSTRAÇÃO · Nada é persistido · EstoqueNOW não conectado</>
+        )}
       </div>
 
       {message && (

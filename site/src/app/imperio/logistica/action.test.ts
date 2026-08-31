@@ -9,6 +9,7 @@ import {
   operationDateTimeInput,
   operationStages,
   operationTimestamp,
+  stageState,
 } from "./action.ts";
 
 test("exige todos os itens da etapa", () => {
@@ -41,4 +42,11 @@ test("preserva o horário operacional de São Paulo", () => {
     operationDateTimeInput("2026-08-31T12:00:00.000Z"),
     "2026-08-31T09:00",
   );
+});
+
+test("apresenta progresso coerente mesmo sem todos os eventos históricos", () => {
+  assert.equal(stageState(0, 3, "active", false), "done");
+  assert.equal(stageState(3, 3, "active", false), "active");
+  assert.equal(stageState(4, 3, "active", false), "pending");
+  assert.equal(stageState(8, 8, "completed", false), "done");
 });

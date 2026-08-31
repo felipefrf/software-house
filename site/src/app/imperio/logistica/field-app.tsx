@@ -21,6 +21,7 @@ import {
   localOutboxKey,
   operationStages,
   stageLabels,
+  stageState,
 } from "./action";
 import type { LogisticsSnapshot, Operation, PendingAction } from "./types";
 import {
@@ -102,13 +103,53 @@ function useElapsed(startedAt?: string) {
 function StageRail({ operation }: { operation: Operation }) {
   const current = operationStages.indexOf(operation.stage);
   return (
-    <div className="mt-5 overflow-x-auto pb-2">
-      <ol className="flex min-w-max gap-2" aria-label="Etapas da operação">
+    <div className="mt-5">
+      <div className="flex items-end justify-between gap-3">
+        <div>
+          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#708078]">
+            Etapa {current + 1} de {operationStages.length}
+          </p>
+          <strong className="text-sm">{stageLabels[operation.stage]}</strong>
+        </div>
+        <span className="text-[10px] text-[#708078]">Deslize para ver todas</span>
+      </div>
+      <div
+        className="mt-3 grid gap-1"
+        style={{ gridTemplateColumns: `repeat(${operationStages.length}, minmax(0, 1fr))` }}
+        aria-hidden="true"
+      >
         {operationStages.map((stage, index) => {
-          const done = operation.events.some(
-            (event) => event.stage === stage && event.event_type === "stage_completed",
+          const state = stageState(
+            index,
+            current,
+            operation.status,
+            operation.events.some(
+              (event) =>
+                event.stage === stage && event.event_type === "stage_completed",
+            ),
           );
-          const active = operation.status === "active" && index === current;
+          return (
+            <span
+              key={stage}
+              className={`h-1.5 rounded-full ${state === "done" ? "bg-[#2d7461]" : state === "active" ? "bg-[#5f52bd]" : "bg-[#d5dcd8]"}`}
+            />
+          );
+        })}
+      </div>
+      <div className="sr-only mt-3 overflow-x-auto pb-2 sm:not-sr-only sm:block">
+        <ol className="flex min-w-max gap-2" aria-label="Etapas da operação">
+        {operationStages.map((stage, index) => {
+          const state = stageState(
+            index,
+            current,
+            operation.status,
+            operation.events.some(
+              (event) =>
+                event.stage === stage && event.event_type === "stage_completed",
+            ),
+          );
+          const done = state === "done";
+          const active = state === "active";
           return (
             <li className="w-20 text-center" key={stage}>
               <span
@@ -130,7 +171,8 @@ function StageRail({ operation }: { operation: Operation }) {
             </li>
           );
         })}
-      </ol>
+        </ol>
+      </div>
     </div>
   );
 }
@@ -633,7 +675,7 @@ export function FieldApp(props: Props) {
 
       {tab === "queue" && (
         <div>
-          <div className="mb-4"><p className="font-mono text-xs uppercase tracking-[0.16em] text-[#708078]">Este aparelho</p><h2 className="mt-1 text-3xl font-semibold">Fila local</h2><p className="mt-2 text-sm text-[#65746c]">Reenvio idempotente com identificador único. Não representa sync offline completo nem resolução automática de conflitos.</p></div>
+          <div className="mb-4"><p className="font-mono text-xs uppercase tracking-[0.16em] text-[#708078]">Este aparelho</p><h2 className="mt-1 text-3xl font-semibold">Fila local</h2><p className="mt-2 text-sm text-[#65746c]">Reenvio idempotente com identificador único se a conexão cair com o app aberto. Abrir ou recarregar exige internet; não há sync offline completo nem resolução automática de conflitos.</p></div>
           <div className="space-y-3">
             {outbox.map((pending) => (
               <article key={pending.deviceActionId} className="rounded-xl border border-[#ead9aa] bg-[#fff9e8] p-4 text-sm"><div className="flex items-start justify-between gap-3"><div><strong>{props.snapshot.operations.find((operation) => operation.id === pending.operationId)?.event_name ?? "Operação"}</strong><p className="text-[#75622f]">{stageLabels[pending.stage]} · capturada em {formatDate(pending.deviceCapturedAt)}</p></div><FileClock size={18} /></div><div className="mt-3 flex flex-wrap gap-4"><button disabled={!online || props.busy} className="font-semibold underline disabled:opacity-40" onClick={() => void props.run(async () => syncAction(pending), "Ação confirmada pelo servidor.")}>Tentar enviar novamente</button><button className="font-semibold text-[#8a4339] underline" onClick={() => { removeFromOutbox(pending.deviceActionId); props.setMessage("Ação pendente descartada somente deste aparelho."); }}>Descartar deste aparelho</button></div></article>
