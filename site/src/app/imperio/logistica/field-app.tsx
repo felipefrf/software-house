@@ -453,7 +453,7 @@ export function FieldApp(props: Props) {
                     resetCapture();
                   }, "Operações atualizadas.")
                 }
-                className="rounded-lg border border-[#d3dbd6] p-2"
+                className="min-h-11 min-w-11 rounded-lg border border-[#d3dbd6] p-2"
                 aria-label="Atualizar"
               >
                 <RefreshCw size={16} />

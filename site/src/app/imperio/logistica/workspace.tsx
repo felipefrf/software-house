@@ -227,7 +227,7 @@ export function LogisticsWorkspace({
                   onClick={() => setSurface("web")}
                   aria-label="Torre web"
                   aria-pressed={surface === "web"}
-                  className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium ${surface === "web" ? "bg-white shadow-sm" : "text-[#587067]"}`}
+                  className={`flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium ${surface === "web" ? "bg-white shadow-sm" : "text-[#587067]"}`}
                 >
                   <Monitor size={16} /> <span className="hidden sm:inline">Torre web</span>
                 </button>
@@ -235,7 +235,7 @@ export function LogisticsWorkspace({
                   onClick={() => setSurface("field")}
                   aria-label="App de campo"
                   aria-pressed={surface === "field"}
-                  className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium ${surface === "field" ? "bg-white shadow-sm" : "text-[#587067]"}`}
+                  className={`flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium ${surface === "field" ? "bg-white shadow-sm" : "text-[#587067]"}`}
                 >
                   <Smartphone size={16} /> <span className="hidden sm:inline">App de campo</span>
                 </button>
@@ -245,7 +245,7 @@ export function LogisticsWorkspace({
               <button
                 title="Sair"
                 aria-label="Sair"
-                className="rounded-lg border border-[#cad4cd] p-2.5"
+                className="min-h-11 min-w-11 rounded-lg border border-[#cad4cd] p-2.5"
                 onClick={() =>
                   void run(async () => {
                     await postJson("logout", {});
