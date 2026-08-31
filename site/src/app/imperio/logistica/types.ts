@@ -1,50 +1,137 @@
-export type DataSource = "estoquenow" | "mock";
-
-export type OperationStatus =
+export type Role = "manager" | "worker";
+export type OperationStage =
   | "preparation"
-  | "route"
+  | "departure"
+  | "travel"
+  | "arrival"
+  | "assembly"
   | "delivery"
+  | "disassembly"
   | "return"
-  | "completed";
+  | "inspection";
+export type OperationStatus = "active" | "completed" | "cancelled";
+export type ActionState = "pending" | "confirmed";
 
-export type LogisticOperation = {
+export type Person = {
   id: string;
-  orderId: string;
-  eventName: string;
-  venue: string;
-  city: string;
-  scheduledDate: string;
-  scheduledTime: string;
-  returnDate: string;
-  status: OperationStatus;
-  coordinator: string;
-  crew: string;
-  vehicle: string;
-  nextMilestone: string;
-  alert?: string;
+  full_name: string;
+  role: Role;
+  job_title: string;
+  phone: string | null;
+  availability: "available" | "unavailable";
+  must_change_password: boolean;
 };
 
-export type LogisticsSnapshot = {
-  source: DataSource;
-  operations: LogisticOperation[];
-  fetchedAt: string;
-  notice: string;
+export type Team = {
+  id: string;
+  name: string;
+  leader_id: string | null;
+  member_ids: string[];
 };
 
-export type LocationEvidence = {
+export type Vehicle = {
+  id: string;
+  name: string;
+  plate: string;
+  vehicle_type: string;
+  capacity_label: string | null;
+  status: "available" | "in_use" | "maintenance";
+};
+
+export type OperationEvent = {
+  id: string;
+  device_action_id: string;
+  stage: OperationStage;
+  event_type: "stage_completed" | "arrival_blocked";
+  state: "confirmed";
+  device_captured_at: string;
+  server_received_at: string;
+  checklist: Record<string, boolean>;
   latitude: number;
   longitude: number;
   accuracy: number;
-  capturedAt: string;
+  duration_seconds: number | null;
+  arrival_access: "released" | "blocked" | null;
+  arrival_reason: string | null;
+  acceptance_name: string | null;
+  note: string | null;
+  actor_name: string;
+  responsible_name: string;
+  photo_url: string | null;
 };
 
-export type DepartureDraft = {
+export type Operation = {
+  id: string;
+  source: "manual" | "estoquenow";
+  external_id: string | null;
+  event_name: string;
+  destination: string;
+  scheduled_at: string;
+  stage: OperationStage;
+  status: OperationStatus;
+  stage_started_at: string;
+  completed_at: string | null;
+  cancel_reason: string | null;
+  manager_id: string;
+  team_id: string | null;
+  vehicle_id: string | null;
+  driver_id: string | null;
+  notes: string | null;
+  imported_at: string | null;
+  waiting_since: string | null;
+  events: OperationEvent[];
+};
+
+export type Incident = {
+  id: string;
+  operation_id: string;
+  stage: OperationStage;
+  type: "delay" | "damage" | "missing_item" | "access" | "other";
+  severity: "low" | "medium" | "high";
+  impact: string | null;
+  description: string;
+  status: "open" | "handling" | "resolved";
+  latitude: number | null;
+  longitude: number | null;
+  accuracy: number | null;
+  created_at: string;
+  resolved_at: string | null;
+  actor_name: string;
+  responsible_name: string | null;
+  photo_url: string | null;
+};
+
+export type EstoqueNowStatus = {
+  source: "estoquenow" | "mock";
+  configured: boolean;
+  notice: string;
+  last_sync_at: string | null;
+  imported_count: number;
+};
+
+export type LogisticsSnapshot = {
+  configured: boolean;
+  user: Person | null;
+  people: Person[];
+  teams: Team[];
+  vehicles: Vehicle[];
+  operations: Operation[];
+  incidents: Incident[];
+  estoquenow: EstoqueNowStatus;
+};
+
+export type PendingAction = {
+  deviceActionId: string;
   operationId: string;
-  driver: string;
-  crew: string;
-  vehicle: string;
-  checks: Record<"load" | "documents" | "vehicle", boolean>;
+  stage: OperationStage;
+  state: ActionState;
+  checklist: Record<string, boolean>;
+  location: { latitude: number; longitude: number; accuracy: number };
+  deviceCapturedAt: string;
+  note: string;
+  responsibleId: string;
+  arrivalAccess: "released" | "blocked" | "";
+  arrivalReason: string;
+  acceptanceName: string;
   photoDataUrl: string;
-  location: LocationEvidence | null;
-  queuedAt: string | null;
 };

@@ -1,0 +1,17 @@
+{
+  "name": "Império Eventos · Logística",
+  "short_name": "Império Logística",
+  "description": "Torre web e operação de campo da Império Eventos.",
+  "start_url": "/imperio/logistica",
+  "display": "standalone",
+  "background_color": "#f4f6f4",
+  "theme_color": "#173d34",
+  "icons": [
+    {
+      "src": "/imperio/logistica-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

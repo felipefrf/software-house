@@ -1,0 +1,3 @@
+- [ ] Credenciais e contrato real do EstoqueNOW ainda não recebidos — bloqueiam smoke test somente leitura, importação canário e substituição dos dados sintéticos. Obter URL, `client_id`, `client_secret` e amostra da resposta de logística quando Maiara enviar.
+- [ ] Infraestrutura de produção da Império pendente — bloqueia go-live com dados reais. Criar projetos Supabase e Vercel, aplicar migrations/pgTAP e validar o fluxo em celular real.
+- [x] Revisão visual Impeccable concluída no protótipo estático — fluxos desktop/mobile revisados, achados corrigidos e `DESIGN.md` gerado; execução automatizada via `file://` permaneceu indisponível.

@@ -51,7 +51,7 @@ yarn-error.log*
 /site/logos-olimpiadas/
 .vercel
 .env*
-!site/.env.example
+!**/.env.example
 
 # artefatos locais de ferramentas de design e geração
 /.agents/skills/impeccable/

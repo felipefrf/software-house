@@ -1,54 +1,5 @@
-import { EstoqueNowClient } from "./estoquenow";
-import type { LogisticOperation, LogisticsSnapshot } from "./types";
-
-const MOCK_OPERATIONS: LogisticOperation[] = [
-  {
-    id: "demo-1048",
-    orderId: "DEMO-1048",
-    eventName: "Evento demonstração · montagem principal",
-    venue: "Pavilhão Norte",
-    city: "São Paulo",
-    scheduledDate: "28/08/2026",
-    scheduledTime: "14:30",
-    returnDate: "29/08/2026",
-    status: "preparation",
-    coordinator: "Coordenação simulada",
-    crew: "Equipe Alfa · 4 pessoas",
-    vehicle: "Caminhão 01 · DEMO",
-    nextMilestone: "Concluir conferência e liberar saída",
-    alert: "Janela de carga em 42 min",
-  },
-  {
-    id: "demo-1052",
-    orderId: "DEMO-1052",
-    eventName: "Evento demonstração · lounge corporativo",
-    venue: "Centro de Convenções",
-    city: "Guarulhos",
-    scheduledDate: "28/08/2026",
-    scheduledTime: "16:00",
-    returnDate: "30/08/2026",
-    status: "route",
-    coordinator: "Coordenação simulada",
-    crew: "Equipe Bravo · 3 pessoas",
-    vehicle: "Van 02 · DEMO",
-    nextMilestone: "Confirmar chegada ao local",
-  },
-  {
-    id: "demo-1061",
-    orderId: "DEMO-1061",
-    eventName: "Evento demonstração · cerimônia",
-    venue: "Espaço Jardim",
-    city: "Mogi das Cruzes",
-    scheduledDate: "28/08/2026",
-    scheduledTime: "18:20",
-    returnDate: "29/08/2026",
-    status: "delivery",
-    coordinator: "Coordenação simulada",
-    crew: "Equipe Charlie · 5 pessoas",
-    vehicle: "Caminhão 03 · DEMO",
-    nextMilestone: "Finalizar montagem e registrar evidências",
-  },
-];
+import { EstoqueNowClient, type EstoqueNowOperation } from "./estoquenow";
+import type { EstoqueNowStatus } from "./types";
 
 const dateForApi = (date: Date) =>
   new Intl.DateTimeFormat("pt-BR", {
@@ -60,44 +11,46 @@ const dateForApi = (date: Date) =>
 
 let liveClient: EstoqueNowClient | null = null;
 
-export async function getLogisticsSnapshot(): Promise<LogisticsSnapshot> {
-  const fetchedAt = new Date().toISOString();
-  const clientId = process.env.ESTOQUENOW_CLIENT_ID;
-  const clientSecret = process.env.ESTOQUENOW_CLIENT_SECRET;
+const credentials = () => ({
+  clientId: process.env.ESTOQUENOW_CLIENT_ID,
+  clientSecret: process.env.ESTOQUENOW_CLIENT_SECRET,
+});
+
+export function getEstoqueNowStatus(
+  lastSyncAt: string | null = null,
+  importedCount = 0,
+): EstoqueNowStatus {
+  const { clientId, clientSecret } = credentials();
   if (!clientId || !clientSecret)
     return {
       source: "mock",
-      operations: MOCK_OPERATIONS,
-      fetchedAt,
-      notice: "Credenciais ausentes. Dados demonstrativos; nenhuma chamada ao EstoqueNOW foi feita.",
+      configured: false,
+      notice: "Credenciais ausentes. Operações internas não vieram do EstoqueNOW.",
+      last_sync_at: null,
+      imported_count: 0,
     };
 
-  try {
-    const today = new Date();
-    const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
-    liveClient ??= new EstoqueNowClient({
-        clientId,
-        clientSecret,
-        baseUrl: process.env.ESTOQUENOW_API_URL,
-      });
-    const operations = await liveClient.listLogistics(
-      dateForApi(today),
-      dateForApi(tomorrow),
-    );
-    return {
-      source: "estoquenow",
-      operations,
-      fetchedAt,
-      notice: operations.length
-        ? "Leitura concluída na API do EstoqueNOW."
-        : "Leitura real concluída; nenhuma logística foi retornada para o período.",
-    };
-  } catch {
-    return {
-      source: "mock",
-      operations: MOCK_OPERATIONS,
-      fetchedAt,
-      notice: "A leitura do EstoqueNOW falhou com segurança. Exibindo dados demonstrativos sem expor detalhes da integração.",
-    };
-  }
+  return {
+    source: lastSyncAt ? "estoquenow" : "mock",
+    configured: true,
+    notice: lastSyncAt
+      ? "Última importação somente leitura confirmada."
+      : "Credenciais configuradas; a primeira importação somente leitura ainda não foi executada.",
+    last_sync_at: lastSyncAt,
+    imported_count: importedCount,
+  };
+}
+
+export async function readEstoqueNowOperations(
+  startDate: Date,
+  endDate: Date,
+): Promise<EstoqueNowOperation[]> {
+  const { clientId, clientSecret } = credentials();
+  if (!clientId || !clientSecret) throw new Error("ESTOQUENOW_NOT_CONFIGURED");
+  liveClient ??= new EstoqueNowClient({
+    clientId,
+    clientSecret,
+    baseUrl: process.env.ESTOQUENOW_API_URL,
+  });
+  return liveClient.listLogistics(dateForApi(startDate), dateForApi(endDate));
 }

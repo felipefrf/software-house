@@ -1,10 +1,36 @@
-import type { LogisticOperation, OperationStatus } from "./types";
+export type EstoqueNowOperation = {
+  id: string;
+  orderId: string;
+  eventName: string;
+  venue: string;
+  city: string;
+  scheduledDate: string;
+  scheduledTime: string;
+  returnDate: string;
+  status: "preparation" | "route" | "delivery" | "return" | "completed";
+  coordinator: string;
+  crew: string;
+  vehicle: string;
+  nextMilestone: string;
+};
 
 type JsonObject = Record<string, unknown>;
 type FetchLike = typeof fetch;
 
+type SourceFields = {
+  event_name: string;
+  destination: string;
+  scheduled_at: string;
+};
+
+export const sourceFieldsDiverged = (current: SourceFields, incoming: SourceFields) =>
+  current.event_name !== incoming.event_name ||
+  current.destination !== incoming.destination ||
+  new Date(current.scheduled_at).getTime() !== new Date(incoming.scheduled_at).getTime();
+
 const DEFAULT_BASE_URL = "https://api.estoquenow.com.br";
 const REQUEST_TIMEOUT_MS = 8_000;
+const PAGE_SIZE = 50;
 
 const asObject = (value: unknown): JsonObject | null =>
   value !== null && typeof value === "object" && !Array.isArray(value)
@@ -37,7 +63,7 @@ const listFrom = (payload: unknown): unknown[] => {
   return [];
 };
 
-const statusFrom = (record: JsonObject): OperationStatus => {
+const statusFrom = (record: JsonObject): EstoqueNowOperation["status"] => {
   if (record.is_concluded_return === 1 || record.is_concluded_return === "1")
     return "completed";
   if (record.is_concluded_delivery === 1 || record.is_concluded_delivery === "1")
@@ -53,7 +79,7 @@ const statusFrom = (record: JsonObject): OperationStatus => {
   return "preparation";
 };
 
-export const normalizeLogistics = (payload: unknown): LogisticOperation[] =>
+export const normalizeLogistics = (payload: unknown): EstoqueNowOperation[] =>
   listFrom(payload).flatMap((value, index) => {
     const record = asObject(value);
     if (!record) return [];
@@ -177,13 +203,24 @@ export class EstoqueNowClient {
   }
 
   async listLogistics(startDate: string, endDate: string) {
-    const query = new URLSearchParams({
-      "order[id]": "desc",
-      page: "1",
-      per_page: "50",
-      start_date: startDate,
-      end_date: endDate,
-    });
-    return normalizeLogistics(await this.request(`/v1/logistic?${query}`));
+    const operations = new Map<string, EstoqueNowOperation>();
+    for (let page = 1; page <= 100; page += 1) {
+      const query = new URLSearchParams({
+        "order[id]": "desc",
+        page: String(page),
+        per_page: String(PAGE_SIZE),
+        start_date: startDate,
+        end_date: endDate,
+      });
+      const batch = normalizeLogistics(await this.request(`/v1/logistic?${query}`));
+      for (const [index, operation] of batch.entries()) {
+        const id = operation.id.startsWith("logistica-")
+          ? `logistica-${page}-${index + 1}`
+          : operation.id;
+        operations.set(id, { ...operation, id });
+      }
+      if (batch.length < PAGE_SIZE) break;
+    }
+    return [...operations.values()];
   }
 }
