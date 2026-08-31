@@ -12,6 +12,7 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   agentRules: false,
+  devIndicators: false,
   async headers() {
     return [
       { source: "/imperio/logistica/:path*", headers: securityHeaders },

@@ -47,6 +47,10 @@ body:has(.imperio-shell) > footer {
   display: none;
 }
 
+.imperio-shell {
+  font-family: "Avenir Next", Avenir, "Segoe UI", sans-serif;
+}
+
 .imperio-shell :where(button, a, input, select, textarea, summary):focus-visible {
   outline: 3px solid #8b7ee0;
   outline-offset: 2px;

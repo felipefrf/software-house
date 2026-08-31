@@ -1,6 +1,6 @@
 "use client";
 
-import { LogOut, Monitor, Smartphone } from "lucide-react";
+import { LogOut, Monitor, Smartphone, X } from "lucide-react";
 import { useState } from "react";
 
 import { FieldApp } from "./field-app";
@@ -60,7 +60,7 @@ function AccessCard({
   changePassword?: boolean;
 }) {
   return (
-    <main className="imperio-shell grid min-h-screen place-items-center bg-[#f4f6f4] p-6 text-[#17231f]">
+    <div className="imperio-shell grid min-h-screen place-items-center bg-[#f4f6f4] p-6 text-[#17231f]">
       <form
         className="w-full max-w-sm rounded-2xl border border-[#d8dfda] bg-white p-7 shadow-sm"
         onSubmit={(event) => {
@@ -121,7 +121,7 @@ function AccessCard({
           </p>
         )}
       </form>
-    </main>
+    </div>
   );
 }
 
@@ -206,11 +206,11 @@ export function LogisticsWorkspace({
     );
 
   return (
-    <main className="imperio-shell min-h-screen bg-[#f4f6f4] text-[#17231f]">
+    <div className="imperio-shell min-h-screen bg-[#f4f6f4] text-[#17231f]">
       <header className="border-b border-[#d7dfd9] bg-white px-4 py-2.5 md:px-8 md:py-3">
         <div className="mx-auto flex max-w-[1500px] items-center justify-between gap-3">
           <div>
-            <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#3d7567]">
+            <p className="font-mono text-xs uppercase tracking-[0.18em] text-[#3d7567]">
               Império Eventos
             </p>
             <h1 className="text-lg font-semibold tracking-tight md:text-xl">
@@ -227,7 +227,7 @@ export function LogisticsWorkspace({
                   onClick={() => setSurface("web")}
                   aria-label="Torre web"
                   aria-pressed={surface === "web"}
-                  className={`flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium ${surface === "web" ? "bg-white shadow-sm" : "text-[#587067]"}`}
+                  className={`flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium ${surface === "web" ? "border border-[#d7dfd9] bg-white text-[#234e42]" : "text-[#587067]"}`}
                 >
                   <Monitor size={16} /> <span className="hidden sm:inline">Torre web</span>
                 </button>
@@ -235,7 +235,7 @@ export function LogisticsWorkspace({
                   onClick={() => setSurface("field")}
                   aria-label="App de campo"
                   aria-pressed={surface === "field"}
-                  className={`flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium ${surface === "field" ? "bg-white shadow-sm" : "text-[#587067]"}`}
+                  className={`flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium ${surface === "field" ? "border border-[#d7dfd9] bg-white text-[#234e42]" : "text-[#587067]"}`}
                 >
                   <Smartphone size={16} /> <span className="hidden sm:inline">App de campo</span>
                 </button>
@@ -261,7 +261,7 @@ export function LogisticsWorkspace({
       </header>
 
       <div
-        className={`border-b px-4 py-2 text-center text-[11px] font-semibold sm:text-xs ${
+        className={`border-b px-4 py-2 text-center text-xs font-semibold ${
           snapshot.configured
             ? "border-[#c9ded6] bg-[#eaf4f0] text-[#275f50]"
             : "border-[#ead9aa] bg-[#fff6d9] text-[#765c16]"
@@ -277,13 +277,11 @@ export function LogisticsWorkspace({
       </div>
 
       {message && (
-        <div className="mx-auto mt-4 max-w-[1500px] px-4">
-          <p
-            className="rounded-lg border border-[#d4ddd7] bg-white px-4 py-3 text-sm"
-            aria-live="polite"
-          >
-            {message}
-          </p>
+        <div className="fixed right-4 top-4 z-50 flex w-[calc(100%-2rem)] max-w-sm items-start gap-3 rounded-xl border border-[#cbd7d0] bg-white p-4 shadow-[0_12px_36px_rgba(23,35,31,0.14)]" role="status" aria-live="polite">
+          <p className="min-w-0 flex-1 text-sm">{message}</p>
+          <button onClick={() => setMessage("")} className="grid min-h-11 min-w-11 place-items-center rounded-lg text-[#5f7067] hover:bg-[#edf1ee]" aria-label="Fechar mensagem">
+            <X size={17} />
+          </button>
         </div>
       )}
 
@@ -307,6 +305,6 @@ export function LogisticsWorkspace({
           setMessage={setMessage}
         />
       )}
-    </main>
+    </div>
   );
 }

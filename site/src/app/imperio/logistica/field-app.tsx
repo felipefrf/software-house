@@ -2,6 +2,7 @@
 
 import {
   AlertTriangle,
+  ArrowLeft,
   Camera,
   Check,
   Clock3,
@@ -19,11 +20,10 @@ import {
   checklistForStage,
   isChecklistComplete,
   localOutboxKey,
-  operationStages,
   stageLabels,
-  stageState,
 } from "./action";
-import type { LogisticsSnapshot, Operation, PendingAction } from "./types";
+import { StageRail } from "./stage-rail";
+import type { LogisticsSnapshot, PendingAction } from "./types";
 import {
   formatDate,
   formatDuration,
@@ -100,83 +100,6 @@ function useElapsed(startedAt?: string) {
   return seconds;
 }
 
-function StageRail({ operation }: { operation: Operation }) {
-  const current = operationStages.indexOf(operation.stage);
-  return (
-    <div className="mt-5">
-      <div className="flex items-end justify-between gap-3">
-        <div>
-          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#708078]">
-            Etapa {current + 1} de {operationStages.length}
-          </p>
-          <strong className="text-sm">{stageLabels[operation.stage]}</strong>
-        </div>
-        <span className="text-[10px] text-[#708078]">Deslize para ver todas</span>
-      </div>
-      <div
-        className="mt-3 grid gap-1"
-        style={{ gridTemplateColumns: `repeat(${operationStages.length}, minmax(0, 1fr))` }}
-        aria-hidden="true"
-      >
-        {operationStages.map((stage, index) => {
-          const state = stageState(
-            index,
-            current,
-            operation.status,
-            operation.events.some(
-              (event) =>
-                event.stage === stage && event.event_type === "stage_completed",
-            ),
-          );
-          return (
-            <span
-              key={stage}
-              className={`h-1.5 rounded-full ${state === "done" ? "bg-[#2d7461]" : state === "active" ? "bg-[#5f52bd]" : "bg-[#d5dcd8]"}`}
-            />
-          );
-        })}
-      </div>
-      <div className="sr-only mt-3 overflow-x-auto pb-2 sm:not-sr-only sm:block">
-        <ol className="flex min-w-max gap-2" aria-label="Etapas da operação">
-        {operationStages.map((stage, index) => {
-          const state = stageState(
-            index,
-            current,
-            operation.status,
-            operation.events.some(
-              (event) =>
-                event.stage === stage && event.event_type === "stage_completed",
-            ),
-          );
-          const done = state === "done";
-          const active = state === "active";
-          return (
-            <li className="w-20 text-center" key={stage}>
-              <span
-                aria-current={active ? "step" : undefined}
-                aria-label={`${stageLabels[stage]}: ${done ? "concluída" : active ? "etapa atual" : "pendente"}`}
-                className={`mx-auto grid size-10 place-items-center rounded-full border-2 text-xs font-bold ${
-                  done
-                    ? "border-[#287258] bg-[#e8f3ef] text-[#287258]"
-                    : active
-                      ? "border-[#5f52bd] bg-[#5f52bd] text-white ring-4 ring-[#ebe8fb]"
-                      : "border-[#d5dcd8] bg-white text-[#819087]"
-                }`}
-              >
-                {done ? <Check size={16} /> : index + 1}
-              </span>
-              <span className="mt-2 block text-[10px] font-medium">
-                {stageLabels[stage]}
-              </span>
-            </li>
-          );
-        })}
-        </ol>
-      </div>
-    </div>
-  );
-}
-
 function CapturePhoto({
   value,
   onChange,
@@ -227,6 +150,7 @@ function CapturePhoto({
 
 export function FieldApp(props: Props) {
   const [tab, setTab] = useState<"today" | "evidence" | "queue">("today");
+  const [stageOpen, setStageOpen] = useState(false);
   const [outbox, setOutbox] = useState<PendingAction[]>([]);
   const [checks, setChecks] = useState<Record<string, boolean>>({});
   const [photoDataUrl, setPhotoDataUrl] = useState("");
@@ -342,7 +266,7 @@ export function FieldApp(props: Props) {
 
   const submitAction = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!selected || !location || !photoDataUrl) return;
+    if (actionDisabled || !selected || !location || !photoDataUrl) return;
     const form = new FormData(event.currentTarget);
     const pending: PendingAction = {
       deviceActionId: crypto.randomUUID(),
@@ -400,6 +324,10 @@ export function FieldApp(props: Props) {
     }, "Ocorrência registrada e exibida na torre.");
   };
 
+  const defaultResponsibleId =
+    [selected?.driver_id, props.snapshot.user?.id].find((id) =>
+      responsiblePeople.some((person) => person.id === id),
+    ) ?? responsiblePeople[0]?.id ?? "";
   const actionDisabled =
     props.busy ||
     !props.snapshot.configured ||
@@ -408,6 +336,7 @@ export function FieldApp(props: Props) {
     !isChecklistComplete(checks, selected.stage) ||
     !photoDataUrl ||
     !location ||
+    !defaultResponsibleId ||
     pendingForSelected.some((item) => item.stage === selected.stage) ||
     (selected.stage === "arrival" && !arrivalAccess);
 
@@ -423,12 +352,34 @@ export function FieldApp(props: Props) {
       </section>
     );
 
+  const uncheckedCount = currentItems.filter((item) => !checks[item]).length;
+  const actionRequirements = [
+    uncheckedCount ? `${uncheckedCount} item(ns) do checklist` : "",
+    photoDataUrl ? "" : "foto",
+    location ? "" : "GPS",
+    defaultResponsibleId ? "" : "responsável",
+    selected.stage === "arrival" && !arrivalAccess ? "liberação de acesso" : "",
+  ].filter(Boolean);
+  const hasPendingStage = pendingForSelected.some(
+    (item) => item.stage === selected.stage,
+  );
+  const actionHint = props.busy
+    ? "Envio em andamento."
+    : !props.snapshot.configured
+      ? "Ação desativada no ambiente demonstrativo."
+      : hasPendingStage
+      ? "Esta etapa já tem um envio pendente neste aparelho."
+      : actionRequirements.length
+        ? `Falta: ${actionRequirements.join(", ")}.`
+        : online
+          ? "Tudo pronto para confirmar no servidor."
+          : "Tudo pronto; a ação ficará pendente neste aparelho.";
   const evidence = props.snapshot.operations.flatMap((operation) =>
     operation.events.map((item) => ({ operation, item })),
   );
 
   return (
-    <section className="mx-auto max-w-[460px] px-4 py-6 pb-28">
+    <section className={`mx-auto max-w-[460px] px-4 py-6 ${tab === "today" && stageOpen && selected.status === "active" ? "pb-[calc(160px+env(safe-area-inset-bottom))]" : "pb-[calc(72px+env(safe-area-inset-bottom))]"}`}>
       <div className="mb-3 flex items-center justify-between rounded-xl border border-[#d7dfd9] bg-white px-4 py-3 text-xs">
         <span className="flex items-center gap-2 font-semibold">
           {online ? <Signal size={16} /> : <SignalZero size={16} />}
@@ -441,11 +392,62 @@ export function FieldApp(props: Props) {
 
       {tab === "today" && (
         <>
-          <div className="rounded-2xl border border-[#d7dfd9] bg-white p-5 shadow-sm">
+          {!stageOpen ? (
+            <div>
+              <div className="flex items-end justify-between gap-3">
+                <div>
+                  <p className="font-mono text-xs uppercase tracking-[0.16em] text-[#5f7067]">
+                    Operação de campo
+                  </p>
+                  <h1 className="mt-1 text-3xl font-semibold tracking-tight">Meu turno</h1>
+                  <p className="mt-1 text-sm text-[#65746c]">
+                    Abra uma operação para ver a próxima ação.
+                  </p>
+                </div>
+                <button
+                  onClick={() => void props.run(props.refresh, "Operações atualizadas.")}
+                  className="grid min-h-11 min-w-11 place-items-center rounded-lg border border-[#d3dbd6] bg-white"
+                  aria-label="Atualizar operações"
+                >
+                  <RefreshCw size={16} />
+                </button>
+              </div>
+              <div className="mt-5 space-y-3">
+                {props.snapshot.operations.map((operation) => (
+                  <button
+                    key={operation.id}
+                    onClick={() => {
+                      props.setSelectedId(operation.id);
+                      resetCapture();
+                      setStageOpen(true);
+                    }}
+                    className="w-full min-w-0 rounded-xl border border-[#d7dfd9] bg-white p-4 text-left hover:border-[#aebbb4]"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <span className="font-mono text-xs font-semibold text-[#5f7067]">
+                        {formatDate(operation.scheduled_at)}
+                      </span>
+                      <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${operation.status === "completed" ? "bg-[#e3f2ec] text-[#28624f]" : operation.status === "cancelled" ? "bg-[#fae5e2] text-[#923d34]" : "bg-[#edf1ee] text-[#52655d]"}`}>
+                        {operation.status === "completed" ? "Concluída" : operation.status === "cancelled" ? "Cancelada" : "Em operação"}
+                      </span>
+                    </div>
+                    <strong className="mt-3 block break-words text-lg">{operation.event_name}</strong>
+                    <span className="mt-1 block text-sm text-[#65746c]">{operation.destination}</span>
+                    <span className="mt-4 flex items-center justify-between gap-3 border-t border-[#e1e7e3] pt-3 text-sm">
+                      <span><span className="text-[#5f7067]">Etapa atual</span><strong className="ml-2 text-[#5b4bcc]">{stageLabels[operation.stage]}</strong></span>
+                      <span className="font-semibold">Abrir</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+          <>
+          <div className="rounded-2xl border border-[#d7dfd9] bg-white p-5">
             <div className="flex items-center justify-between gap-3">
-              <p className="font-mono text-xs uppercase tracking-[0.16em] text-[#708078]">
-                Operação móvel
-              </p>
+              <button onClick={() => setStageOpen(false)} className="flex min-h-11 items-center gap-2 rounded-lg px-1 text-sm font-semibold text-[#5f7067]">
+                <ArrowLeft size={17} /> Meu turno
+              </button>
               <button
                 onClick={() =>
                   void props.run(async () => {
@@ -454,27 +456,13 @@ export function FieldApp(props: Props) {
                   }, "Operações atualizadas.")
                 }
                 className="min-h-11 min-w-11 rounded-lg border border-[#d3dbd6] p-2"
-                aria-label="Atualizar"
+                aria-label="Atualizar operação"
               >
                 <RefreshCw size={16} />
               </button>
             </div>
-            <select
-              value={selected.id}
-              onChange={(event) => {
-                props.setSelectedId(event.target.value);
-                resetCapture();
-              }}
-              className="mt-4 w-full rounded-lg border border-[#cbd4ce] bg-white px-3 py-3 font-semibold"
-            >
-              {props.snapshot.operations.map((operation) => (
-                <option value={operation.id} key={operation.id}>
-                  {operation.event_name}
-                </option>
-              ))}
-            </select>
             <p
-              className={`mt-5 font-mono text-xs uppercase tracking-[0.14em] ${
+              className={`mt-3 break-words font-mono text-xs uppercase tracking-[0.14em] ${
                 selected.source === "manual" ? "text-[#9b653e]" : "text-[#32705d]"
               }`}
             >
@@ -489,14 +477,14 @@ export function FieldApp(props: Props) {
             <StageRail operation={selected} />
             <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
               <div className="rounded-lg bg-[#f2f5f3] p-3">
-                <span className="text-[#708078]">Equipe</span>
+                <span className="text-[#5f7067]">Equipe</span>
                 <strong className="mt-1 block">
                   {props.snapshot.teams.find((team) => team.id === selected.team_id)
                     ?.name ?? "Não escalada"}
                 </strong>
               </div>
               <div className="rounded-lg bg-[#f2f5f3] p-3">
-                <span className="text-[#708078]">Veículo</span>
+                <span className="text-[#5f7067]">Veículo</span>
                 <strong className="mt-1 block">
                   {props.snapshot.vehicles.find(
                     (vehicle) => vehicle.id === selected.vehicle_id,
@@ -508,7 +496,7 @@ export function FieldApp(props: Props) {
               href={mapsUrl(selected.destination)}
               target="_blank"
               rel="noreferrer"
-              className="mt-4 flex items-center justify-center gap-2 rounded-lg border border-[#bfd0c7] px-3 py-3 font-semibold"
+              className="mt-4 flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[#bfd0c7] px-3 py-3 font-semibold"
             >
               Abrir rota no Google Maps <ExternalLink size={16} />
             </a>
@@ -526,19 +514,20 @@ export function FieldApp(props: Props) {
             </div>
           ) : (
             <form
+              id="stage-action"
               onSubmit={submitAction}
-              className="mt-4 rounded-2xl border border-[#d7dfd9] bg-white p-5 shadow-sm"
+              className="mt-4 rounded-2xl border border-[#d7dfd9] bg-white p-5"
             >
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="font-mono text-xs uppercase tracking-[0.14em] text-[#5f52bd]">
+                  <p className="font-mono text-xs uppercase tracking-[0.14em] text-[#5b4bcc]">
                     Próxima ação
                   </p>
                   <h2 className="mt-1 text-2xl font-semibold">
                     Concluir {stageLabels[selected.stage].toLowerCase()}
                   </h2>
                 </div>
-                <span className="flex items-center gap-1 rounded-lg bg-[#f0edfb] px-2 py-1 text-xs text-[#5f52bd]">
+                <span className="flex items-center gap-1 rounded-lg bg-[#f0edfb] px-2 py-1 text-xs text-[#5b4bcc]">
                   <Clock3 size={14} /> {formatDuration(elapsed)}
                 </span>
               </div>
@@ -606,7 +595,7 @@ export function FieldApp(props: Props) {
                 <select
                   name="responsibleId"
                   className="mt-2 w-full rounded-lg border border-[#cbd4ce] bg-white px-3 py-3"
-                  defaultValue={selected.driver_id ?? props.snapshot.user?.id}
+                  defaultValue={defaultResponsibleId}
                   required
                 >
                   {responsiblePeople.map((person) => (
@@ -624,24 +613,11 @@ export function FieldApp(props: Props) {
                   rows={2}
                 />
               </label>
-              <button
-                disabled={actionDisabled}
-                className="mt-5 w-full rounded-lg bg-[#173d34] px-4 py-4 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {selected.stage === "arrival" && arrivalAccess === "blocked"
-                  ? "Registrar bloqueio e iniciar espera"
-                  : `Confirmar ${stageLabels[selected.stage].toLowerCase()}`}
-              </button>
-              {!props.snapshot.configured && (
-                <p className="mt-3 text-center text-xs text-[#80651c]">
-                  Ação desativada no ambiente demonstrativo.
-                </p>
-              )}
             </form>
           )}
 
           <details className="mt-4 rounded-xl border border-[#d7dfd9] bg-white p-5">
-            <summary className="flex cursor-pointer items-center gap-2 font-semibold">
+            <summary className="flex min-h-11 cursor-pointer items-center gap-2 font-semibold">
               <AlertTriangle size={18} /> Registrar ocorrência
             </summary>
             <p className="mt-2 text-sm text-[#65746c]">
@@ -658,27 +634,48 @@ export function FieldApp(props: Props) {
               {!online && <p className="mt-2 text-xs text-[#80651c]">Ocorrências exigem conexão neste corte. A fila local cobre apenas ações de etapa.</p>}
             </form>
           </details>
+
+          {selected.status === "active" && (
+            <div className="fixed inset-x-4 bottom-[calc(56px+env(safe-area-inset-bottom))] z-20 mx-auto max-w-[428px] border border-[#d7dfd9] bg-white/95 p-3 shadow-[0_-8px_30px_rgba(23,35,31,0.08)] backdrop-blur">
+              <button
+                form="stage-action"
+                aria-disabled={actionDisabled}
+                aria-describedby="stage-action-hint"
+                onClick={(event) => {
+                  if (actionDisabled) event.preventDefault();
+                }}
+                className={`min-h-12 w-full rounded-lg bg-[#5b4bcc] px-4 py-3 font-semibold text-white ${actionDisabled ? "cursor-not-allowed opacity-40" : "hover:bg-[#493caf]"}`}
+              >
+                {selected.stage === "arrival" && arrivalAccess === "blocked"
+                  ? "Registrar bloqueio e iniciar espera"
+                  : `Confirmar ${stageLabels[selected.stage].toLowerCase()}`}
+              </button>
+              <p id="stage-action-hint" aria-live="polite" className="mt-1.5 text-center text-xs text-[#5f7067]">{actionHint}</p>
+            </div>
+          )}
+          </>
+          )}
         </>
       )}
 
       {tab === "evidence" && (
         <div>
-          <div className="mb-4"><p className="font-mono text-xs uppercase tracking-[0.16em] text-[#708078]">Servidor</p><h2 className="mt-1 text-3xl font-semibold">Evidências</h2><p className="mt-2 text-sm text-[#65746c]">Somente registros já confirmados.</p></div>
+          <div className="mb-4"><p className="font-mono text-xs uppercase tracking-[0.16em] text-[#5f7067]">Servidor</p><h2 className="mt-1 text-3xl font-semibold">Evidências</h2><p className="mt-2 text-sm text-[#65746c]">Somente registros já confirmados.</p></div>
           <div className="space-y-3">
             {evidence.map(({ operation, item }) => (
-              <article key={item.id} className="rounded-xl border border-[#d7dfd9] bg-white p-4"><div className="flex items-start justify-between gap-3"><div><strong>{operation.event_name}</strong><p className="text-sm text-[#65746c]">{stageLabels[item.stage]} · {item.actor_name}</p></div><Check size={18} className="text-[#2d7461]" /></div><p className="mt-2 text-xs text-[#7a8780]">{formatDate(item.server_received_at)} · GPS {item.latitude.toFixed(5)}, {item.longitude.toFixed(5)}</p>{item.photo_url && <a href={item.photo_url} target="_blank" rel="noreferrer" className="mt-3 inline-block text-sm font-semibold underline">Abrir foto</a>}</article>
+              <article key={item.id} className="rounded-xl border border-[#d7dfd9] bg-white p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><strong className="break-words">{operation.event_name}</strong><p className="text-sm text-[#65746c]">{stageLabels[item.stage]} · {item.actor_name}</p></div><Check size={18} className="shrink-0 text-[#2d7461]" /></div><p className="mt-2 text-xs text-[#5f7067]">{formatDate(item.server_received_at)} · GPS {item.latitude.toFixed(5)}, {item.longitude.toFixed(5)}</p>{item.photo_url && <a href={item.photo_url} target="_blank" rel="noreferrer" className="mt-3 inline-flex min-h-11 items-center text-sm font-semibold underline">Abrir foto</a>}</article>
             ))}
-            {!evidence.length && <p className="rounded-xl border border-dashed border-[#cbd5ce] bg-white p-6 text-center text-sm text-[#66756d]">Nenhuma evidência confirmada.</p>}
+            {!evidence.length && <p className="rounded-xl border border-dashed border-[#cbd5ce] bg-white p-6 text-center text-sm text-[#66756d]">Conclua uma etapa para gerar a primeira evidência.</p>}
           </div>
         </div>
       )}
 
       {tab === "queue" && (
         <div>
-          <div className="mb-4"><p className="font-mono text-xs uppercase tracking-[0.16em] text-[#708078]">Este aparelho</p><h2 className="mt-1 text-3xl font-semibold">Fila local</h2><p className="mt-2 text-sm text-[#65746c]">Reenvio idempotente com identificador único se a conexão cair com o app aberto. Abrir ou recarregar exige internet; não há sync offline completo nem resolução automática de conflitos.</p></div>
+          <div className="mb-4"><p className="font-mono text-xs uppercase tracking-[0.16em] text-[#5f7067]">Este aparelho</p><h2 className="mt-1 text-3xl font-semibold">Fila local</h2><p className="mt-2 text-sm text-[#65746c]">Reenvio idempotente com identificador único se a conexão cair com o app aberto. Abrir ou recarregar exige internet; não há sync offline completo nem resolução automática de conflitos.</p></div>
           <div className="space-y-3">
             {outbox.map((pending) => (
-              <article key={pending.deviceActionId} className="rounded-xl border border-[#ead9aa] bg-[#fff9e8] p-4 text-sm"><div className="flex items-start justify-between gap-3"><div><strong>{props.snapshot.operations.find((operation) => operation.id === pending.operationId)?.event_name ?? "Operação"}</strong><p className="text-[#75622f]">{stageLabels[pending.stage]} · capturada em {formatDate(pending.deviceCapturedAt)}</p></div><FileClock size={18} /></div><div className="mt-3 flex flex-wrap gap-4"><button disabled={!online || props.busy} className="font-semibold underline disabled:opacity-40" onClick={() => void props.run(async () => syncAction(pending), "Ação confirmada pelo servidor.")}>Tentar enviar novamente</button><button className="font-semibold text-[#8a4339] underline" onClick={() => { removeFromOutbox(pending.deviceActionId); props.setMessage("Ação pendente descartada somente deste aparelho."); }}>Descartar deste aparelho</button></div></article>
+              <article key={pending.deviceActionId} className="rounded-xl border border-[#ead9aa] bg-[#fff9e8] p-4 text-sm"><div className="flex items-start justify-between gap-3"><div><strong>{props.snapshot.operations.find((operation) => operation.id === pending.operationId)?.event_name ?? "Operação"}</strong><p className="text-[#75622f]">{stageLabels[pending.stage]} · capturada em {formatDate(pending.deviceCapturedAt)}</p></div><FileClock size={18} /></div><div className="mt-3 flex flex-wrap gap-2"><button disabled={!online || props.busy} className="min-h-11 px-2 font-semibold underline disabled:opacity-40" onClick={() => void props.run(async () => syncAction(pending), "Ação confirmada pelo servidor.")}>Tentar enviar novamente</button><button className="min-h-11 px-2 font-semibold text-[#8a4339] underline" onClick={() => { if (!window.confirm("Descartar esta ação somente deste aparelho?")) return; removeFromOutbox(pending.deviceActionId); props.setMessage("Ação pendente descartada somente deste aparelho."); }}>Descartar deste aparelho</button></div></article>
             ))}
             {!outbox.length && <p className="rounded-xl border border-dashed border-[#cbd5ce] bg-white p-6 text-center text-sm text-[#66756d]">Nenhuma ação pendente neste aparelho.</p>}
           </div>
@@ -690,7 +687,7 @@ export function FieldApp(props: Props) {
           "today",
           "Hoje",
         ], ["evidence", "Evidências"], ["queue", `Fila${outbox.length ? ` (${outbox.length})` : ""}`]] as const).map(([id, label]) => (
-          <button key={id} aria-current={tab === id ? "page" : undefined} onClick={() => setTab(id)} className={`px-2 py-4 text-xs font-semibold ${tab === id ? "text-[#5f52bd]" : "text-[#65746c]"}`}>{label}</button>
+          <button key={id} aria-current={tab === id ? "page" : undefined} onClick={() => { setTab(id); if (id === "today") setStageOpen(false); }} className={`min-h-14 px-2 py-4 text-xs font-semibold ${tab === id ? "text-[#5b4bcc]" : "text-[#65746c]"}`}>{label}</button>
         ))}
       </nav>
     </section>

@@ -4,7 +4,9 @@ import {
   AlertTriangle,
   CalendarDays,
   Camera,
+  Check,
   CheckCircle2,
+  ChevronLeft,
   ChevronRight,
   CircleGauge,
   ExternalLink,
@@ -15,11 +17,13 @@ import {
   Settings2,
   Truck,
   Users,
+  X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import {
+  checklistForStage,
   operationDateInput,
   operationDateTimeInput,
   operationStages,
@@ -27,11 +31,13 @@ import {
   stageLabels,
   stageState,
 } from "./action";
+import { StageRail } from "./stage-rail";
 import type {
   Incident,
   LogisticsSnapshot,
   Operation,
   OperationEvent,
+  OperationStage,
 } from "./types";
 import {
   formatDate,
@@ -103,7 +109,7 @@ function Pill({
   };
   return (
     <span
-      className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${colors[tone]}`}
+      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${colors[tone]}`}
     >
       {children}
     </span>
@@ -129,7 +135,7 @@ function Input({
     <label className="mt-3 block text-sm font-medium">
       {label}
       <input
-        className="mt-2 w-full rounded-lg border border-[#cbd4ce] bg-white px-3 py-2.5"
+        className="mt-2 min-h-11 w-full rounded-lg border border-[#cbd4ce] bg-white px-3 py-2.5"
         name={name}
         type={type}
         required={required}
@@ -157,7 +163,7 @@ function Select({
     <label className="mt-3 block text-sm font-medium">
       {label}
       <select
-        className="mt-2 w-full rounded-lg border border-[#cbd4ce] bg-white px-3 py-2.5"
+        className="mt-2 min-h-11 w-full rounded-lg border border-[#cbd4ce] bg-white px-3 py-2.5"
         name={name}
         defaultValue={defaultValue ?? ""}
         required={required}
@@ -185,9 +191,9 @@ function Submit({
   return (
     <button
       disabled={busy || !configured}
-      className="mt-5 w-full rounded-lg bg-[#173d34] px-4 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+      className="mt-5 min-h-11 w-full rounded-lg bg-[#5b4bcc] px-4 py-3 font-semibold text-white transition-colors hover:bg-[#4e3fb5] disabled:cursor-not-allowed disabled:opacity-40"
     >
-      {label}
+      {busy ? "Salvando…" : label}
     </button>
   );
 }
@@ -204,33 +210,41 @@ function OperationList({
   operations,
   selectedId,
   setSelectedId,
+  compact = false,
 }: {
   operations: Operation[];
   selectedId: string;
   setSelectedId: (id: string) => void;
+  compact?: boolean;
 }) {
   if (!operations.length)
     return <Empty>Nenhuma operação corresponde a esta visão.</Empty>;
   return (
-    <div className="overflow-hidden rounded-xl border border-[#d7dfd9] bg-white">
+    <div className={`${compact ? "flex max-w-full overflow-x-auto lg:block lg:overflow-hidden" : "overflow-hidden"} rounded-xl border border-[#d7dfd9] bg-white`}>
+      <div className={`${compact ? "hidden" : "hidden md:grid"} grid-cols-[120px_1fr_170px_20px] gap-2 border-b border-[#d7dfd9] bg-[#f7f9f7] px-4 py-2 font-mono text-xs uppercase tracking-[0.12em] text-[#5f7067]`}>
+        <span>Horário</span>
+        <span>Operação</span>
+        <span>Etapa</span>
+        <span aria-hidden="true" />
+      </div>
       {operations.map((operation) => (
         <button
           key={operation.id}
           onClick={() => setSelectedId(operation.id)}
-          className={`grid w-full gap-2 border-b border-[#e4e9e6] p-4 text-left last:border-0 md:grid-cols-[120px_1fr_170px_20px] ${
+          className={`grid min-h-16 w-full gap-2 p-4 text-left ${compact ? "min-w-[300px] shrink-0 grid-cols-[82px_1fr_20px] border-r border-[#e4e9e6] last:border-r-0 lg:min-w-0 lg:border-b lg:border-r-0 lg:last:border-b-0" : "min-w-0 grid-cols-[minmax(0,1fr)_20px] border-b border-[#e4e9e6] last:border-0 md:grid-cols-[120px_1fr_170px_20px]"} ${
             selectedId === operation.id ? "bg-[#eef5f1]" : "hover:bg-[#f8faf8]"
           }`}
         >
-          <span className="font-mono text-xs font-semibold">
+          <span className={`${compact ? "" : "col-start-1 row-start-1 md:col-auto md:row-auto"} font-mono text-xs font-semibold`}>
             {formatDate(operation.scheduled_at)}
           </span>
-          <span>
-            <strong className="block">{operation.event_name}</strong>
+          <span className={`${compact ? "" : "col-start-1 row-start-2 md:col-auto md:row-auto"} min-w-0`}>
+            <strong className="block break-words">{operation.event_name}</strong>
             <small className="line-clamp-1 text-[#68776f]">
               {operation.destination}
             </small>
           </span>
-          <span className="text-sm">
+          <span className={`${compact ? "col-start-2" : "col-start-1 row-start-3 md:col-auto md:row-auto"} text-sm`}>
             <span className="block font-medium">{stageLabels[operation.stage]}</span>
             <small
               className={
@@ -240,101 +254,117 @@ function OperationList({
               {operation.source === "manual" ? "Origem manual" : "Origem EstoqueNOW"}
             </small>
           </span>
-          <ChevronRight size={18} className="self-center text-[#87948e]" />
+          <ChevronRight
+            size={18}
+            className={`${compact ? "col-start-3 row-span-2 row-start-1" : "col-start-2 row-span-3 row-start-1 md:col-auto md:row-auto"} self-center text-[#5f7067]`}
+          />
         </button>
       ))}
     </div>
   );
 }
 
-function StageRail({ operation }: { operation: Operation }) {
+function StageFocus({
+  operation,
+  stage,
+}: {
+  operation: Operation;
+  stage: OperationStage;
+}) {
+  const index = operationStages.indexOf(stage);
   const current = operationStages.indexOf(operation.stage);
+  const completedEvent = operation.events.find(
+    (event) => event.stage === stage && event.event_type === "stage_completed",
+  );
+  const evidence = completedEvent ?? operation.events.find((event) => event.stage === stage);
+  const state = stageState(index, current, operation.status, Boolean(completedEvent));
+  const stateLabel = state === "done" ? "Concluída" : state === "active" ? "Etapa atual" : "Aguardando";
+
   return (
-    <div className="mt-5">
-      <div className="flex items-end justify-between gap-3">
+    <section className="mt-5 border-y border-[#e2e8e4] py-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#708078]">
-            Etapa {current + 1} de {operationStages.length}
+          <p className="font-mono text-xs uppercase tracking-[0.14em] text-[#5f7067]">
+            Foco da etapa {index + 1}
           </p>
-          <strong className="text-sm">{stageLabels[operation.stage]}</strong>
+          <h4 className="mt-1 text-lg font-semibold">{stageLabels[stage]}</h4>
         </div>
-        <span className="text-[10px] text-[#708078]">Deslize para ver todas</span>
+        <Pill tone={state === "done" ? "green" : "neutral"}>{stateLabel}</Pill>
       </div>
-      <div
-        className="mt-3 grid gap-1"
-        style={{ gridTemplateColumns: `repeat(${operationStages.length}, minmax(0, 1fr))` }}
-        aria-hidden="true"
-      >
-        {operationStages.map((stage, index) => {
-          const state = stageState(
-            index,
-            current,
-            operation.status,
-            operation.events.some(
-              (event) =>
-                event.stage === stage && event.event_type === "stage_completed",
-            ),
-          );
-          return (
-            <span
-              key={stage}
-              className={`h-1.5 rounded-full ${state === "done" ? "bg-[#2d7461]" : state === "active" ? "bg-[#5f52bd]" : "bg-[#d5dcd8]"}`}
-            />
-          );
-        })}
+      <div className="mt-4 grid gap-5 lg:grid-cols-2">
+        <div>
+          <h5 className="text-sm font-semibold">Checklist operacional</h5>
+          <ul className="mt-3 space-y-2">
+            {checklistForStage(stage).map((item) => {
+              const checked = evidence?.checklist[item] === true;
+              return (
+                <li key={item} className="flex items-start gap-2 text-sm">
+                  <span className={`mt-0.5 grid size-5 shrink-0 place-items-center rounded border ${checked ? "border-[#287258] bg-[#287258] text-white" : "border-[#d3a34a] bg-[#fff7e3] text-[#7a5911]"}`}>
+                    {checked && <Check size={13} />}
+                  </span>
+                  <span>{item}</span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+        <div>
+          <h5 className="text-sm font-semibold">Evidências da etapa</h5>
+          {evidence ? (
+            <dl className="mt-3 space-y-2 text-sm">
+              <div><dt className="text-[#5f7067]">Confirmação</dt><dd className="font-medium">{formatDate(evidence.server_received_at)}</dd></div>
+              <div><dt className="text-[#5f7067]">Responsável</dt><dd className="font-medium">{evidence.responsible_name || evidence.actor_name}</dd></div>
+              <div><dt className="text-[#5f7067]">GPS</dt><dd className="font-medium">{evidence.latitude.toFixed(5)}, {evidence.longitude.toFixed(5)} · precisão {Math.round(evidence.accuracy)} m</dd></div>
+              {evidence.photo_url && <div><dt className="text-[#5f7067]">Foto</dt><dd><a href={evidence.photo_url} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center font-semibold underline">Abrir evidência</a></dd></div>}
+            </dl>
+          ) : (
+            <p className="mt-3 rounded-lg bg-[#f3f6f4] p-3 text-sm text-[#5f7067]">
+              {state === "done"
+                ? "Etapa avançada sem evidência disponível neste recorte."
+                : "Aguardando checklist, foto e GPS confirmados pelo app de campo."}
+            </p>
+          )}
+        </div>
       </div>
-      <ol className="mt-3 flex gap-2 overflow-x-auto pb-2" aria-label="Etapas da operação">
-        {operationStages.map((stage, index) => {
-          const state = stageState(
-            index,
-            current,
-            operation.status,
-            operation.events.some(
-              (event) =>
-                event.stage === stage && event.event_type === "stage_completed",
-            ),
-          );
-          const done = state === "done";
-          const active = state === "active";
-          return (
-            <li className="min-w-24 text-center" key={stage}>
-              <span
-                aria-current={active ? "step" : undefined}
-                aria-label={`${stageLabels[stage]}: ${done ? "concluída" : active ? "etapa atual" : "pendente"}`}
-                className={`mx-auto grid size-9 place-items-center rounded-full border-2 text-xs font-bold ${
-                  done
-                    ? "border-[#2d7461] bg-[#e8f3ef] text-[#2d7461]"
-                    : active
-                      ? "border-[#5f52bd] bg-[#5f52bd] text-white ring-4 ring-[#ebe8fb]"
-                      : "border-[#d5dcd8] bg-white text-[#819087]"
-                }`}
-              >
-                {done ? "OK" : index + 1}
-              </span>
-              <span className="mt-2 block text-[11px] font-medium">
-                {stageLabels[stage]}
-              </span>
-            </li>
-          );
-        })}
-      </ol>
-    </div>
+    </section>
   );
 }
 
-function OperationDetail({ snapshot, operation }: { snapshot: LogisticsSnapshot; operation?: Operation }) {
+function OperationDetail({
+  snapshot,
+  operation,
+  timelineLimit,
+}: {
+  snapshot: LogisticsSnapshot;
+  operation?: Operation;
+  timelineLimit?: number;
+}) {
+  const [focusedStage, setFocusedStage] = useState<OperationStage>(
+    operation?.stage ?? "preparation",
+  );
   if (!operation) return <Empty>Selecione uma operação para ver o detalhe.</Empty>;
   const operationIncidents = snapshot.incidents.filter(
     (incident) => incident.operation_id === operation.id && incident.status !== "resolved",
   );
+  const orderedEvents = [...operation.events].sort(
+    (left, right) =>
+      Date.parse(right.server_received_at) - Date.parse(left.server_received_at),
+  );
+  const visibleEvents =
+    timelineLimit === undefined
+      ? orderedEvents
+      : orderedEvents.slice(0, timelineLimit);
+  const hiddenEvents = orderedEvents.length - visibleEvents.length;
   return (
-    <article className="min-w-0 rounded-xl border border-[#d7dfd9] bg-white p-5">
+    <article className="min-w-0 overflow-hidden rounded-xl border border-[#d7dfd9] bg-white p-5 md:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="font-mono text-xs uppercase tracking-[0.14em] text-[#708078]">
+        <div className="min-w-0">
+          <p className="break-words font-mono text-xs uppercase tracking-[0.14em] text-[#5f7067]">
             {sourceLabel(operation)}
           </p>
-          <h3 className="mt-2 text-2xl font-semibold">{operation.event_name}</h3>
+          <h3 className="mt-2 break-words text-2xl font-semibold md:text-3xl">
+            {operation.event_name}
+          </h3>
           <p className="mt-1 text-sm text-[#617068]">{operation.destination}</p>
         </div>
         <Pill
@@ -343,45 +373,61 @@ function OperationDetail({ snapshot, operation }: { snapshot: LogisticsSnapshot;
               ? "green"
               : operation.status === "cancelled"
                 ? "red"
-                : "amber"
+                : "neutral"
           }
         >
           {statusLabel[operation.status]}
         </Pill>
       </div>
+      {operationIncidents.length > 0 && (
+        <div className="mt-5 border-l-4 border-[#d69f38] bg-[#fff7e3] p-4 text-sm text-[#755615]">
+          <p className="font-mono text-xs uppercase tracking-[0.14em]">
+            Antes de avançar
+          </p>
+          <strong className="mt-1 block">
+            {operationIncidents.length} ocorrência(s) exige(m) decisão.
+          </strong>
+          <span className="mt-1 block">Revise a exceção na torre antes da próxima etapa.</span>
+        </div>
+      )}
       <a
         href={mapsUrl(operation.destination)}
         target="_blank"
         rel="noreferrer"
-        className="mt-4 inline-flex items-center gap-2 rounded-lg border border-[#bfcfc6] px-3 py-2 text-sm font-semibold"
+        className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-lg border border-[#bfcfc6] px-3 py-2 text-sm font-semibold hover:bg-[#f4f7f5]"
       >
         Abrir rota no Google Maps <ExternalLink size={15} />
       </a>
-      <StageRail operation={operation} />
-      <dl className="mt-5 grid grid-cols-2 gap-4 border-y border-[#e2e8e4] py-4 text-sm">
+      <StageRail
+        operation={operation}
+        selectedStage={focusedStage}
+        onStageSelect={setFocusedStage}
+      />
+      <StageFocus operation={operation} stage={focusedStage} />
+      <dl className="mt-5 grid border-y border-[#e2e8e4] text-sm [&>div]:p-4 sm:grid-cols-2">
         <div>
-          <dt className="text-[#708078]">Equipe</dt>
+          <dt className="text-[#5f7067]">Equipe</dt>
           <dd className="font-medium">
             {snapshot.teams.find((team) => team.id === operation.team_id)?.name ??
               "Não escalada"}
           </dd>
         </div>
-        <div>
-          <dt className="text-[#708078]">Veículo</dt>
+        <div className="border-t border-[#e2e8e4] sm:border-l sm:border-t-0">
+          <dt className="text-[#5f7067]">Veículo</dt>
           <dd className="font-medium">
             {snapshot.vehicles.find((vehicle) => vehicle.id === operation.vehicle_id)
               ?.name ?? "Não escalado"}
           </dd>
         </div>
-        <div>
-          <dt className="text-[#708078]">Motorista</dt>
+        <div className="border-t border-[#e2e8e4]">
+          <dt className="text-[#5f7067]">Motorista</dt>
           <dd className="font-medium">
             {snapshot.people.find((person) => person.id === operation.driver_id)
               ?.full_name ?? "Não escalado"}
           </dd>
         </div>
-        <div>
-          <dt className="text-[#708078]">Próxima ação</dt>
+        <div className="border-t border-[#e2e8e4] sm:border-l">
+          <dt className="text-[#5f7067]">Próxima ação</dt>
           <dd className="font-medium">
             {operation.status === "active"
               ? `Concluir ${stageLabels[operation.stage].toLowerCase()}`
@@ -389,19 +435,19 @@ function OperationDetail({ snapshot, operation }: { snapshot: LogisticsSnapshot;
           </dd>
         </div>
       </dl>
-      {operationIncidents.length > 0 && (
-        <div className="mt-4 rounded-lg border border-[#ead5a4] bg-[#fff7e3] p-3 text-sm text-[#755615]">
-          <strong>{operationIncidents.length} ocorrência(s) exige(m) decisão.</strong>
-        </div>
-      )}
       <h4 className="mt-5 font-semibold">Linha do tempo e evidências</h4>
       <div className="mt-3 space-y-3">
         {!operation.events.length && (
-          <p className="text-sm text-[#708078]">Nenhuma ação confirmada no servidor.</p>
+          <p className="text-sm text-[#5f7067]">Nenhuma ação confirmada no servidor.</p>
         )}
-        {operation.events.map((event) => (
+        {visibleEvents.map((event) => (
           <TimelineEvent key={event.id} event={event} />
         ))}
+        {hiddenEvents > 0 && (
+          <p className="border-t border-[#e2e8e4] pt-3 text-sm font-medium text-[#5f7067]">
+            +{hiddenEvents} registro(s) disponível(is) em Evidências.
+          </p>
+        )}
       </div>
     </article>
   );
@@ -464,51 +510,104 @@ function TodayView(props: Props) {
       CheckCircle2,
     ],
   ];
+  const selectedIncident = openIncidents.find(
+    (incident) => incident.operation_id === selected?.id,
+  );
+  const selectedUnassigned = selected && unassigned.includes(selected);
   return (
     <div>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {metrics.map(([label, value, Icon]) => (
-          <article key={String(label)} className="rounded-xl border border-[#d7dfd9] bg-white p-4">
-            <Icon size={19} className="text-[#3d7567]" />
-            <strong className="mt-3 block text-3xl">{String(value)}</strong>
-            <span className="text-sm text-[#65746c]">{String(label)}</span>
+      <div className="grid grid-cols-[minmax(0,1fr)_44px] items-end gap-4">
+        <div>
+          <p className="font-mono text-xs uppercase tracking-[0.16em] text-[#5f7067]">
+            Torre de hoje
+          </p>
+          <h2 className="mt-1 text-3xl font-semibold tracking-tight">
+            Próxima ação, sem ruído.
+          </h2>
+        </div>
+        <button
+          onClick={() => void props.run(props.refresh, "Torre atualizada.")}
+          className="grid min-h-11 min-w-11 place-items-center rounded-lg border border-[#cad4cd] bg-white hover:bg-[#f4f7f5]"
+          aria-label="Atualizar torre"
+        >
+          <RefreshCw size={17} />
+        </button>
+      </div>
+
+      <div className="mt-5 grid grid-cols-4 overflow-hidden border-y border-[#d7dfd9] bg-white">
+        {metrics.map(([label, value, Icon], index) => (
+          <article
+            key={String(label)}
+            className={`flex min-h-20 min-w-0 items-start gap-2 px-2 py-3 sm:gap-3 sm:px-4 ${index < metrics.length - 1 ? "border-r border-[#e1e7e3]" : ""}`}
+          >
+            <Icon size={18} className="hidden shrink-0 text-[#3d7567] sm:block" />
+            <span className="min-w-0">
+              <strong className="block text-2xl leading-none">{String(value)}</strong>
+              <span className="mt-1 block text-xs leading-tight text-[#5f7067] sm:text-sm">{String(label)}</span>
+            </span>
           </article>
         ))}
       </div>
-      <div className="mt-5 grid gap-5 xl:grid-cols-[1fr_440px]">
-        <div>
-          <div className="mb-4 flex items-end justify-between gap-3">
-            <div>
-              <p className="font-mono text-xs uppercase tracking-[0.16em] text-[#708078]">
-                Torre de hoje
-              </p>
-              <h2 className="mt-1 text-3xl font-semibold tracking-tight">
-                Próxima ação, sem ruído.
-              </h2>
+
+      <div className="mt-5 grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_280px] xl:grid-cols-[minmax(0,1fr)_340px]">
+        <OperationDetail key={`${selected?.id}-${selected?.stage}`} snapshot={snapshot} operation={selected} timelineLimit={2} />
+        <aside className="order-first min-w-0 space-y-4 lg:order-last">
+          <section>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="font-mono text-xs uppercase tracking-[0.14em] text-[#5f7067]">
+                  Agenda operacional
+                </p>
+                <h3 className="font-semibold">Operações em andamento</h3>
+              </div>
+              <Pill tone="green">{active.length} ativa(s)</Pill>
             </div>
-            <button
-              onClick={() => void props.run(props.refresh, "Torre atualizada.")}
-              className="rounded-lg border border-[#cad4cd] bg-white p-2"
-              aria-label="Atualizar"
-            >
-              <RefreshCw size={17} />
-            </button>
-          </div>
           <OperationList
             operations={active}
-            selectedId={selectedId}
+            selectedId={selected?.id ?? ""}
             setSelectedId={setSelectedId}
+            compact
           />
-        </div>
-        <OperationDetail snapshot={snapshot} operation={selected} />
+          </section>
+
+          {selected && <section
+            className={`border-l-4 p-4 ${
+              selectedIncident
+                ? "border-[#d69f38] bg-[#fff7e3] text-[#755615]"
+                : selectedUnassigned
+                  ? "border-[#bd6d56] bg-[#fff0eb] text-[#7f4034]"
+                  : "border-[#2d7461] bg-[#edf6f2] text-[#285f50]"
+            }`}
+          >
+            <p className="font-mono text-xs uppercase tracking-[0.14em]">
+              Próxima decisão
+            </p>
+            <strong className="mt-2 block">
+              {selectedIncident
+                ? incidentTypeLabel[selectedIncident.type]
+                : selectedUnassigned
+                  ? "Completar a escala"
+                  : "Operação pronta para avançar"}
+            </strong>
+            <p className="mt-1 text-sm">
+              {selectedIncident
+                ? selectedIncident.description
+                : selectedUnassigned
+                  ? "Associe equipe, veículo e motorista antes da saída."
+                  : "Sem bloqueios abertos para a etapa atual."}
+            </p>
+          </section>}
+        </aside>
       </div>
     </div>
   );
 }
 
-function OperationsView(props: Props) {
+function OperationsView(props: Props & { openSelected?: boolean }) {
   const [stageFilter, setStageFilter] = useState("all");
   const [sourceFilter, setSourceFilter] = useState("all");
+  const [detailOpen, setDetailOpen] = useState(Boolean(props.openSelected));
+  const detailRef = useRef<HTMLDivElement>(null);
   const filtered = props.snapshot.operations.filter(
     (operation) =>
       (stageFilter === "all" || operation.stage === stageFilter) &&
@@ -516,6 +615,12 @@ function OperationsView(props: Props) {
   );
   const selected =
     filtered.find((operation) => operation.id === props.selectedId) ?? filtered[0];
+
+  useEffect(() => {
+    if (!detailOpen || !detailRef.current || window.matchMedia("(min-width: 1280px)").matches)
+      return;
+    detailRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [detailOpen, selected?.id]);
 
   const create = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -557,15 +662,15 @@ function OperationsView(props: Props) {
     <div>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="font-mono text-xs uppercase tracking-[0.16em] text-[#708078]">Operações</p>
+          <p className="font-mono text-xs uppercase tracking-[0.16em] text-[#5f7067]">Operações</p>
           <h2 className="mt-1 text-3xl font-semibold tracking-tight">Planejamento e escala</h2>
         </div>
-        <div className="flex gap-2">
+        <div className="grid w-full gap-2 sm:w-auto sm:grid-cols-2">
           <select
             aria-label="Filtrar por etapa"
             value={stageFilter}
             onChange={(event) => setStageFilter(event.target.value)}
-            className="rounded-lg border border-[#cbd4ce] bg-white px-3 py-2 text-sm"
+            className="min-h-11 w-full rounded-lg border border-[#cbd4ce] bg-white px-3 py-2 text-sm"
           >
             <option value="all">Todas as etapas</option>
             {operationStages.map((stage) => (
@@ -576,7 +681,7 @@ function OperationsView(props: Props) {
             aria-label="Filtrar por origem"
             value={sourceFilter}
             onChange={(event) => setSourceFilter(event.target.value)}
-            className="rounded-lg border border-[#cbd4ce] bg-white px-3 py-2 text-sm"
+            className="min-h-11 w-full rounded-lg border border-[#cbd4ce] bg-white px-3 py-2 text-sm"
           >
             <option value="all">Todas as origens</option>
             <option value="manual">Manual interna</option>
@@ -584,12 +689,15 @@ function OperationsView(props: Props) {
           </select>
         </div>
       </div>
-      <div className="mt-5 grid gap-5 xl:grid-cols-[1fr_430px]">
+      <div className={`mt-5 grid items-start gap-5 ${detailOpen ? "xl:grid-cols-[minmax(0,1fr)_430px]" : ""}`}>
         <div className="min-w-0 space-y-5">
           <OperationList
             operations={filtered}
-            selectedId={props.selectedId}
-            setSelectedId={props.setSelectedId}
+            selectedId={selected?.id ?? ""}
+            setSelectedId={(id) => {
+              props.setSelectedId(id);
+              setDetailOpen(true);
+            }}
           />
           <details className="rounded-xl border border-[#d7dfd9] bg-white p-5" open={!props.snapshot.operations.length}>
             <summary className="cursor-pointer font-semibold">Criar operação manual</summary>
@@ -604,12 +712,14 @@ function OperationsView(props: Props) {
               <Select name="vehicleId" label="Veículo" required={false} options={props.snapshot.vehicles.map((vehicle) => [vehicle.id, `${vehicle.name} · ${vehicle.plate}`])} />
               <Select name="driverId" label="Motorista" required={false} options={props.snapshot.people.map((person) => [person.id, person.full_name])} />
               <div className="md:col-span-2"><Input name="notes" label="Observações" required={false} /></div>
-              <div className="md:col-span-2"><Submit busy={props.busy} configured={props.snapshot.configured} label="Criar e escalar operação" /></div>
+              <div className="md:col-span-2"><Submit busy={props.busy} configured={props.snapshot.configured} label="Criar operação manual" /></div>
             </form>
           </details>
         </div>
-        <div className="min-w-0 space-y-5">
-          <OperationDetail snapshot={props.snapshot} operation={selected} />
+        {detailOpen && (
+        <div ref={detailRef} className="min-w-0 scroll-mt-20 space-y-3 xl:sticky xl:top-4">
+          <button onClick={() => setDetailOpen(false)} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-[#cad4cd] bg-white px-3 text-sm font-semibold hover:bg-[#f4f7f5]"><X size={16} /> Fechar detalhe</button>
+          <OperationDetail key={`${selected?.id}-${selected?.stage}`} snapshot={props.snapshot} operation={selected} />
           {selected && selected.status === "active" && (
             <form key={selected.id} onSubmit={update} className="rounded-xl border border-[#d7dfd9] bg-white p-5">
               <h3 className="text-lg font-semibold">Editar escala</h3>
@@ -642,55 +752,143 @@ function OperationsView(props: Props) {
             </form>
           )}
         </div>
+        )}
       </div>
     </div>
   );
 }
 
-function CalendarView({ snapshot, setSelectedId }: Props) {
-  const [reference, setReference] = useState(operationDateInput(new Date()));
+function CalendarView({
+  snapshot,
+  setSelectedId,
+  onOpenOperation,
+}: Props & { onOpenOperation: () => void }) {
+  const [reference, setReference] = useState(
+    operationDateInput(
+      new Date(
+        snapshot.operations.find((operation) => operation.status === "active")
+          ?.scheduled_at ?? new Date(),
+      ),
+    ),
+  );
+  const [teamFilter, setTeamFilter] = useState("all");
   const selectedDate = new Date(`${reference}T12:00:00`);
   const monday = new Date(selectedDate);
   monday.setDate(selectedDate.getDate() - ((selectedDate.getDay() + 6) % 7));
-  const days = Array.from({ length: 7 }, (_, index) => {
+  const days = Array.from({ length: 5 }, (_, index) => {
     const date = new Date(monday);
     date.setDate(monday.getDate() + index);
     return date;
   });
+  const weekendDays = [5, 6].map((index) => {
+    const date = new Date(monday);
+    date.setDate(monday.getDate() + index);
+    return date;
+  });
+  const slots = [0, 6, 12, 18];
+  const dayKeys = new Set(days.map(operationDateInput));
+  const weekKeys = new Set([...days, ...weekendDays].map(operationDateInput));
+  const visibleOperations = snapshot.operations.filter(
+    (operation) =>
+      weekKeys.has(operationDateInput(new Date(operation.scheduled_at))) &&
+      (teamFilter === "all" || operation.team_id === teamFilter),
+  );
+  const weekendOperations = visibleOperations.filter(
+    (operation) =>
+      !dayKeys.has(operationDateInput(new Date(operation.scheduled_at))),
+  );
+  const shiftWeek = (daysToAdd: number) => {
+    const next = new Date(selectedDate);
+    next.setDate(next.getDate() + daysToAdd);
+    setReference(operationDateInput(next));
+  };
   return (
     <div>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="font-mono text-xs uppercase tracking-[0.16em] text-[#708078]">Agenda</p>
+          <p className="font-mono text-xs uppercase tracking-[0.16em] text-[#5f7067]">Agenda</p>
           <h2 className="mt-1 text-3xl font-semibold tracking-tight">Semana operacional</h2>
         </div>
-        <label className="text-sm font-medium">Semana de referência<input type="date" value={reference} onChange={(event) => setReference(event.target.value)} className="ml-2 rounded-lg border border-[#cbd4ce] bg-white px-3 py-2" /></label>
+        <div className="grid w-full gap-2 sm:w-auto sm:grid-cols-[44px_1fr_44px]">
+          <button type="button" onClick={() => shiftWeek(-7)} aria-label="Semana anterior" className="grid min-h-11 min-w-11 place-items-center rounded-lg border border-[#cbd4ce] bg-white"><ChevronLeft size={17} /></button>
+          <label className="sr-only" htmlFor="agenda-reference">Semana de referência</label>
+          <input id="agenda-reference" type="date" value={reference} onChange={(event) => { if (event.target.value) setReference(event.target.value); }} className="min-h-11 w-full rounded-lg border border-[#cbd4ce] bg-white px-3 py-2 text-sm" />
+          <button type="button" onClick={() => shiftWeek(7)} aria-label="Próxima semana" className="grid min-h-11 min-w-11 place-items-center rounded-lg border border-[#cbd4ce] bg-white"><ChevronRight size={17} /></button>
+        </div>
       </div>
-      <div className="mt-5 grid gap-3 lg:grid-cols-7">
-        {days.map((day) => {
-          const key = operationDateInput(day);
-          const operations = snapshot.operations.filter(
-            (operation) => operationDateInput(new Date(operation.scheduled_at)) === key,
-          );
-          return (
-            <section key={key} className="min-h-40 rounded-xl border border-[#d7dfd9] bg-white p-3">
-              <h3 className="text-xs font-semibold uppercase tracking-[0.1em] text-[#65746c]">
-                {new Intl.DateTimeFormat("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit" }).format(day)}
-              </h3>
-              <div className="mt-3 space-y-2">
-                {operations.map((operation) => (
-                  <button key={operation.id} onClick={() => setSelectedId(operation.id)} className="w-full rounded-lg bg-[#eef4f0] p-2 text-left text-xs">
-                    <strong className="block">{new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" }).format(new Date(operation.scheduled_at))}</strong>
-                    <span className="mt-1 block">{operation.event_name}</span>
-                    <small className="text-[#617068]">{stageLabels[operation.stage]}</small>
-                  </button>
-                ))}
-                {!operations.length && <span className="text-xs text-[#9aa49f]">Sem operação</span>}
-              </div>
-            </section>
-          );
-        })}
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-[#5f7067]">Cinco dias úteis · fim de semana destacado · horários de São Paulo</p>
+        <select aria-label="Filtrar agenda por equipe" value={teamFilter} onChange={(event) => setTeamFilter(event.target.value)} className="min-h-11 w-full rounded-lg border border-[#cbd4ce] bg-white px-3 py-2 text-sm sm:w-auto">
+          <option value="all">Todas as equipes</option>
+          {snapshot.teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
+        </select>
       </div>
+      <div className="mt-4 overflow-x-auto rounded-xl border border-[#d7dfd9] bg-white">
+        <div className="grid min-w-[820px] grid-cols-[76px_repeat(5,minmax(140px,1fr))]">
+          <div className="border-b border-r border-[#e1e7e3] bg-[#f7f9f7]" />
+          {days.map((day) => (
+            <h3 key={operationDateInput(day)} className="border-b border-r border-[#e1e7e3] bg-[#f7f9f7] px-3 py-3 text-xs font-semibold uppercase tracking-[0.1em] text-[#5f7067] last:border-r-0">
+              {new Intl.DateTimeFormat("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit" }).format(day)}
+            </h3>
+          ))}
+          {slots.map((slot) => (
+            <div className="contents" key={slot}>
+              <time className="border-b border-r border-[#e1e7e3] px-3 py-3 font-mono text-xs tabular-nums text-[#5f7067]">{String(slot).padStart(2, "0")}:00</time>
+              {days.map((day) => {
+                const key = operationDateInput(day);
+                const operations = visibleOperations.filter((operation) => {
+                  if (operationDateInput(new Date(operation.scheduled_at)) !== key) return false;
+                  const hour = Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", hour: "2-digit", hourCycle: "h23" }).format(new Date(operation.scheduled_at)));
+                  return hour >= slot && hour < slot + 6;
+                });
+                return (
+                  <section key={`${key}-${slot}`} aria-label={`${key}, ${slot}:00`} className="min-h-28 border-b border-r border-[#e1e7e3] p-2 last:border-r-0">
+                    <div className="space-y-2">
+                      {operations.map((operation) => (
+                        <button key={operation.id} onClick={() => { setSelectedId(operation.id); onOpenOperation(); }} className="min-h-11 w-full rounded-lg bg-[#eef4f0] p-2 text-left text-xs hover:bg-[#e2eee7]">
+                          <strong className="block font-mono tabular-nums">{new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" }).format(new Date(operation.scheduled_at))}</strong>
+                          <span className="mt-1 block font-semibold">{operation.event_name}</span>
+                          <span className="text-[#5f7067]">{stageLabels[operation.stage]}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+      {weekendOperations.length > 0 && (
+        <section className="mt-4 rounded-xl border border-[#d7dfd9] bg-white p-4">
+          <p className="font-mono text-xs uppercase tracking-[0.14em] text-[#5f7067]">Fim de semana</p>
+          <div className="mt-3 grid gap-3 md:grid-cols-2">
+            {weekendDays.map((day) => {
+              const key = operationDateInput(day);
+              const operations = weekendOperations.filter(
+                (operation) => operationDateInput(new Date(operation.scheduled_at)) === key,
+              );
+              return (
+                <article key={key} className="rounded-lg border border-[#e1e7e3] p-3">
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.1em] text-[#5f7067]">
+                    {new Intl.DateTimeFormat("pt-BR", { weekday: "long", day: "2-digit", month: "2-digit" }).format(day)}
+                  </h3>
+                  <div className="mt-2 space-y-2">
+                    {operations.map((operation) => (
+                      <button key={operation.id} onClick={() => { setSelectedId(operation.id); onOpenOperation(); }} className="min-h-11 w-full rounded-lg bg-[#eef4f0] p-3 text-left text-sm hover:bg-[#e2eee7]">
+                        <strong>{new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" }).format(new Date(operation.scheduled_at))} · {operation.event_name}</strong>
+                        <span className="mt-1 block text-xs text-[#5f7067]">{stageLabels[operation.stage]}</span>
+                      </button>
+                    ))}
+                    {!operations.length && <p className="text-sm text-[#5f7067]">Sem operação.</p>}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      )}
+      {!visibleOperations.length && <div className="mt-4"><Empty>Nenhuma operação corresponde à semana e à equipe selecionadas.</Empty></div>}
     </div>
   );
 }
@@ -713,39 +911,71 @@ function PeopleView(props: Props) {
   return (
     <div>
       <div>
-        <p className="font-mono text-xs uppercase tracking-[0.16em] text-[#708078]">Pessoas e equipes</p>
+        <p className="font-mono text-xs uppercase tracking-[0.16em] text-[#5f7067]">Pessoas e equipes</p>
         <h2 className="mt-1 text-3xl font-semibold tracking-tight">Quem pode ir para a escala</h2>
       </div>
-      <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+
+      <div className="mt-5 grid items-start gap-3 sm:grid-cols-2">
+        <details className="rounded-xl border border-[#d7dfd9] bg-white p-4" open={!props.snapshot.people.length}>
+          <summary className="flex min-h-11 cursor-pointer items-center gap-3 font-semibold">
+            <Users size={19} className="text-[#3d7567]" /> Cadastrar funcionário
+          </summary>
+          <form className="mt-2 border-t border-[#e1e7e3] pt-2" onSubmit={submit("create-person", "Funcionário e acesso criados.", (form) => ({ fullName: formValue(form, "fullName"), email: formValue(form, "email"), phone: formValue(form, "phone"), jobTitle: formValue(form, "jobTitle"), temporaryPassword: formValue(form, "temporaryPassword") }))}>
+            <p className="mt-2 text-sm text-[#5f7067]">Cria o perfil no Auth; a senha temporária muda no primeiro acesso.</p>
+            <Input name="fullName" label="Nome completo" />
+            <Input name="email" label="E-mail" type="email" />
+            <Input name="jobTitle" label="Função operacional" />
+            <Input name="phone" label="Telefone" required={false} />
+            <Input name="temporaryPassword" label="Senha temporária" type="password" minLength={10} />
+            <Submit busy={props.busy} configured={props.snapshot.configured} label="Cadastrar funcionário" />
+          </form>
+        </details>
+
+        <details className="rounded-xl border border-[#d7dfd9] bg-white p-4" open={!props.snapshot.teams.length}>
+          <summary className="flex min-h-11 cursor-pointer items-center gap-3 font-semibold">
+            <Users size={19} className="text-[#3d7567]" /> Criar equipe-base
+          </summary>
+          <form className="mt-2 border-t border-[#e1e7e3] pt-2" onSubmit={submit("create-team", "Equipe criada.", (form) => ({ name: formValue(form, "name"), leaderId: formValue(form, "leaderId"), memberIds: form.getAll("memberIds").map(String) }))}>
+            <Input name="name" label="Nome da equipe" />
+            <Select name="leaderId" label="Líder" options={props.snapshot.people.map((person) => [person.id, person.full_name])} />
+            <fieldset className="mt-4">
+              <legend className="text-sm font-medium">Integrantes</legend>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                {props.snapshot.people.map((person) => (
+                  <label key={person.id} className="flex min-h-11 items-center gap-3 rounded-lg border border-[#d7dfd9] px-3 text-sm">
+                    <input type="checkbox" name="memberIds" value={person.id} className="size-5 accent-[#5b4bcc]" />
+                    <span className="min-w-0 break-words">{person.full_name}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            <Submit busy={props.busy} configured={props.snapshot.configured} label="Criar equipe" />
+          </form>
+        </details>
+      </div>
+
+      <h3 className="mt-7 font-semibold">Pessoas</h3>
+      <div className="mt-3 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {props.snapshot.people.map((person) => (
           <article key={person.id} className="rounded-xl border border-[#d7dfd9] bg-white p-4">
             <div className="flex items-start justify-between gap-3">
-              <div><strong>{person.full_name}</strong><p className="text-sm text-[#65746c]">{person.job_title}</p></div>
+              <div className="min-w-0"><strong className="break-words">{person.full_name}</strong><p className="text-sm text-[#65746c]">{person.job_title}</p></div>
               <Pill tone={person.availability === "available" ? "green" : "amber"}>{person.availability === "available" ? "Disponível" : "Indisponível"}</Pill>
             </div>
             <p className="mt-3 text-sm text-[#65746c]">{person.phone ?? "Telefone não informado"}</p>
-            <small className="mt-2 block text-[#819087]">Acesso: {person.role === "manager" ? "Gestor" : "Funcionário"}</small>
+            <small className="mt-2 block text-[#5f7067]">Acesso: {person.role === "manager" ? "Gestor" : "Funcionário"}</small>
           </article>
         ))}
       </div>
-      <div className="mt-5 grid gap-5 xl:grid-cols-2">
-        <form className="rounded-xl border border-[#d7dfd9] bg-white p-5" onSubmit={submit("create-person", "Funcionário e acesso criados.", (form) => ({ fullName: formValue(form, "fullName"), email: formValue(form, "email"), phone: formValue(form, "phone"), jobTitle: formValue(form, "jobTitle"), temporaryPassword: formValue(form, "temporaryPassword") }))}>
-          <Users size={21} /><h3 className="mt-3 text-xl font-semibold">Cadastrar funcionário</h3><p className="mt-1 text-sm text-[#68776f]">Cria perfil no Auth. A senha temporária deve ser trocada no primeiro acesso.</p>
-          <Input name="fullName" label="Nome completo" /><Input name="email" label="E-mail" type="email" /><Input name="jobTitle" label="Função operacional" /><Input name="phone" label="Telefone" required={false} /><Input name="temporaryPassword" label="Senha temporária" type="password" minLength={10} />
-          <Submit busy={props.busy} configured={props.snapshot.configured} label="Cadastrar funcionário" />
-        </form>
-        <form className="rounded-xl border border-[#d7dfd9] bg-white p-5" onSubmit={submit("create-team", "Equipe criada.", (form) => ({ name: formValue(form, "name"), leaderId: formValue(form, "leaderId"), memberIds: form.getAll("memberIds").map(String) }))}>
-          <Users size={21} /><h3 className="mt-3 text-xl font-semibold">Criar equipe-base</h3>
-          <Input name="name" label="Nome da equipe" /><Select name="leaderId" label="Líder" options={props.snapshot.people.map((person) => [person.id, person.full_name])} />
-          <label className="mt-3 block text-sm font-medium">Integrantes<select name="memberIds" multiple className="mt-2 h-32 w-full rounded-lg border border-[#cbd4ce] bg-white px-3 py-2">{props.snapshot.people.map((person) => <option key={person.id} value={person.id}>{person.full_name}</option>)}</select></label>
-          <Submit busy={props.busy} configured={props.snapshot.configured} label="Criar equipe" />
-        </form>
-      </div>
-      <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      {!props.snapshot.people.length && <div className="mt-3"><Empty>Cadastre a primeira pessoa para formar uma equipe.</Empty></div>}
+
+      <h3 className="mt-7 font-semibold">Equipes-base</h3>
+      <div className="mt-3 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {props.snapshot.teams.map((team) => (
-          <article key={team.id} className="rounded-xl border border-[#d7dfd9] bg-white p-4"><strong>{team.name}</strong><p className="mt-2 text-sm text-[#65746c]">Líder: {props.snapshot.people.find((person) => person.id === team.leader_id)?.full_name ?? "Não informado"}</p><p className="text-sm text-[#65746c]">{team.member_ids.length} integrante(s)</p></article>
+          <article key={team.id} className="min-w-0 rounded-xl border border-[#d7dfd9] bg-white p-4"><strong className="break-words">{team.name}</strong><p className="mt-2 text-sm text-[#65746c]">Líder: {props.snapshot.people.find((person) => person.id === team.leader_id)?.full_name ?? "Não informado"}</p><p className="text-sm text-[#65746c]">{team.member_ids.length} integrante(s)</p></article>
         ))}
       </div>
+      {!props.snapshot.teams.length && <div className="mt-3"><Empty>Crie uma equipe para escalar os recursos juntos.</Empty></div>}
     </div>
   );
 }
@@ -763,16 +993,33 @@ function FleetView(props: Props) {
   };
   return (
     <div>
-      <div><p className="font-mono text-xs uppercase tracking-[0.16em] text-[#708078]">Frota</p><h2 className="mt-1 text-3xl font-semibold tracking-tight">Veículos e disponibilidade</h2></div>
-      <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {props.snapshot.vehicles.map((vehicle) => (
-          <article key={vehicle.id} className="rounded-xl border border-[#d7dfd9] bg-white p-4">
-            <Truck size={21} className="text-[#3d7567]" /><strong className="mt-3 block text-lg">{vehicle.name}</strong><p className="text-sm text-[#65746c]">{vehicle.plate} · {vehicle.vehicle_type}</p><p className="mt-1 text-sm text-[#65746c]">{vehicle.capacity_label ?? "Capacidade não informada"}</p>
-            <label className="mt-4 block text-xs font-semibold">Status<select value={vehicle.status} disabled={!props.snapshot.configured || props.busy} onChange={(event) => void props.run(async () => { await postJson("set-vehicle-status", { id: vehicle.id, status: event.target.value }); await props.refresh(); }, "Status do veículo atualizado.")} className="mt-2 w-full rounded-lg border border-[#cbd4ce] bg-white px-3 py-2 text-sm"><option value="available">Disponível</option><option value="in_use">Em uso</option><option value="maintenance">Manutenção</option></select></label>
-          </article>
-        ))}
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div><p className="font-mono text-xs uppercase tracking-[0.16em] text-[#5f7067]">Frota</p><h2 className="mt-1 text-3xl font-semibold tracking-tight">Veículos e disponibilidade</h2></div>
+        <details className="w-full rounded-xl border border-[#d7dfd9] bg-white p-4 sm:max-w-sm">
+          <summary className="flex min-h-11 cursor-pointer items-center gap-3 font-semibold"><Truck size={19} className="text-[#3d7567]" /> Cadastrar veículo</summary>
+          <form onSubmit={create} className="mt-2 border-t border-[#e1e7e3] pt-2"><div className="grid gap-x-4 sm:grid-cols-2"><Input name="name" label="Nome" /><Input name="plate" label="Placa" /><Input name="vehicleType" label="Tipo" /><Input name="capacityLabel" label="Capacidade" required={false} /></div><Submit busy={props.busy} configured={props.snapshot.configured} label="Cadastrar veículo" /></form>
+        </details>
       </div>
-      <form onSubmit={create} className="mt-5 max-w-2xl rounded-xl border border-[#d7dfd9] bg-white p-5"><h3 className="text-xl font-semibold">Cadastrar veículo</h3><div className="grid gap-x-4 md:grid-cols-2"><Input name="name" label="Nome" /><Input name="plate" label="Placa" /><Input name="vehicleType" label="Tipo" /><Input name="capacityLabel" label="Capacidade" required={false} /></div><Submit busy={props.busy} configured={props.snapshot.configured} label="Cadastrar veículo" /></form>
+
+      <div className="mt-5 overflow-x-auto rounded-xl border border-[#d7dfd9] bg-white">
+        <table className="w-full min-w-[720px] text-left text-sm">
+          <thead className="bg-[#f7f9f7] font-mono text-xs uppercase tracking-[0.12em] text-[#5f7067]">
+            <tr><th className="px-4 py-3">Veículo</th><th className="px-4 py-3">Documento</th><th className="px-4 py-3">Tipo</th><th className="px-4 py-3">Capacidade</th><th className="px-4 py-3">Status</th></tr>
+          </thead>
+          <tbody>
+            {props.snapshot.vehicles.map((vehicle) => (
+              <tr key={vehicle.id} className="border-t border-[#e4e9e6]">
+                <td className="px-4 py-3 font-semibold">{vehicle.name}</td>
+                <td className="px-4 py-3 font-mono text-xs">{vehicle.plate}</td>
+                <td className="px-4 py-3 text-[#5f7067]">{vehicle.vehicle_type}</td>
+                <td className="px-4 py-3 text-[#5f7067]">{vehicle.capacity_label ?? "Não informada"}</td>
+                <td className="px-4 py-3"><select aria-label={`Status de ${vehicle.name}`} value={vehicle.status} disabled={!props.snapshot.configured || props.busy} onChange={(event) => void props.run(async () => { await postJson("set-vehicle-status", { id: vehicle.id, status: event.target.value }); await props.refresh(); }, "Status do veículo atualizado.")} className="min-h-11 w-full rounded-lg border border-[#cbd4ce] bg-white px-3 py-2 text-sm"><option value="available">Disponível</option><option value="in_use">Em uso</option><option value="maintenance">Manutenção</option></select></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {!props.snapshot.vehicles.length && <div className="mt-3"><Empty>Cadastre o primeiro veículo para completar uma escala.</Empty></div>}
     </div>
   );
 }
@@ -783,16 +1030,16 @@ function EvidenceView({ snapshot }: Props) {
   );
   return (
     <div>
-      <div><p className="font-mono text-xs uppercase tracking-[0.16em] text-[#708078]">Evidências</p><h2 className="mt-1 text-3xl font-semibold tracking-tight">Registro confirmado por etapa</h2></div>
+      <div><p className="font-mono text-xs uppercase tracking-[0.16em] text-[#5f7067]">Evidências</p><h2 className="mt-1 text-3xl font-semibold tracking-tight">Registro confirmado por etapa</h2></div>
       <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {evidence.map(({ operation, event }) => (
           <article key={event.id} className="overflow-hidden rounded-xl border border-[#d7dfd9] bg-white">
-            {event.photo_url ? <a href={event.photo_url} target="_blank" rel="noreferrer" className="grid h-40 place-items-end bg-cover bg-center p-4 text-sm font-semibold text-white" style={{ backgroundImage: `linear-gradient(180deg, transparent 35%, rgba(17, 35, 29, .82)), url(${event.photo_url})` }}><span className="flex items-center gap-2"><Camera size={18} />Abrir evidência</span></a> : <div className="grid h-28 place-items-center bg-[#edf1ee] text-xs text-[#7a8780]">Sem foto nesta etapa</div>}
-            <div className="p-4"><Pill tone="green">Servidor confirmado</Pill><h3 className="mt-3 font-semibold">{operation.event_name}</h3><p className="text-sm text-[#65746c]">{stageLabels[event.stage]} · {event.actor_name}</p><p className="mt-2 text-xs text-[#7a8780]">{formatDate(event.server_received_at)} · GPS {event.latitude.toFixed(5)}, {event.longitude.toFixed(5)}</p></div>
+            {event.photo_url ? <a href={event.photo_url} target="_blank" rel="noreferrer" className="grid h-40 place-items-end bg-cover bg-center p-4 text-sm font-semibold text-white" style={{ backgroundImage: `linear-gradient(180deg, transparent 35%, rgba(17, 35, 29, .82)), url(${JSON.stringify(event.photo_url)})` }}><span className="flex items-center gap-2"><Camera size={18} />Abrir evidência</span></a> : <div className="grid h-28 place-items-center bg-[#edf1ee] text-xs text-[#5f7067]">Sem foto nesta etapa</div>}
+            <div className="p-4"><Pill tone="green">Servidor confirmado</Pill><h3 className="mt-3 font-semibold">{operation.event_name}</h3><p className="text-sm text-[#65746c]">{stageLabels[event.stage]} · {event.actor_name}</p><p className="mt-2 text-xs text-[#5f7067]">{formatDate(event.server_received_at)} · GPS {event.latitude.toFixed(5)}, {event.longitude.toFixed(5)}</p></div>
           </article>
         ))}
       </div>
-      {!evidence.length && <div className="mt-5"><Empty>Nenhuma evidência confirmada no servidor.</Empty></div>}
+      {!evidence.length && <div className="mt-5"><Empty>Conclua uma etapa no app de campo para gerar a primeira evidência.</Empty></div>}
     </div>
   );
 }
@@ -800,14 +1047,14 @@ function EvidenceView({ snapshot }: Props) {
 function IncidentsView(props: Props) {
   return (
     <div>
-      <div><p className="font-mono text-xs uppercase tracking-[0.16em] text-[#708078]">Ocorrências</p><h2 className="mt-1 text-3xl font-semibold tracking-tight">Exceções que exigem decisão</h2></div>
+      <div><p className="font-mono text-xs uppercase tracking-[0.16em] text-[#5f7067]">Ocorrências</p><h2 className="mt-1 text-3xl font-semibold tracking-tight">Exceções que exigem decisão</h2></div>
       <div className="mt-5 space-y-3">
         {props.snapshot.incidents.map((incident) => {
           const operation = props.snapshot.operations.find((item) => item.id === incident.operation_id);
           return (
             <article key={incident.id} className="grid gap-4 rounded-xl border border-[#d7dfd9] bg-white p-4 lg:grid-cols-[1fr_180px]">
-              <div><div className="flex flex-wrap gap-2"><Pill tone={incident.severity === "high" ? "red" : incident.severity === "medium" ? "amber" : "neutral"}>{incident.severity === "high" ? "Alta" : incident.severity === "medium" ? "Média" : "Baixa"}</Pill><Pill>{incidentTypeLabel[incident.type]}</Pill></div><h3 className="mt-3 font-semibold">{operation?.event_name ?? "Operação"} · {stageLabels[incident.stage]}</h3><p className="mt-1 text-sm text-[#56675e]">{incident.description}</p>{incident.impact && <p className="mt-1 text-sm text-[#7a5911]">Impacto: {incident.impact}</p>}<p className="mt-2 text-xs text-[#7a8780]">{incident.actor_name} · {formatDate(incident.created_at)}</p>{incident.photo_url && <a href={incident.photo_url} target="_blank" rel="noreferrer" className="mt-2 inline-block text-sm font-semibold underline">Abrir foto</a>}</div>
-              <label className="text-xs font-semibold">Tratamento<select value={incident.status} disabled={!props.snapshot.configured || props.busy} onChange={(event) => void props.run(async () => { await postJson("update-incident-status", { id: incident.id, status: event.target.value }); await props.refresh(); }, "Ocorrência atualizada.")} className="mt-2 w-full rounded-lg border border-[#cbd4ce] bg-white px-3 py-2 text-sm"><option value="open">{incidentStatusLabel.open}</option><option value="handling">{incidentStatusLabel.handling}</option><option value="resolved">{incidentStatusLabel.resolved}</option></select></label>
+              <div><div className="flex flex-wrap gap-2"><Pill tone={incident.severity === "high" ? "red" : incident.severity === "medium" ? "amber" : "neutral"}>{incident.severity === "high" ? "Alta" : incident.severity === "medium" ? "Média" : "Baixa"}</Pill><Pill>{incidentTypeLabel[incident.type]}</Pill></div><h3 className="mt-3 font-semibold">{operation?.event_name ?? "Operação"} · {stageLabels[incident.stage]}</h3><p className="mt-1 text-sm text-[#56675e]">{incident.description}</p>{incident.impact && <p className="mt-1 text-sm text-[#7a5911]">Impacto: {incident.impact}</p>}<p className="mt-2 text-xs text-[#5f7067]">{incident.actor_name} · {formatDate(incident.created_at)}</p>{incident.photo_url && <a href={incident.photo_url} target="_blank" rel="noreferrer" className="mt-2 inline-block text-sm font-semibold underline">Abrir foto</a>}</div>
+              <label className="text-xs font-semibold">Tratamento<select value={incident.status} disabled={!props.snapshot.configured || props.busy} onChange={(event) => void props.run(async () => { await postJson("update-incident-status", { id: incident.id, status: event.target.value }); await props.refresh(); }, "Ocorrência atualizada.")} className="mt-2 min-h-11 w-full rounded-lg border border-[#cbd4ce] bg-white px-3 py-2 text-sm"><option value="open">{incidentStatusLabel.open}</option><option value="handling">{incidentStatusLabel.handling}</option><option value="resolved">{incidentStatusLabel.resolved}</option></select></label>
             </article>
           );
         })}
@@ -847,15 +1094,15 @@ function IntegrationsView(props: Props) {
   ];
   return (
     <div>
-      <div><p className="font-mono text-xs uppercase tracking-[0.16em] text-[#708078]">Integrações</p><h2 className="mt-1 text-3xl font-semibold tracking-tight">Conexões e fontes de verdade</h2></div>
+      <div><p className="font-mono text-xs uppercase tracking-[0.16em] text-[#5f7067]">Integrações</p><h2 className="mt-1 text-3xl font-semibold tracking-tight">Conexões e fontes de verdade</h2></div>
       <div className="mt-5 grid gap-5 xl:grid-cols-2">
-        <article className="rounded-xl border border-[#d7dfd9] bg-white p-5"><div className="flex items-start justify-between gap-4"><div><Link2 size={21} className="text-[#3d7567]" /><h3 className="mt-3 text-xl font-semibold">EstoqueNOW</h3></div><Pill tone={props.snapshot.estoquenow.source === "estoquenow" ? "green" : "amber"}>{props.snapshot.estoquenow.source === "estoquenow" ? "Leitura confirmada" : props.snapshot.estoquenow.configured ? "Aguardando teste" : "Sem credenciais"}</Pill></div><p className="mt-3 text-sm text-[#65746c]">{props.snapshot.estoquenow.notice}</p><dl className="mt-4 grid grid-cols-2 gap-3 text-sm"><div><dt className="text-[#7a8780]">Operações importadas</dt><dd className="font-semibold">{props.snapshot.estoquenow.imported_count}</dd></div><div><dt className="text-[#7a8780]">Última leitura</dt><dd className="font-semibold">{props.snapshot.estoquenow.last_sync_at ? formatDate(props.snapshot.estoquenow.last_sync_at) : "Nunca"}</dd></div></dl><div className="mt-4 rounded-lg bg-[#fff6dd] p-3 text-xs text-[#705817]">Integração estritamente server-side e somente leitura. Entrega, devolução, locação e inventário nunca são alterados por este módulo.</div></article>
-        <form onSubmit={sync} className="rounded-xl border border-[#d7dfd9] bg-white p-5"><h3 className="text-xl font-semibold">Importar período</h3><p className="mt-2 text-sm text-[#65746c]">A lista de logísticas é conciliada por ID externo. Etapa, equipe, veículo e evidências internas são preservados.</p><div className="grid gap-x-4 sm:grid-cols-2"><Input name="startDate" label="Início" type="date" defaultValue={operationDateInput(today)} /><Input name="endDate" label="Fim" type="date" defaultValue={operationDateInput(future)} /></div><button disabled={props.busy || !props.snapshot.configured || !props.snapshot.estoquenow.configured} className="mt-5 w-full rounded-lg bg-[#173d34] px-4 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">Executar importação somente leitura</button></form>
+        <article className="rounded-xl border border-[#d7dfd9] bg-white p-5"><div className="flex items-start justify-between gap-4"><div><Link2 size={21} className="text-[#3d7567]" /><h3 className="mt-3 text-xl font-semibold">EstoqueNOW</h3></div><Pill tone={props.snapshot.estoquenow.source === "estoquenow" ? "green" : "amber"}>{props.snapshot.estoquenow.source === "estoquenow" ? "Leitura confirmada" : props.snapshot.estoquenow.configured ? "Aguardando teste" : "Sem credenciais"}</Pill></div><p className="mt-3 text-sm text-[#65746c]">{props.snapshot.estoquenow.notice}</p><dl className="mt-4 grid grid-cols-2 gap-3 text-sm"><div><dt className="text-[#5f7067]">Operações importadas</dt><dd className="font-semibold">{props.snapshot.estoquenow.imported_count}</dd></div><div><dt className="text-[#5f7067]">Última leitura</dt><dd className="font-semibold">{props.snapshot.estoquenow.last_sync_at ? formatDate(props.snapshot.estoquenow.last_sync_at) : "Nunca"}</dd></div></dl><div className="mt-4 rounded-lg bg-[#fff6dd] p-3 text-xs text-[#705817]">Integração estritamente server-side e somente leitura. Entrega, devolução, locação e inventário nunca são alterados por este módulo.</div></article>
+        <form onSubmit={sync} className="rounded-xl border border-[#d7dfd9] bg-white p-5"><h3 className="text-xl font-semibold">Importar período</h3><p className="mt-2 text-sm text-[#65746c]">A lista de logísticas é conciliada por ID externo. Etapa, equipe, veículo e evidências internas são preservados.</p><div className="grid gap-x-4 sm:grid-cols-2"><Input name="startDate" label="Início" type="date" defaultValue={operationDateInput(today)} /><Input name="endDate" label="Fim" type="date" defaultValue={operationDateInput(future)} /></div><button disabled={props.busy || !props.snapshot.configured || !props.snapshot.estoquenow.configured} className="mt-5 min-h-11 w-full rounded-lg bg-[#5b4bcc] px-4 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">Executar importação somente leitura</button></form>
         <article className="rounded-xl border border-[#d7dfd9] bg-white p-5"><Settings2 size={21} /><h3 className="mt-3 text-xl font-semibold">Supabase</h3><Pill tone={props.snapshot.configured ? "green" : "amber"}>{props.snapshot.configured ? "Persistência ativa" : "Modo demonstrativo"}</Pill><p className="mt-3 text-sm text-[#65746c]">Postgres, Auth e Storage são configurados exclusivamente por ambiente. Nenhum segredo é enviado ao navegador.</p></article>
         <article className="rounded-xl border border-[#d7dfd9] bg-white p-5"><MapPin size={21} /><h3 className="mt-3 text-xl font-semibold">Google Maps</h3><Pill tone="green">URL universal ativa</Pill><p className="mt-3 text-sm text-[#65746c]">Abre a rota no app ou navegador. Sem chave paga, mapa embutido ou cálculo próprio de ETA.</p></article>
         <article className="overflow-hidden rounded-xl border border-[#d7dfd9] bg-white xl:col-span-2">
           <div className="border-b border-[#e2e8e4] p-5">
-            <p className="font-mono text-xs uppercase tracking-[0.14em] text-[#708078]">Contrato de dados</p>
+            <p className="font-mono text-xs uppercase tracking-[0.14em] text-[#5f7067]">Contrato de dados</p>
             <h3 className="mt-2 text-xl font-semibold">Uma fonte de verdade por domínio</h3>
           </div>
           <div className="divide-y divide-[#e5eae7]">
@@ -882,6 +1129,7 @@ function IntegrationsView(props: Props) {
 
 export function WebDashboard(props: Props) {
   const [view, setView] = useState<View>("today");
+  const [openSelectedOperation, setOpenSelectedOperation] = useState(false);
   const navigation: [View, string, typeof CircleGauge][] = [
     ["today", "Hoje", CircleGauge],
     ["operations", "Operações", ListChecks],
@@ -894,8 +1142,8 @@ export function WebDashboard(props: Props) {
   ];
   const content = {
     today: <TodayView {...props} />,
-    operations: <OperationsView {...props} />,
-    calendar: <CalendarView {...props} />,
+    operations: <OperationsView {...props} openSelected={openSelectedOperation} />,
+    calendar: <CalendarView {...props} onOpenOperation={() => { setOpenSelectedOperation(true); setView("operations"); }} />,
     people: <PeopleView {...props} />,
     fleet: <FleetView {...props} />,
     evidence: <EvidenceView {...props} />,
@@ -903,15 +1151,15 @@ export function WebDashboard(props: Props) {
     integrations: <IntegrationsView {...props} />,
   };
   return (
-    <div className="mx-auto grid max-w-[1500px] gap-5 px-4 py-6 lg:grid-cols-[220px_1fr] md:px-8">
-      <aside className="self-start overflow-x-auto rounded-xl border border-[#d7dfd9] bg-white p-2 lg:sticky lg:top-5">
+    <div className="mx-auto w-full max-w-[1720px] lg:grid lg:grid-cols-[210px_minmax(0,1fr)] xl:grid-cols-[240px_minmax(0,1fr)]">
+      <aside className="sticky top-0 z-30 overflow-x-auto border-b border-[#d7dfd9] bg-white p-2 lg:min-h-[calc(100vh-96px)] lg:border-b-0 lg:border-r lg:p-4">
         <nav className="flex gap-1 lg:flex-col" aria-label="Torre web">
           {navigation.map(([id, label, Icon]) => (
-            <button key={id} onClick={() => setView(id)} aria-pressed={view === id} className={`flex min-w-max items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium ${view === id ? "bg-[#eaf2ed] text-[#1e5948]" : "text-[#5f7067] hover:bg-[#f5f7f5]"}`}><Icon size={17} />{label}</button>
+            <button key={id} onClick={() => { if (id === "operations") setOpenSelectedOperation(false); setView(id); }} aria-pressed={view === id} className={`flex min-h-11 min-w-max items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium ${view === id ? "bg-[#eaf2ed] text-[#1e5948]" : "text-[#5f7067] hover:bg-[#f5f7f5]"}`}><Icon size={17} />{label}</button>
           ))}
         </nav>
       </aside>
-      <section className="min-w-0">{content[view]}</section>
+      <section className="min-w-0 p-4 md:p-6 xl:p-8">{content[view]}</section>
     </div>
   );
 }
