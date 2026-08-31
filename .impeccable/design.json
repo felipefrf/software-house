@@ -1,0 +1,283 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-29T00:00:00-03:00",
+  "title": "Design System: Império Logística",
+  "extensions": {
+    "shadows": [
+      {
+        "name": "phone-frame",
+        "value": "0 18px 60px rgba(34,48,42,.15)",
+        "purpose": "Enquadra a simulação do aparelho apenas em viewports de 700px ou mais."
+      },
+      {
+        "name": "active-route-halo-desktop",
+        "value": "0 0 0 7px #f0edfb",
+        "purpose": "Fixa visualmente a etapa ativa da rota no desktop."
+      },
+      {
+        "name": "active-route-halo-mobile",
+        "value": "0 0 0 6px #f0edfb",
+        "purpose": "Fixa visualmente a etapa ativa na janela móvel."
+      }
+    ],
+    "focusRings": [
+      {
+        "name": "global",
+        "value": "3px solid #9d91df",
+        "offset": "2px",
+        "purpose": "Foco visível padrão para controles e links."
+      },
+      {
+        "name": "primary-action",
+        "value": "3px solid #b8adef",
+        "offset": "3px",
+        "purpose": "Foco reforçado da ação primária no desktop."
+      }
+    ],
+    "motion": [
+      {
+        "name": "reduced-motion",
+        "value": "@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; transition: none !important; } }",
+        "purpose": "Remove transições e rolagem suave quando o sistema solicita menos movimento."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "desktop-condensed",
+        "value": "1180px"
+      },
+      {
+        "name": "single-column",
+        "value": "900px"
+      },
+      {
+        "name": "field-phone-frame",
+        "value": "700px"
+      },
+      {
+        "name": "compact-route",
+        "value": "620px"
+      },
+      {
+        "name": "product-condensed",
+        "value": "1050px"
+      },
+      {
+        "name": "product-compact-nav",
+        "value": "780px"
+      }
+    ],
+    "responsive": [
+      {
+        "at": "max-width: 1180px",
+        "behavior": "Navegação e coluna lateral estreitam; recursos passam de três para duas colunas; detalhes secundários da rota somem."
+      },
+      {
+        "at": "max-width: 900px",
+        "behavior": "Navegação lateral some; conteúdo vira coluna única; operações do dia rolam horizontalmente."
+      },
+      {
+        "at": "max-width: 620px",
+        "behavior": "A rota troca grade por faixa horizontal rolável, com etapas de 92px e marcos de 44px."
+      },
+      {
+        "at": "field flow",
+        "behavior": "Conteúdo limitado a 430px; ação principal fixa acima da navegação inferior e com safe-area no padding."
+      },
+      {
+        "at": "max-width: 780px",
+        "behavior": "As superfícies secundárias substituem a barra lateral por uma faixa web compacta e rolável; galerias de pessoas, frota e evidências passam a uma coluna."
+      }
+    ],
+    "iconography": [
+      {
+        "name": "inline-action-icon",
+        "value": "18px SVG, fill none, stroke currentColor, stroke-width 2",
+        "purpose": "Ações de ferramentas e fechamento; botões sem texto exigem aria-label e o SVG é aria-hidden."
+      },
+      {
+        "name": "inline-navigation-icon",
+        "value": "19px SVG, fill none, stroke currentColor, stroke-width 1.7",
+        "purpose": "Reforça destinos da navegação sem substituir o rótulo textual."
+      }
+    ],
+    "interactionPatterns": [
+      {
+        "name": "weekly-agenda",
+        "behavior": "Cinco dias úteis em colunas, horários em linhas, controles de semana e filtro por equipe acima; evento abre detalhe em drawer."
+      },
+      {
+        "name": "responsive-drawer",
+        "behavior": "Dialog modal lateral com largura máxima de 500px, corpo rolável e ações fixas; ocupa a largura inteira abaixo de 780px."
+      },
+      {
+        "name": "validated-form",
+        "behavior": "Labels visíveis, ajuda associada, controles nativos, aria-invalid no erro, role alert e foco no primeiro campo inválido."
+      },
+      {
+        "name": "contextual-empty-state",
+        "behavior": "O vazio permanece dentro da grade ou painel filtrado, explica o resultado e preserva filtros e ação de recuperação."
+      },
+      {
+        "name": "keyboard-card",
+        "behavior": "Cartões acionáveis têm role button, nome acessível, foco visível e respondem a Enter e Espaço."
+      }
+    ],
+    "stateTruth": [
+      {
+        "name": "example",
+        "label": "Dados de exemplo",
+        "meaning": "Conteúdo pré-carregado ou demonstrativo; não prova integração ou persistência."
+      },
+      {
+        "name": "session-only",
+        "label": "Somente nesta sessão",
+        "meaning": "Alteração local da aba atual; desaparece ao recarregar e não envia convite nem escrita remota."
+      },
+      {
+        "name": "persisted",
+        "label": "Persistido",
+        "meaning": "Permitido somente após confirmação do servidor ou integração real."
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Resolve a próxima decisão operacional no desktop.",
+      "html": "<button class=\"ds-btn-primary\">REVISAR SAÍDA</button>",
+      "css": ".ds-btn-primary { background:#5b4bcc; border:0; border-radius:10px; color:#fff; cursor:pointer; font:750 13px/1.45 \"Avenir Next\",Avenir,\"Segoe UI\",sans-serif; padding:13px; width:100%; } .ds-btn-primary:hover { background:#493aa8; } .ds-btn-primary:focus-visible { outline:3px solid #b8adef; outline-offset:3px; }"
+    },
+    {
+      "name": "Field Action",
+      "kind": "button",
+      "refersTo": "button-mobile-action",
+      "description": "Ação final do campo; permanece desabilitada e explica as pendências até o checklist estar completo.",
+      "html": "<button class=\"ds-field-action\" disabled><span>2 tarefa(s) pendente(s)</span><strong>Concluir saída</strong></button>",
+      "css": ".ds-field-action { background:#5b4bcc; border:0; color:#fff; font-family:\"Avenir Next\",Avenir,\"Segoe UI\",sans-serif; padding:14px 18px; text-align:left; width:100%; } .ds-field-action span { display:block; font-size:12px; } .ds-field-action strong { display:flex; font-size:18px; justify-content:space-between; } .ds-field-action strong::after { content:\"›\"; font-size:23px; } .ds-field-action:hover:not(:disabled) { background:#493aa8; } .ds-field-action:focus-visible { outline:3px solid #9d91df; outline-offset:-3px; } .ds-field-action:disabled { background:#9b94c7; cursor:not-allowed; }"
+    },
+    {
+      "name": "Navigation Item",
+      "kind": "nav",
+      "description": "Destino textual da navegação clara; em telas estreitas, os destinos principais formam uma faixa compacta rolável.",
+      "html": "<nav class=\"ds-compact-nav\"><a class=\"ds-nav-item ds-nav-item-active\" href=\"#\">Visão geral</a><a class=\"ds-nav-item\" href=\"#\">Operações</a><a class=\"ds-nav-item\" href=\"#\">Pessoas</a></nav>",
+      "css": ".ds-compact-nav { background:#fff; border-bottom:1px solid #d9dfdc; display:flex; gap:6px; overflow-x:auto; padding:9px 16px; } .ds-nav-item { align-items:center; background:#edf3ee; border-radius:8px; color:#43504a; display:flex; flex:0 0 auto; font:700 12px/1.45 \"Avenir Next\",Avenir,\"Segoe UI\",sans-serif; min-height:38px; padding:0 11px; text-decoration:none; } .ds-nav-item:hover { background:#f2f5f2; } .ds-nav-item:focus-visible { outline:3px solid #9d91df; outline-offset:2px; } .ds-nav-item-active { color:#174b37; }"
+    },
+    {
+      "name": "Support Chip",
+      "kind": "chip",
+      "refersTo": "chip-support",
+      "description": "Contagem ou contexto compacto que não compete com o estado ativo.",
+      "html": "<span class=\"ds-chip\">4 confirmadas</span>",
+      "css": ".ds-chip { background:#edf3ee; border-radius:999px; color:#345044; display:inline-block; font:700 12px/1.45 \"Avenir Next\",Avenir,\"Segoe UI\",sans-serif; padding:4px 8px; }"
+    },
+    {
+      "name": "Operational Surface",
+      "kind": "card",
+      "refersTo": "surface-operational",
+      "description": "Grupo operacional plano, estruturado por borda e divisor.",
+      "html": "<section class=\"ds-surface\"><h2>Rota operacional</h2><p>Saída em revisão · atualização demonstrativa</p></section>",
+      "css": ".ds-surface { background:#fff; border:1px solid #d9dfdc; border-radius:14px; color:#22302a; font-family:\"Avenir Next\",Avenir,\"Segoe UI\",sans-serif; overflow:hidden; } .ds-surface h2 { font-size:16px; margin:0; padding:17px 20px; } .ds-surface p { border-top:1px solid #d9dfdc; color:#64716b; font-size:12px; margin:0; padding:13px 20px; }"
+    },
+    {
+      "name": "Active Route Stage",
+      "kind": "custom",
+      "description": "Marco atual da rota com disco roxo, halo tonal, horário e estado textual.",
+      "html": "<article class=\"ds-route-stage\"><i>2</i><strong>Saída</strong><time>08:30</time><small>Em revisão</small></article>",
+      "css": ".ds-route-stage { color:#22302a; font-family:\"Avenir Next\",Avenir,\"Segoe UI\",sans-serif; text-align:center; width:92px; } .ds-route-stage i { background:#5b4bcc; border:2px solid #5b4bcc; border-radius:50%; box-shadow:0 0 0 7px #f0edfb; color:#fff; display:grid; font-style:normal; height:48px; margin:7px auto 12px; place-items:center; width:48px; } .ds-route-stage strong { color:#5b4bcc; display:block; font-size:12px; } .ds-route-stage time,.ds-route-stage small { color:#64716b; display:block; font-size:12px; margin-top:3px; } .ds-route-stage small { color:#5b4bcc; }"
+    },
+    {
+      "name": "Stage Focus Checklist",
+      "kind": "custom",
+      "description": "Foco único da etapa selecionada, com estado textual, tarefas registradas e pendentes.",
+      "html": "<section class=\"ds-stage-focus\"><header><div><span>Etapa selecionada</span><h2>Saída</h2></div><b>EM ANDAMENTO</b></header><div class=\"ds-task ds-task-done\"><i></i><strong>Confirmar motorista e veículo</strong><small>Registrado</small></div><div class=\"ds-task\"><i></i><strong>Fotografar carga ao vivo</strong><small>Pendente</small></div></section>",
+      "css": ".ds-stage-focus { background:#fff; border:1px solid #d9dfdc; border-radius:14px; color:#22302a; font-family:\"Avenir Next\",Avenir,\"Segoe UI\",sans-serif; overflow:hidden; } .ds-stage-focus header { align-items:center; border-bottom:1px solid #d9dfdc; display:flex; justify-content:space-between; padding:16px 20px; } .ds-stage-focus header span { color:#64716b; font-size:12px; } .ds-stage-focus h2 { font-size:18px; margin:2px 0 0; } .ds-stage-focus header b { background:#f0edfb; border-radius:999px; color:#5b4bcc; font-size:12px; padding:6px 9px; } .ds-task { align-items:center; border-top:1px solid #d9dfdc; display:grid; gap:10px; grid-template-columns:20px 1fr auto; min-height:46px; padding:0 20px; } .ds-task i { border:2px solid #8a5a00; height:19px; width:19px; } .ds-task strong,.ds-task small { font-size:12px; } .ds-task small { color:#8a5a00; } .ds-task-done i { background:#237452; border-color:#237452; } .ds-task-done small { color:#237452; }"
+    },
+    {
+      "name": "Evidence Gallery and GPS",
+      "kind": "custom",
+      "description": "Fotos e sinais automáticos agrupados pela etapa, com origem demonstrativa explícita.",
+      "html": "<section class=\"ds-evidence-group\"><figure><img src=\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='128'%3E%3Crect width='240' height='128' fill='%23dce8de'/%3E%3C/svg%3E\" alt=\"Imagem demonstrativa da operação\"><figcaption>Carga · Saída · exemplo</figcaption></figure><div class=\"ds-gps\"><svg viewBox=\"0 0 24 24\"><path d=\"M12 21s6-5 6-11a6 6 0 1 0-12 0c0 6 6 11 6 11z\"/></svg><div><strong>GPS da saída</strong><span>Localização demonstrativa</span></div><small>08:31</small></div></section>",
+      "css": ".ds-evidence-group { background:#fff; border:1px solid #d9dfdc; border-radius:14px; font-family:\"Avenir Next\",Avenir,\"Segoe UI\",sans-serif; overflow:hidden; } .ds-evidence-group figure { margin:0; } .ds-evidence-group img { display:block; height:128px; object-fit:cover; width:100%; } .ds-evidence-group figcaption { font-size:12px; padding:9px; } .ds-gps { align-items:center; border-top:1px solid #d9dfdc; display:grid; gap:10px; grid-template-columns:35px 1fr auto; padding:13px 14px; } .ds-gps svg { fill:none; height:24px; stroke:#237452; stroke-width:1.8; width:24px; } .ds-gps strong,.ds-gps span,.ds-gps small { display:block; font-size:12px; } .ds-gps span,.ds-gps small { color:#64716b; }"
+    },
+    {
+      "name": "Operational Image Context",
+      "kind": "custom",
+      "description": "Retratos sintéticos e imagens de frota sempre vinculados a pessoa, veículo e estado operacional.",
+      "html": "<div class=\"ds-image-context\"><article><span class=\"ds-portrait\" role=\"img\" aria-label=\"Retrato demonstrativo\"></span><div><strong>Lívia Alves</strong><small>Coordenação · imagem demonstrativa</small></div></article><figure><div class=\"ds-fleet-image\"></div><figcaption><strong>VUC 03</strong><small>Veículo demonstrativo · Em carga</small></figcaption></figure></div>",
+      "css": ".ds-image-context { display:grid; font-family:\"Avenir Next\",Avenir,\"Segoe UI\",sans-serif; gap:12px; grid-template-columns:1fr 1fr; } .ds-image-context article,.ds-image-context figure { align-items:center; background:#fff; border:1px solid #d9dfdc; border-radius:14px; display:grid; gap:12px; grid-template-columns:72px 1fr; margin:0; overflow:hidden; padding:11px; } .ds-portrait { background:#dce8de; border-radius:10px; height:72px; width:72px; } .ds-fleet-image { background:#dce8de; height:72px; width:72px; } .ds-image-context strong,.ds-image-context small { display:block; font-size:12px; } .ds-image-context small { color:#64716b; margin-top:4px; }"
+    },
+    {
+      "name": "Exception Notice",
+      "kind": "card",
+      "refersTo": "notice-exception",
+      "description": "Bloqueio operacional que combina estado, tempo e explicação acionável.",
+      "html": "<aside class=\"ds-exception\"><strong>LOCAL NÃO LIBERADO · 00:18:42</strong><p>Aguardando liberação do portão de carga pelo responsável local.</p></aside>",
+      "css": ".ds-exception { background:#fff7e6; border:1px solid #ecd49d; border-radius:9px; font-family:\"Avenir Next\",Avenir,\"Segoe UI\",sans-serif; padding:16px; } .ds-exception strong { color:#8a5a00; display:block; font-size:13px; } .ds-exception p { color:#705f3d; font-size:12px; margin:5px 0 0; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Route Canvas",
+    "overview": "Route Canvas traduz a precisão e a leitura em camadas de uma rota em um software operacional contemporâneo. O fundo quase branco, a tipografia verde-preta e as regras finas mantêm o ambiente leve; a rota abstrata concentra o estado do evento sem se passar por mapa ou localização ao vivo.\n\nA composição é equilibrada e orientada a decisão: liderança e campo reconhecem evento, etapa ativa, bloqueio e próxima ação em segundos. O roxo de percurso aparece apenas onde há atividade ou ação; verde confirma, âmbar ou vermelho interrompe. A interface é calma, direta e humana, sem a estética preto/dourado dos rascunhos nem acabamento genérico de interface gerada por IA.",
+    "keyCharacteristics": [
+      "Uma rota operacional compartilhada como mecanismo central.",
+      "Cada etapa abre um foco único de checklist, evidências e registros.",
+      "Leveza visual com densidade calma e hierarquia precisa.",
+      "Exceções acima de decoração e estados sempre acompanhados por texto.",
+      "Uma ação principal proporcional ao contexto.",
+      "Dados demonstrativos e limites de integração explicitamente rotulados.",
+      "Exemplo, alteração da sessão e persistência real são estados explicitamente distintos."
+    ],
+    "rules": [
+      {
+        "name": "The Course Purple Rule",
+        "body": "O roxo marca somente o caminho ativo, a seleção atual e a próxima ação; sua raridade preserva a hierarquia.",
+        "section": "colors"
+      },
+      {
+        "name": "The Exception Has Words Rule",
+        "body": "Âmbar e vermelho nunca comunicam sozinhos: toda exceção explica o fato e a ação necessária.",
+        "section": "colors"
+      },
+      {
+        "name": "The Workhorse Rule",
+        "body": "A tipografia serve à operação: sem tipo gigante, contraste editorial ou texto miúdo usado para acomodar excesso de informação.",
+        "section": "typography"
+      },
+      {
+        "name": "The One Shared Route Rule",
+        "body": "A troca de evento redesenha a mesma rota no lugar; não empilha mapas, trilhas ou painéis concorrentes.",
+        "section": "layout"
+      },
+      {
+        "name": "The Flat Operational Field Rule",
+        "body": "Superfícies permanecem planas em repouso; profundidade só aparece para contexto de dispositivo ou estado ativo.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do fazer evento, etapa atual, bloqueio e próxima ação serem compreendidos em uma varredura.",
+      "Do manter estados acompanhados por rótulos explícitos, foco visível e alvos amplos.",
+      "Do manter a ação móvel desabilitada e explicar quantas tarefas faltam até o checklist estar completo.",
+      "Do agrupar foto, GPS, horário e checklist pela etapa que lhes dá contexto.",
+      "Do identificar retratos, frota e evidências de referência como imagens demonstrativas.",
+      "Do distinguir por texto dados de exemplo, alterações somente da sessão e persistência confirmada pelo servidor.",
+      "Do manter filtros e ação disponíveis quando o conteúdo entra em estado vazio.",
+      "Do associar erros aos campos, mover o foco ao primeiro inválido e anunciar feedback dinâmico.",
+      "Do usar SVG inline com rótulo acessível em todo botão que não tenha texto visível.",
+      "Do alinhar horários com numerais tabulares e preservar a leitura em telas estreitas.",
+      "Do rotular dados sintéticos, estado local e integrações ainda não confirmadas."
+    ],
+    "donts": [
+      "Don't transformar a rota abstrata em mapa, GPS ao vivo ou promessa de rastreamento real.",
+      "Don't usar preto/dourado, gradientes, glassmorphism, tipo gigante ou mosaico de cartões KPI.",
+      "Don't espalhar roxo por superfícies decorativas ou usar cor como único sinal de estado.",
+      "Don't usar retratos ou imagens de frota como decoração sem pessoa, veículo, evento ou estado associado.",
+      "Don't afirmar que um cadastro da sessão foi salvo, que um convite foi enviado ou que uma alteração chegou ao servidor.",
+      "Don't substituir label, mensagem de erro ou nome acessível por ícone, placeholder ou cor.",
+      "Don't apresentar câmera, sincronização sem conflitos ou escrita no EstoqueNOW como capacidades prontas."
+    ]
+  }
+}

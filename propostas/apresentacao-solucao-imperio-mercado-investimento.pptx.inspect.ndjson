@@ -1,0 +1,206 @@
+{"kind":"deck","id":"pr/o4p0ri","name":"Deck"}
+{"kind":"layout","layoutId":"/ppt/slideMasters/slideMaster1.xml","name":"Master","type":"master"}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout1.xml","name":"Title Slide","type":"title"}
+{"kind":"slide","id":"sl/y90nupkv","slide":1,"title":"PROPOSTA COMERCIAL · 2026","textShapes":4}
+{"kind":"shape","id":"sh/547294r6","slide":1,"bbox":[0,0,570,720]}
+{"kind":"shape","id":"sh/k3yl0zql","slide":1,"bbox":[56,92,92,6]}
+{"kind":"textbox","id":"sh/7qp4be9c","slide":1,"text":"PROPOSTA COMERCIAL · 2026","textPreview":"PROPOSTA COMERCIAL · 2026","textChars":25,"textLines":1,"bbox":[56,122,360,24]}
+{"kind":"textbox","id":"sh/65g3298r","slide":1,"text":"Uma operação que decide antes de prometer.","textPreview":"Uma operação que decide antes de prometer.","textChars":42,"textLines":1,"bbox":[56,180,470,245]}
+{"kind":"textbox","id":"sh/ts7md4r2","slide":1,"text":"Do mural do cliente ao retorno de cada peça, com um único registro operacional.","textPreview":"Do mural do cliente ao retorno de cada peça, com um único registro operacional.","textChars":79,"textLines":1,"bbox":[56,450,440,80]}
+{"kind":"textbox","id":"sh/sryl4zqx","slide":1,"text":"IMPÉRIO LOCAÇÕES · ÁPICE","textPreview":"IMPÉRIO LOCAÇÕES · ÁPICE","textChars":24,"textLines":1,"bbox":[56,620,300,28]}
+{"kind":"image","id":"im/6lgjadw3","slide":1,"name":"","bbox":[0,0,1280,720]}
+{"kind":"notes","id":"nt/y90nupkv","slide":1,"text":"Abra pela tese: o software conecta decisão comercial, capacidade operacional e evidência de execução.\n\n[Sources]\n- https://software-house-six.vercel.app/imperio — protótipo demonstrável; dados e integrações simulados, consultado em 26 ago 2026\n[/Sources]"}
+{"kind":"slide","id":"sl/hwbqtkby","slide":2,"title":"01 · EXPERIÊNCIA DO CLIENTE","textShapes":15}
+{"kind":"textbox","id":"sh/76twva5c","slide":2,"text":"01 · EXPERIÊNCIA DO CLIENTE","textPreview":"01 · EXPERIÊNCIA DO CLIENTE","textChars":27,"textLines":1,"bbox":[56,48,420,24]}
+{"kind":"textbox","id":"sh/9072xkry","slide":2,"text":"O cliente monta o evento antes de preencher o briefing.","textPreview":"O cliente monta o evento antes de preencher o briefing.","textChars":55,"textLines":1,"bbox":[56,82,445,112]}
+{"kind":"shape","id":"sh/ozy1ofad","slide":2,"bbox":[56,241,29,29]}
+{"kind":"textbox","id":"sh/b29kza94","slide":2,"text":"1","textPreview":"1","textChars":1,"textLines":1,"bbox":[56,245,29,20]}
+{"kind":"textbox","id":"sh/a10jqpsj","slide":2,"text":"Mural comprável","textPreview":"Mural comprável","textChars":15,"textLines":1,"bbox":[100,238,346,28]}
+{"kind":"textbox","id":"sh/x4r21kru","slide":2,"text":"A foto revela os produtos e preserva a referência visual.","textPreview":"A foto revela os produtos e preserva a referência visual.","textChars":57,"textLines":1,"bbox":[100,270,346,52]}
+{"kind":"shape","id":"sh/w3i1sfa9","slide":2,"bbox":[56,343,29,29]}
+{"kind":"textbox","id":"sh/r65knqtk","slide":2,"text":"2","textPreview":"2","textChars":1,"textLines":1,"bbox":[56,347,29,20]}
+{"kind":"textbox","id":"sh/q5wjelsz","slide":2,"text":"Carrinho por evento","textPreview":"Carrinho por evento","textChars":19,"textLines":1,"bbox":[100,340,346,28]}
+{"kind":"textbox","id":"sh/ove9o7yd","slide":2,"text":"Uma conta guarda vários projetos, peças e versões.","textPreview":"Uma conta guarda vários projetos, peças e versões.","textChars":50,"textLines":1,"bbox":[100,372,346,52]}
+{"kind":"shape","id":"sh/9wnqhczy","slide":2,"bbox":[56,445,29,29]}
+{"kind":"textbox","id":"sh/mtwrmxg7","slide":2,"text":"3","textPreview":"3","textChars":1,"textLines":1,"bbox":[56,449,29,20]}
+{"kind":"textbox","id":"sh/nu58f2hs","slide":2,"text":"Checkout contextual","textPreview":"Checkout contextual","textChars":19,"textLines":1,"bbox":[100,442,346,28]}
+{"kind":"textbox","id":"sh/wjy9sry9","slide":2,"text":"Datas, local e acesso entram somente na revisão.","textPreview":"Datas, local e acesso entram somente na revisão.","textChars":48,"textLines":1,"bbox":[100,474,346,52]}
+{"kind":"shape","id":"sh/xk7qlczu","slide":2,"bbox":[56,568,408,86]}
+{"kind":"textbox","id":"sh/ahwrqhgj","slide":2,"text":"Menos atrito comercial","textPreview":"Menos atrito comercial","textChars":22,"textLines":1,"bbox":[76,582,170,20]}
+{"kind":"textbox","id":"sh/bip8jmho","slide":2,"text":"A seleção já chega ao CRM com o contexto do evento.","textPreview":"A seleção já chega ao CRM com o contexto do evento.","textChars":51,"textLines":1,"bbox":[76,608,360,42]}
+{"kind":"shape","id":"sh/cnupgny5","slide":2,"bbox":[515,67,714,570]}
+{"kind":"textbox","id":"sh/t8byxkn2","slide":2,"text":"IMPÉRIO LOCAÇÕES · CONCEITO DE SOLUÇÃO","textPreview":"IMPÉRIO LOCAÇÕES · CONCEITO DE SOLUÇÃO","textChars":38,"textLines":1,"bbox":[56,690,410,18]}
+{"kind":"textbox","id":"sh/s72xofmh","slide":2,"text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[1190,687,35,18]}
+{"kind":"image","id":"im/do3yp03u","slide":2,"name":"","bbox":[520,72,704,560]}
+{"kind":"notes","id":"nt/hwbqtkby","slide":2,"text":"Mostre que o mural deixa de ser inspiração solta e passa a ser uma entrada comercial estruturada.\n\n[Sources]\n- https://software-house-six.vercel.app/imperio — captura própria da demo, consultado em 26 ago 2026\n[/Sources]"}
+{"kind":"slide","id":"sl/ofy9wn61","slide":3,"title":"02 · PROMESSA OPERACIONAL","textShapes":14}
+{"kind":"textbox","id":"sh/e10f2twf","slide":3,"text":"02 · PROMESSA OPERACIONAL","textPreview":"02 · PROMESSA OPERACIONAL","textChars":25,"textLines":1,"bbox":[56,48,420,24]}
+{"kind":"textbox","id":"sh/cza94vmx","slide":3,"text":"Disponibilidade é calculada para o evento — não pelo saldo de hoje.","textPreview":"Disponibilidade é calculada para o evento — não pelo saldo de hoje.","textChars":67,"textLines":1,"bbox":[56,82,470,120]}
+{"kind":"shape","id":"sh/d0jax03i","slide":3,"bbox":[56,261,29,29]}
+{"kind":"textbox","id":"sh/298ryl4v","slide":3,"text":"1","textPreview":"1","textChars":1,"textLines":1,"bbox":[56,265,29,20]}
+{"kind":"textbox","id":"sh/3ah8rqlg","slide":3,"text":"Janela completa","textPreview":"Janela completa","textChars":15,"textLines":1,"bbox":[100,258,346,28]}
+{"kind":"textbox","id":"sh/obq90bml","slide":3,"text":"Preparo, entrega, montagem, retirada, retorno e limpeza.","textPreview":"Preparo, entrega, montagem, retirada, retorno e limpeza.","textChars":56,"textLines":1,"bbox":[100,290,346,52]}
+{"kind":"shape","id":"sh/pcjqtg36","slide":3,"bbox":[56,363,29,29]}
+{"kind":"textbox","id":"sh/m5cra54z","slide":3,"text":"2","textPreview":"2","textChars":1,"textLines":1,"bbox":[56,367,29,20]}
+{"kind":"textbox","id":"sh/n6ls3alk","slide":3,"text":"Local e acesso","textPreview":"Local e acesso","textChars":14,"textLines":1,"bbox":[100,360,346,28]}
+{"kind":"textbox","id":"sh/n2l4fq98","slide":3,"text":"Cidade, rota, pedágio, doca, elevador, escada e equipe.","textPreview":"Cidade, rota, pedágio, doca, elevador, escada e equipe.","textChars":55,"textLines":1,"bbox":[100,392,346,52]}
+{"kind":"shape","id":"sh/m1c3mlsn","slide":3,"bbox":[56,465,29,29]}
+{"kind":"textbox","id":"sh/943mhgre","slide":3,"text":"3","textPreview":"3","textChars":1,"textLines":1,"bbox":[56,469,29,20]}
+{"kind":"textbox","id":"sh/83ulovat","slide":3,"text":"Cobertura da falta","textPreview":"Cobertura da falta","textChars":18,"textLines":1,"bbox":[100,462,346,28]}
+{"kind":"textbox","id":"sh/v6l4jq94","slide":3,"text":"Acervo, substituição, sublocação, produção ou redução.","textPreview":"Acervo, substituição, sublocação, produção ou redução.","textChars":54,"textLines":1,"bbox":[100,494,346,52]}
+{"kind":"textbox","id":"sh/a5c3ql8z","slide":3,"text":"O sistema só promete depois de cruzar tempo + estoque + fábrica + logística.","textPreview":"O sistema só promete depois de cruzar tempo + estoque + fábrica + logística.","textChars":76,"textLines":1,"bbox":[56,590,430,56]}
+{"kind":"shape","id":"sh/x8nml0ra","slide":3,"bbox":[543,81,686,550]}
+{"kind":"textbox","id":"sh/ja54na9g","slide":3,"text":"IMPÉRIO LOCAÇÕES · CONCEITO DE SOLUÇÃO","textPreview":"IMPÉRIO LOCAÇÕES · CONCEITO DE SOLUÇÃO","textChars":38,"textLines":1,"bbox":[56,690,410,18]}
+{"kind":"textbox","id":"sh/i9w3u58v","slide":3,"text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[1190,687,35,18]}
+{"kind":"image","id":"im/o32dw321","slide":3,"name":"","bbox":[548,86,676,540]}
+{"kind":"notes","id":"nt/ofy9wn61","slide":3,"text":"Explique que disponibilidade inclui buffers e capacidade de execução, não apenas quantidade física no galpão.\n\n[Sources]\n- https://software-house-six.vercel.app/imperio — captura própria da demo, consultado em 26 ago 2026\n[/Sources]"}
+{"kind":"slide","id":"sl/jyx0ra1s","slide":4,"title":"03 · CRM E HANDOVER","textShapes":16}
+{"kind":"textbox","id":"sh/1wbapc7q","slide":4,"text":"03 · CRM E HANDOVER","textPreview":"03 · CRM E HANDOVER","textChars":19,"textLines":1,"bbox":[56,42,460,24]}
+{"kind":"textbox","id":"sh/1cj2d8b6","slide":4,"text":"O CRM orquestra a próxima decisão — não apenas registra o lead.","textPreview":"O CRM orquestra a próxima decisão — não apenas registra o lead.","textChars":63,"textLines":1,"bbox":[56,76,458,122]}
+{"kind":"textbox","id":"sh/0ba143al","slide":4,"text":"Um eventId acompanha proposta, reserva, produção, entrega, cobrança e retorno.","textPreview":"Um eventId acompanha proposta, reserva, produção, entrega, cobrança e retorno.","textChars":78,"textLines":1,"bbox":[56,210,458,58]}
+{"kind":"shape","id":"sh/rm1k7yt4","slide":4,"bbox":[56,289,29,29]}
+{"kind":"textbox","id":"sh/ql8jytsj","slide":4,"text":"1","textPreview":"1","textChars":1,"textLines":1,"bbox":[56,293,29,20]}
+{"kind":"textbox","id":"sh/doj29oba","slide":4,"text":"Próxima ação","textPreview":"Próxima ação","textChars":12,"textLines":1,"bbox":[100,286,376,28]}
+{"kind":"textbox","id":"sh/sna103ap","slide":4,"text":"Responsável, prazo, dependência e bloqueio ficam visíveis.","textPreview":"Responsável, prazo, dependência e bloqueio ficam visíveis.","textChars":58,"textLines":1,"bbox":[100,318,376,52]}
+{"kind":"shape","id":"sh/3ihk3et8","slide":4,"bbox":[56,399,29,29]}
+{"kind":"textbox","id":"sh/ih8ju9sn","slide":4,"text":"2","textPreview":"2","textChars":1,"textLines":1,"bbox":[56,403,29,20]}
+{"kind":"textbox","id":"sh/kbm987y5","slide":4,"text":"Proposta e reserva","textPreview":"Proposta e reserva","textChars":18,"textLines":1,"bbox":[100,396,376,28]}
+{"kind":"textbox","id":"sh/5cva1cfq","slide":4,"text":"Aprovação cria hold; pagamento confirma peças concretas.","textPreview":"Aprovação cria hold; pagamento confirma peças concretas.","textChars":56,"textLines":1,"bbox":[100,428,376,52]}
+{"kind":"shape","id":"sh/i94r6xgz","slide":4,"bbox":[56,509,29,29]}
+{"kind":"textbox","id":"sh/jadsz2xk","slide":4,"text":"3","textPreview":"3","textChars":1,"textLines":1,"bbox":[56,513,29,20]}
+{"kind":"textbox","id":"sh/w72947yt","slide":4,"text":"Pacote executável","textPreview":"Pacote executável","textChars":17,"textLines":1,"bbox":[100,506,376,28]}
+{"kind":"textbox","id":"sh/x8vaxsfe","slide":4,"text":"Cada área recebe somente o necessário para executar.","textPreview":"Cada área recebe somente o necessário para executar.","textChars":52,"textLines":1,"bbox":[100,538,376,52]}
+{"kind":"shape","id":"sh/a5kr2xg3","slide":4,"bbox":[527,65,702,399]}
+{"kind":"shape","id":"sh/g36tgryd","slide":4,"bbox":[737,469,492,191]}
+{"kind":"textbox","id":"sh/p0batw72","slide":4,"text":"CRM","textPreview":"CRM","textChars":3,"textLines":1,"bbox":[548,430,80,24]}
+{"kind":"textbox","id":"sh/oz29krqh","slide":4,"text":"FINANCEIRO","textPreview":"FINANCEIRO","textChars":10,"textLines":1,"bbox":[636,484,92,24]}
+{"kind":"textbox","id":"sh/3ytsrmpw","slide":4,"text":"IMPÉRIO LOCAÇÕES · CONCEITO DE SOLUÇÃO","textPreview":"IMPÉRIO LOCAÇÕES · CONCEITO DE SOLUÇÃO","textChars":38,"textLines":1,"bbox":[56,690,410,18]}
+{"kind":"textbox","id":"sh/2xkrih8b","slide":4,"text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[1190,687,35,18]}
+{"kind":"image","id":"im/v618be10","slide":4,"name":"","bbox":[532,70,692,389]}
+{"kind":"image","id":"im/w7u9kj25","slide":4,"name":"","bbox":[742,474,482,181]}
+{"kind":"notes","id":"nt/jyx0ra1s","slide":4,"text":"O ponto de venda é o handover: a proposta só avança quando o próximo time recebe contexto, responsável e condição de saída.\n\n[Sources]\n- https://software-house-six.vercel.app/imperio — capturas próprias de CRM e financeiro, consultado em 26 ago 2026\n[/Sources]"}
+{"kind":"slide","id":"sl/i107q5of","slide":5,"title":"04 · FLUXO DA INFORMAÇÃO","textShapes":9}
+{"kind":"textbox","id":"sh/58vehgvy","slide":5,"text":"04 · FLUXO DA INFORMAÇÃO","textPreview":"04 · FLUXO DA INFORMAÇÃO","textChars":24,"textLines":1,"bbox":[56,38,460,24]}
+{"kind":"textbox","id":"sh/dgbulwnm","slide":5,"text":"Um registro acompanha o evento inteiro.","textPreview":"Um registro acompanha o evento inteiro.","textChars":39,"textLines":1,"bbox":[56,72,820,62]}
+{"kind":"textbox","id":"sh/cf2tcr61","slide":5,"text":"Pedido → proposta → reserva → produção → separação → rota → retorno → financeiro","textPreview":"Pedido → proposta → reserva → produção → separação → rota → retorno → financeiro","textChars":80,"textLines":1,"bbox":[56,132,890,34]}
+{"kind":"shape","id":"sh/z2tcnm5s","slide":5,"bbox":[51,191,558,318]}
+{"kind":"shape","id":"sh/l4bupwny","slide":5,"bbox":[671,191,558,318]}
+{"kind":"textbox","id":"sh/n6dcr65o","slide":5,"text":"Comercial entrega uma promessa executável","textPreview":"Comercial entrega uma promessa executável","textChars":41,"textLines":1,"bbox":[56,524,300,28]}
+{"kind":"textbox","id":"sh/m5kbi1oj","slide":5,"text":"Evento, peças, janela, acesso, valor, versão e responsável.","textPreview":"Evento, peças, janela, acesso, valor, versão e responsável.","textChars":59,"textLines":1,"bbox":[56,570,500,42]}
+{"kind":"textbox","id":"sh/w32dkbuh","slide":5,"text":"A operação devolve evidência","textPreview":"A operação devolve evidência","textChars":28,"textLines":1,"bbox":[676,524,300,28]}
+{"kind":"textbox","id":"sh/x4vedgvm","slide":5,"text":"Tags, fotos, divergências, avarias, custos e conclusão.","textPreview":"Tags, fotos, divergências, avarias, custos e conclusão.","textChars":55,"textLines":1,"bbox":[676,570,500,42]}
+{"kind":"shape","id":"sh/ahkvi1cb","slide":5,"bbox":[56,638,1168,4]}
+{"kind":"textbox","id":"sh/v2twb6dw","slide":5,"text":"IMPÉRIO LOCAÇÕES · CONCEITO DE SOLUÇÃO","textPreview":"IMPÉRIO LOCAÇÕES · CONCEITO DE SOLUÇÃO","textChars":38,"textLines":1,"bbox":[56,690,410,18]}
+{"kind":"textbox","id":"sh/k7mxovud","slide":5,"text":"05","textPreview":"05","textChars":2,"textLines":1,"bbox":[1190,687,35,18]}
+{"kind":"image","id":"im/5ove5g3m","slide":5,"name":"","bbox":[56,196,548,308]}
+{"kind":"image","id":"im/4nmdwbm1","slide":5,"name":"","bbox":[676,196,548,308]}
+{"kind":"notes","id":"nt/i107q5of","slide":5,"text":"Enfatize o mesmo identificador de evento atravessando todos os módulos. Alterações relevantes criam nova versão; não apagam o histórico.\n\n[Sources]\n- https://software-house-six.vercel.app/imperio — capturas próprias da torre de controle e logística, consultado em 26 ago 2026\n[/Sources]"}
+{"kind":"slide","id":"sl/x8f69ofe","slide":6,"title":"05 · INTELIGÊNCIA DE DECISÃO","textShapes":15}
+{"kind":"textbox","id":"sh/0fy5k3id","slide":6,"text":"05 · INTELIGÊNCIA DE DECISÃO","textPreview":"05 · INTELIGÊNCIA DE DECISÃO","textChars":28,"textLines":1,"bbox":[56,42,460,24]}
+{"kind":"textbox","id":"sh/yhg7epsj","slide":6,"text":"Quando falta estoque, o sistema calcula se vale produzir.","textPreview":"Quando falta estoque, o sistema calcula se vale produzir.","textChars":57,"textLines":1,"bbox":[56,76,475,128]}
+{"kind":"textbox","id":"sh/zi98nu94","slide":6,"text":"Nenhuma ordem nasce sozinha: regras auditáveis com aprovação humana.","textPreview":"Nenhuma ordem nasce sozinha: regras auditáveis com aprovação humana.","textChars":68,"textLines":1,"bbox":[56,218,450,82]}
+{"kind":"shape","id":"sh/87ipkzal","slide":6,"bbox":[56,343,29,29]}
+{"kind":"textbox","id":"sh/98rqt4r6","slide":6,"text":"1","textPreview":"1","textChars":1,"textLines":1,"bbox":[56,347,29,20]}
+{"kind":"textbox","id":"sh/ml07i9sv","slide":6,"text":"Margem do pedido","textPreview":"Margem do pedido","textChars":16,"textLines":1,"bbox":[100,340,366,28]}
+{"kind":"textbox","id":"sh/7m98ru9g","slide":6,"text":"Receita preservada menos produção, logística e capital.","textPreview":"Receita preservada menos produção, logística e capital.","textChars":55,"textLines":1,"bbox":[100,372,366,52]}
+{"kind":"shape","id":"sh/oryp8fah","slide":6,"bbox":[56,437,29,29]}
+{"kind":"textbox","id":"sh/pc76hkr2","slide":6,"text":"2","textPreview":"2","textChars":1,"textLines":1,"bbox":[56,441,29,20]}
+{"kind":"textbox","id":"sh/h4bupgn6","slide":6,"text":"Demanda destravada","textPreview":"Demanda destravada","textChars":18,"textLines":1,"bbox":[100,434,366,28]}
+{"kind":"textbox","id":"sh/w32twb6l","slide":6,"text":"Pedidos perdidos compatíveis nos próximos 120 dias.","textPreview":"Pedidos perdidos compatíveis nos próximos 120 dias.","textChars":51,"textLines":1,"bbox":[100,466,366,52]}
+{"kind":"shape","id":"sh/v2tcn650","slide":6,"bbox":[56,531,29,29]}
+{"kind":"textbox","id":"sh/u1kbu1ov","slide":6,"text":"3","textPreview":"3","textChars":1,"textLines":1,"bbox":[56,535,29,20]}
+{"kind":"textbox","id":"sh/5svutgni","slide":6,"text":"Alternativas reais","textPreview":"Alternativas reais","textChars":18,"textLines":1,"bbox":[100,528,366,28]}
+{"kind":"textbox","id":"sh/47mt0b6x","slide":6,"text":"Produzir × substituir × sublocar × reduzir quantidade.","textPreview":"Produzir × substituir × sublocar × reduzir quantidade.","textChars":54,"textLines":1,"bbox":[100,560,366,52]}
+{"kind":"shape","id":"sh/j6dcr65c","slide":6,"bbox":[527,65,702,399]}
+{"kind":"shape","id":"sh/twfux0ne","slide":6,"bbox":[737,469,492,191]}
+{"kind":"shape","id":"sh/cbe5g3ih","slide":6,"bbox":[534,478,190,58]}
+{"kind":"textbox","id":"sh/dcnm98zm","slide":6,"text":"DECISÃO EXPLICÁVEL","textPreview":"DECISÃO EXPLICÁVEL","textChars":18,"textLines":1,"bbox":[552,496,154,22]}
+{"kind":"textbox","id":"sh/qpwnet0b","slide":6,"text":"IMPÉRIO LOCAÇÕES · CONCEITO DE SOLUÇÃO","textPreview":"IMPÉRIO LOCAÇÕES · CONCEITO DE SOLUÇÃO","textChars":38,"textLines":1,"bbox":[56,690,410,18]}
+{"kind":"textbox","id":"sh/bq547yhw","slide":6,"text":"06","textPreview":"06","textChars":2,"textLines":1,"bbox":[1190,687,35,18]}
+{"kind":"image","id":"im/md8ru5sv","slide":6,"name":"","bbox":[532,70,692,389]}
+{"kind":"image","id":"im/90zqp0r6","slide":6,"name":"","bbox":[742,474,482,181]}
+{"kind":"notes","id":"nt/x8f69ofe","slide":6,"text":"Não apresente IA mágica. O primeiro ganho vem de regras determinísticas, auditáveis e explicáveis; IA preditiva entra depois de dados confiáveis.\n\n[Sources]\n- https://software-house-six.vercel.app/imperio — capturas próprias da recomendação simulada e fábrica, consultado em 26 ago 2026\n[/Sources]"}
+{"kind":"slide","id":"sl/gnmp4jqx","slide":7,"title":"06 · RETORNO E RENTABILIDADE","textShapes":16}
+{"kind":"textbox","id":"sh/50v2pgna","slide":7,"text":"06 · RETORNO E RENTABILIDADE","textPreview":"06 · RETORNO E RENTABILIDADE","textChars":28,"textLines":1,"bbox":[56,48,460,24]}
+{"kind":"textbox","id":"sh/cb2tkvap","slide":7,"text":"O evento só termina quando cada peça tem destino e custo.","textPreview":"O evento só termina quando cada peça tem destino e custo.","textChars":57,"textLines":1,"bbox":[56,82,465,118]}
+{"kind":"shape","id":"sh/dcbud0ra","slide":7,"bbox":[56,249,29,29]}
+{"kind":"textbox","id":"sh/ydkbm5sv","slide":7,"text":"1","textPreview":"1","textChars":1,"textLines":1,"bbox":[56,253,29,20]}
+{"kind":"textbox","id":"sh/zedcfa9g","slide":7,"text":"Inspeção","textPreview":"Inspeção","textChars":8,"textLines":1,"bbox":[100,246,376,28]}
+{"kind":"textbox","id":"sh/kzmdova1","slide":7,"text":"Foto, condição, severidade e responsabilidade.","textPreview":"Foto, condição, severidade e responsabilidade.","textChars":46,"textLines":1,"bbox":[100,278,376,52]}
+{"kind":"shape","id":"sh/l0vuh0rm","slide":7,"bbox":[56,353,29,29]}
+{"kind":"textbox","id":"sh/eh0ba1sr","slide":7,"text":"2","textPreview":"2","textChars":1,"textLines":1,"bbox":[56,357,29,20]}
+{"kind":"textbox","id":"sh/fi9c369c","slide":7,"text":"Manutenção","textPreview":"Manutenção","textChars":10,"textLines":1,"bbox":[100,350,376,28]}
+{"kind":"textbox","id":"sh/baxkjqlk","slide":7,"text":"Limpeza, reparo, tapeçaria, localização ou baixa.","textPreview":"Limpeza, reparo, tapeçaria, localização ou baixa.","textChars":49,"textLines":1,"bbox":[100,382,376,52]}
+{"kind":"shape","id":"sh/a9ojq5kz","slide":7,"bbox":[56,457,29,29]}
+{"kind":"textbox","id":"sh/xcz2l03q","slide":7,"text":"3","textPreview":"3","textChars":1,"textLines":1,"bbox":[56,461,29,20]}
+{"kind":"textbox","id":"sh/cbq1sv25","slide":7,"text":"Resultado real","textPreview":"Resultado real","textChars":14,"textLines":1,"bbox":[100,454,376,28]}
+{"kind":"textbox","id":"sh/n6x0fqlo","slide":7,"text":"Avaria e retrabalho retornam à margem do evento.","textPreview":"Avaria e retrabalho retornam à margem do evento.","textChars":48,"textLines":1,"bbox":[100,486,376,52]}
+{"kind":"shape","id":"sh/25ojml43","slide":7,"bbox":[56,572,420,82]}
+{"kind":"textbox","id":"sh/p8fih03e","slide":7,"text":"Regra de disponibilidade","textPreview":"Regra de disponibilidade","textChars":24,"textLines":1,"bbox":[76,586,180,22]}
+{"kind":"textbox","id":"sh/o761ov2t","slide":7,"text":"Peça sem inspeção não volta ao disponível.","textPreview":"Peça sem inspeção não volta ao disponível.","textChars":42,"textLines":1,"bbox":[76,615,360,24]}
+{"kind":"shape","id":"sh/f2d0b6lc","slide":7,"bbox":[527,115,702,399]}
+{"kind":"textbox","id":"sh/id4ju1oz","slide":7,"text":"EVENTO → INSPEÇÃO → OS → ESTOQUE","textPreview":"EVENTO → INSPEÇÃO → OS → ESTOQUE","textChars":32,"textLines":1,"bbox":[660,540,440,26]}
+{"kind":"textbox","id":"sh/jedkn654","slide":7,"text":"IMPÉRIO LOCAÇÕES · CONCEITO DE SOLUÇÃO","textPreview":"IMPÉRIO LOCAÇÕES · CONCEITO DE SOLUÇÃO","textChars":38,"textLines":1,"bbox":[56,690,410,18]}
+{"kind":"textbox","id":"sh/4fm1wb6p","slide":7,"text":"07","textPreview":"07","textChars":2,"textLines":1,"bbox":[1190,687,35,18]}
+{"kind":"image","id":"im/50v6tonq","slide":7,"name":"","bbox":[532,120,692,389]}
+{"kind":"notes","id":"nt/gnmp4jqx","slide":7,"text":"Relacione avaria, manutenção e baixa à rentabilidade do evento e à disponibilidade futura do acervo.\n\n[Sources]\n- https://software-house-six.vercel.app/imperio — captura própria de retorno e revisão, consultado em 26 ago 2026\n[/Sources]"}
+{"kind":"slide","id":"sl/fu1gfa1s","slide":8,"title":"INTELIGÊNCIA COM GOVERNANÇA","textShapes":14}
+{"kind":"textbox","id":"sh/lgbepgvm","slide":8,"text":"INTELIGÊNCIA COM GOVERNANÇA","textPreview":"INTELIGÊNCIA COM GOVERNANÇA","textChars":27,"textLines":1,"bbox":[56,42,560,24]}
+{"kind":"textbox","id":"sh/18byd4zy","slide":8,"text":"A inteligência entra em camadas — e cada uma tem uma função.","textPreview":"A inteligência entra em camadas — e cada uma tem uma função.","textChars":60,"textLines":1,"bbox":[56,76,720,68]}
+{"kind":"textbox","id":"sh/ri9g7uhw","slide":8,"text":"CAMADA 1 · AGORA","textPreview":"CAMADA 1 · AGORA","textChars":16,"textLines":1,"bbox":[56,276,330,22]}
+{"kind":"textbox","id":"sh/6h0fypgb","slide":8,"text":"Regras operacionais","textPreview":"Regras operacionais","textChars":19,"textLines":1,"bbox":[56,316,330,34]}
+{"kind":"textbox","id":"sh/tkby9kzm","slide":8,"text":"Disponibilidade temporal\nBuffers e holds\nConflitos e capacidade\nAlertas de handover","textPreview":"Disponibilidade temporal | Buffers e holds | Conflitos e capacidade | Alertas de handover","textChars":83,"textLines":4,"bbox":[56,370,330,190]}
+{"kind":"shape","id":"sh/sjix0zy1","slide":8,"bbox":[416,280,1,300]}
+{"kind":"textbox","id":"sh/je9g3ahk","slide":8,"text":"CAMADA 2 · DECISÃO","textPreview":"CAMADA 2 · DECISÃO","textChars":18,"textLines":1,"bbox":[444,276,330,22]}
+{"kind":"textbox","id":"sh/id0fu50z","slide":8,"text":"Economia do evento","textPreview":"Economia do evento","textChars":18,"textLines":1,"bbox":[444,316,330,34]}
+{"kind":"textbox","id":"sh/o7ydoret","slide":8,"text":"Produzir ou sublocar\nMargem por evento\nDemanda destravada\nCusto de avaria","textPreview":"Produzir ou sublocar | Margem por evento | Demanda destravada | Custo de avaria","textChars":73,"textLines":4,"bbox":[444,370,330,190]}
+{"kind":"shape","id":"sh/98rehwve","slide":8,"bbox":[804,280,1,300]}
+{"kind":"textbox","id":"sh/m5gvmhwn","slide":8,"text":"CAMADA 3 · EVOLUÇÃO","textPreview":"CAMADA 3 · EVOLUÇÃO","textChars":19,"textLines":1,"bbox":[832,276,330,22]}
+{"kind":"textbox","id":"sh/n6pwfmd8","slide":8,"text":"Otimização e IA","textPreview":"Otimização e IA","textChars":15,"textLines":1,"bbox":[832,316,330,34]}
+{"kind":"textbox","id":"sh/0jydkreh","slide":8,"text":"Rotas e carga\nPrevisão de demanda\nSugestão de mix\nLeitura de briefing e foto","textPreview":"Rotas e carga | Previsão de demanda | Sugestão de mix | Leitura de briefing e foto","textChars":76,"textLines":4,"bbox":[832,370,330,190]}
+{"kind":"shape","id":"sh/1k7edwv2","slide":8,"bbox":[56,610,1168,54]}
+{"kind":"textbox","id":"sh/ehgvihwr","slide":8,"text":"COMEÇAMOS PELO DETERMINÍSTICO: explicável, auditável e com decisão humana","textPreview":"COMEÇAMOS PELO DETERMINÍSTICO: explicável, auditável e com decisão humana","textChars":73,"textLines":1,"bbox":[76,626,1128,24]}
+{"kind":"textbox","id":"sh/zipwbmdc","slide":8,"text":"IMPÉRIO LOCAÇÕES · CONCEITO DE SOLUÇÃO","textPreview":"IMPÉRIO LOCAÇÕES · CONCEITO DE SOLUÇÃO","textChars":38,"textLines":1,"bbox":[56,690,410,18]}
+{"kind":"textbox","id":"sh/kfixwbe1","slide":8,"text":"08","textPreview":"08","textChars":2,"textLines":1,"bbox":[1190,687,35,18]}
+{"kind":"image","id":"im/yp8rix47","slide":8,"name":"","bbox":[882,42,342,192]}
+{"kind":"notes","id":"nt/fu1gfa1s","slide":8,"text":"As camadas 1 e 2 podem operar sem modelo de IA. A camada preditiva exige histórico confiável, avaliação e supervisão humana.\n\n[Sources]\n- https://software-house-six.vercel.app/imperio — captura própria da recomendação simulada, consultado em 26 ago 2026\n- https://booqable.com/pricing/ — AI Rental Assistant e recursos operacionais, consultado em 26 ago 2026\n- https://pro.goodshuffle.com/pricing — dispatch com auto-route e recursos de inventário, consultado em 26 ago 2026\n[/Sources]"}
+{"kind":"slide","id":"sl/udsvah03","slide":9,"title":"ANÁLISE DE MERCADO","textShapes":14}
+{"kind":"textbox","id":"sh/lsn2h4fa","slide":9,"text":"ANÁLISE DE MERCADO","textPreview":"ANÁLISE DE MERCADO","textChars":18,"textLines":1,"bbox":[56,42,560,24]}
+{"kind":"textbox","id":"sh/1cfmhgne","slide":9,"text":"SaaS prova o padrão; o diferencial justifica o software próprio.","textPreview":"SaaS prova o padrão; o diferencial justifica o software próprio.","textChars":64,"textLines":1,"bbox":[56,76,720,68]}
+{"kind":"textbox","id":"sh/nex4jq5k","slide":9,"text":"SAAS PRONTO","textPreview":"SAAS PRONTO","textChars":11,"textLines":1,"bbox":[56,276,330,22]}
+{"kind":"textbox","id":"sh/mdonql4z","slide":9,"text":"US$ 29–149/mês","textPreview":"US$ 29–149/mês","textChars":14,"textLines":1,"bbox":[56,316,330,34]}
+{"kind":"textbox","id":"sh/9gzml0nq","slide":9,"text":"Inventário e pedidos\nDisponibilidade e contrato\nTracking e relatórios\nImplantação rápida","textPreview":"Inventário e pedidos | Disponibilidade e contrato | Tracking e relatórios | Implantação rápida","textChars":88,"textLines":4,"bbox":[56,370,330,190]}
+{"kind":"shape","id":"sh/ofq5svm5","slide":9,"bbox":[416,280,1,300]}
+{"kind":"textbox","id":"sh/bih4na5w","slide":9,"text":"CAMADA HÍBRIDA","textPreview":"CAMADA HÍBRIDA","textChars":14,"textLines":1,"bbox":[444,276,330,22]}
+{"kind":"textbox","id":"sh/ah8nu54b","slide":9,"text":"R$ 185–320 mil","textPreview":"R$ 185–320 mil","textChars":14,"textLines":1,"bbox":[444,316,330,34]}
+{"kind":"textbox","id":"sh/oza1gfyh","slide":9,"text":"Site + CRM próprios\nEstoque Now/ERP integrado\nInteligência de decisão\nMenor risco de migração","textPreview":"Site + CRM próprios | Estoque Now/ERP integrado | Inteligência de decisão | Menor risco de migração","textChars":93,"textLines":4,"bbox":[444,370,330,190]}
+{"kind":"shape","id":"sh/p0ji9kf2","slide":9,"bbox":[804,280,1,300]}
+{"kind":"textbox","id":"sh/2xsjepgb","slide":9,"text":"FULL CUSTOM","textPreview":"FULL CUSTOM","textChars":11,"textLines":1,"bbox":[832,276,330,22]}
+{"kind":"textbox","id":"sh/3y107axw","slide":9,"text":"R$ 380–550 mil","textPreview":"R$ 380–550 mil","textChars":14,"textLines":1,"bbox":[832,316,330,34]}
+{"kind":"textbox","id":"sh/cnu1kzyd","slide":9,"text":"Fábrica e CNC\nTags e custódia\nFiscal e financeiro\nControle ponta a ponta","textPreview":"Fábrica e CNC | Tags e custódia | Fiscal e financeiro | Controle ponta a ponta","textChars":72,"textLines":4,"bbox":[832,370,330,190]}
+{"kind":"shape","id":"sh/do3id4fy","slide":9,"bbox":[56,610,1168,54]}
+{"kind":"textbox","id":"sh/qlcjipgn","slide":9,"text":"RECOMENDAÇÃO: discovery + MVP híbrido; substituir sistemas só após provar APIs e fluxo","textPreview":"RECOMENDAÇÃO: discovery + MVP híbrido; substituir sistemas só após provar APIs e fluxo","textChars":86,"textLines":1,"bbox":[76,626,1128,24]}
+{"kind":"textbox","id":"sh/bml0buxs","slide":9,"text":"IMPÉRIO LOCAÇÕES · CONCEITO DE SOLUÇÃO","textPreview":"IMPÉRIO LOCAÇÕES · CONCEITO DE SOLUÇÃO","textChars":38,"textLines":1,"bbox":[56,690,410,18]}
+{"kind":"textbox","id":"sh/0ru1ozyp","slide":9,"text":"09","textPreview":"09","textChars":2,"textLines":1,"bbox":[1190,687,35,18]}
+{"kind":"image","id":"im/md47elwz","slide":9,"name":"","bbox":[882,42,342,192]}
+{"kind":"notes","id":"nt/udsvah03","slide":9,"text":"Os preços de SaaS não são comparáveis ao full custom: compram o padrão do setor, mas não necessariamente fábrica/CNC, fiscal brasileiro e inteligência específica.\n\n[Sources]\n- https://booqable.com/pricing/ — planos anuais US$29, US$69 e US$149 por mês; consultado em 26 ago 2026\n- https://rentman.io/pricing — plataforma €39 por mês mais produtos e add-ons por usuário; consultado em 26 ago 2026\n- https://pro.goodshuffle.com/pricing — Lite US$39; Standard US$99 anual ou US$139 mensal; consultado em 26 ago 2026\n[/Sources]"}
+{"kind":"slide","id":"sl/m90b6t0r","slide":10,"title":"INVESTIMENTO E FASEAMENTO","textShapes":14}
+{"kind":"textbox","id":"sh/p0ru503u","slide":10,"text":"INVESTIMENTO E FASEAMENTO","textPreview":"INVESTIMENTO E FASEAMENTO","textChars":25,"textLines":1,"bbox":[56,42,560,24]}
+{"kind":"textbox","id":"sh/xc3mho32","slide":10,"text":"O investimento acompanha o valor entregue — e reduz risco por etapa.","textPreview":"O investimento acompanha o valor entregue — e reduz risco por etapa.","textChars":68,"textLines":1,"bbox":[56,76,720,68]}
+{"kind":"textbox","id":"sh/zelojyl8","slide":10,"text":"0 · DESCOBERTA","textPreview":"0 · DESCOBERTA","textChars":14,"textLines":1,"bbox":[56,276,330,22]}
+{"kind":"textbox","id":"sh/ydcnatkn","slide":10,"text":"R$ 18–25 mil","textPreview":"R$ 18–25 mil","textChars":12,"textLines":1,"bbox":[56,316,330,34]}
+{"kind":"textbox","id":"sh/l036l83y","slide":10,"text":"80–120 horas\nProcessos e dados\nAPIs e arquitetura\nEstimativa fechada","textPreview":"80–120 horas | Processos e dados | APIs e arquitetura | Estimativa fechada","textChars":68,"textLines":4,"bbox":[56,370,330,190]}
+{"kind":"shape","id":"sh/kzu5c32t","slide":10,"bbox":[416,280,1,300]}
+{"kind":"textbox","id":"sh/725onyl4","slide":10,"text":"1 · MVP OPERACIONAL","textPreview":"1 · MVP OPERACIONAL","textChars":19,"textLines":1,"bbox":[444,276,330,22]}
+{"kind":"textbox","id":"sh/m1cnetkj","slide":10,"text":"R$ 185–245 mil","textPreview":"R$ 185–245 mil","textChars":14,"textLines":1,"bbox":[444,316,330,34]}
+{"kind":"textbox","id":"sh/s7yt4b21","slide":10,"text":"900–1.200 horas\n12–16 semanas\nCliente + CRM\nReserva + estoque","textPreview":"900–1.200 horas | 12–16 semanas | Cliente + CRM | Reserva + estoque","textChars":61,"textLines":4,"bbox":[444,370,330,190]}
+{"kind":"shape","id":"sh/d87uxg3m","slide":10,"bbox":[804,280,1,300]}
+{"kind":"textbox","id":"sh/q5gb21kb","slide":10,"text":"PROJETO COMPLETO","textPreview":"PROJETO COMPLETO","textChars":16,"textLines":1,"bbox":[832,276,330,22]}
+{"kind":"textbox","id":"sh/r6pcv6lw","slide":10,"text":"R$ 380–550 mil","textPreview":"R$ 380–550 mil","textChars":14,"textLines":1,"bbox":[832,316,330,34]}
+{"kind":"textbox","id":"sh/0bit8b2d","slide":10,"text":"1.760–2.540 horas\n5–8 meses\nFábrica + logística\nFinanceiro + inteligência","textPreview":"1.760–2.540 horas | 5–8 meses | Fábrica + logística | Financeiro + inteligência","textChars":73,"textLines":4,"bbox":[832,370,330,190]}
+{"kind":"shape","id":"sh/1cru1g3y","slide":10,"bbox":[56,610,1168,54]}
+{"kind":"textbox","id":"sh/e9gb61k7","slide":10,"text":"PRÓXIMA DECISÃO: autorizar discovery e escolher a primeira fonte de verdade","textPreview":"PRÓXIMA DECISÃO: autorizar discovery e escolher a primeira fonte de verdade","textChars":75,"textLines":1,"bbox":[76,626,1128,24]}
+{"kind":"textbox","id":"sh/fapcz6ls","slide":10,"text":"IMPÉRIO LOCAÇÕES · CONCEITO DE SOLUÇÃO","textPreview":"IMPÉRIO LOCAÇÕES · CONCEITO DE SOLUÇÃO","textChars":38,"textLines":1,"bbox":[56,690,410,18]}
+{"kind":"textbox","id":"sh/ozitcv29","slide":10,"text":"10","textPreview":"10","textChars":2,"textLines":1,"bbox":[1190,687,35,18]}
+{"kind":"image","id":"im/mh4bm183","slide":10,"name":"","bbox":[882,42,342,192]}
+{"kind":"notes","id":"nt/m90b6t0r","slide":10,"text":"O intervalo usa 1.760–2.540 h do escopo interno, taxa blended de referência compatível com o mercado e reserva de risco para integrações e migração. Não é proposta fechada antes do discovery.\n\n[Sources]\n- https://clutch.co/developers/pricing — software houses US$25–49/h e custo médio reportado US$132.480; atualizado em 23 ago 2026\n- https://www.bcb.gov.br/indexhome — PTAX de 21 ago 2026: USD venda R$5,1625; EUR venda R$6,0319\n- Base interna: propostas/imperio-product-spec.md — estimativa 1.760–2.540 h\n[/Sources]"}

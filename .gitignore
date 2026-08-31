@@ -52,3 +52,12 @@ yarn-error.log*
 .vercel
 .env*
 !**/.env.example
+
+# artefatos locais de ferramentas de design e geração
+/.agents/skills/impeccable/
+/.codex/hooks.json
+/.impeccable/config.local.json
+/.impeccable/mocks/decision/
+/.impeccable/quality-bars/
+/.impeccable/questions/
+/propostas/.tmp-*/

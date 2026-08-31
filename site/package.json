@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test --experimental-strip-types src/app/imperio/logistica/*.test.ts"
+    "test": "node --test --experimental-strip-types src/app/imperio/logistica/*.test.ts",
+    "smoke:estoquenow": "node --experimental-strip-types src/app/imperio/logistica/smoke-estoquenow.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.5",
