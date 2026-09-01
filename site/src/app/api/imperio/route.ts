@@ -2,7 +2,13 @@ import { NextResponse } from "next/server";
 
 import { checklistForStage, operationStages } from "@/app/imperio/logistica/action";
 import { readEstoqueNowOperations } from "@/app/imperio/logistica/data";
-import { sourceFieldsDiverged } from "@/app/imperio/logistica/estoquenow";
+import {
+  isValidExternalId,
+  isValidIsoDate,
+  sourceFieldsDiverged,
+  toScheduledAt,
+  type EstoqueNowOperation,
+} from "@/app/imperio/logistica/estoquenow";
 import { getAppSnapshot } from "@/app/imperio/logistica/server";
 import type { OperationStage } from "@/app/imperio/logistica/types";
 import {
@@ -26,15 +32,69 @@ const isStage = (value: string): value is OperationStage =>
 
 const isOptionalUuid = (value?: string) => !value || isUuid(value);
 
-const validDateInput = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value);
+const validDateInput = (value: string) => isValidIsoDate(value);
 
-const scheduledAt = (date: string, time: string) => {
-  const match = date.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  const isoDate = match ? `${match[3]}-${match[2]}-${match[1]}` : date;
-  if (!validDateInput(isoDate)) return null;
-  const normalizedTime = /^\d{2}:\d{2}/.test(time) ? time.slice(0, 5) : "08:00";
-  const parsed = new Date(`${isoDate}T${normalizedTime}:00-03:00`);
-  return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : null;
+type EstoqueNowImportRow = {
+  source: "estoquenow";
+  external_id: string;
+  event_name: string;
+  destination: string;
+  scheduled_at: string;
+  notes: string;
+  imported_at: string;
+};
+
+type EstoqueNowSkipReason =
+  | "missing_external_id"
+  | "invalid_external_id"
+  | "missing_event_name"
+  | "invalid_event_name"
+  | "missing_destination"
+  | "invalid_destination"
+  | "invalid_scheduled_date_or_time";
+
+const estoqueNowImportRow = (
+  operation: EstoqueNowOperation,
+  importedAt: string,
+): { row: EstoqueNowImportRow | null; reason: EstoqueNowSkipReason | null } => {
+  const externalId = operation.id.trim();
+  if (!externalId) return { row: null, reason: "missing_external_id" };
+  if (!isValidExternalId(externalId)) return { row: null, reason: "invalid_external_id" };
+  const eventName = operation.eventName.trim();
+  if (!eventName) return { row: null, reason: "missing_event_name" };
+  if (eventName.length < 2) return { row: null, reason: "invalid_event_name" };
+  const destinationParts = [operation.venue.trim(), operation.city.trim()].filter(
+    (value, index, values) => value && values.indexOf(value) === index,
+  );
+  if (!destinationParts.length) return { row: null, reason: "missing_destination" };
+  const destination = destinationParts.join(" · ");
+  if (destination.length < 5) return { row: null, reason: "invalid_destination" };
+  const scheduledAt = toScheduledAt(operation.scheduledDate, operation.scheduledTime);
+  if (!scheduledAt)
+    return { row: null, reason: "invalid_scheduled_date_or_time" };
+
+  const notes = [
+    operation.orderId.trim() ? `Pedido ${operation.orderId.trim()}.` : "",
+    operation.returnDate.trim() ? `Retorno previsto: ${operation.returnDate.trim()}.` : "",
+    operation.nextMilestone.trim()
+      ? `Marco externo: ${operation.nextMilestone.trim()}.`
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return {
+    row: {
+      source: "estoquenow",
+      external_id: externalId,
+      event_name: eventName,
+      destination,
+      scheduled_at: scheduledAt,
+      notes: ["Importado por leitura do EstoqueNOW.", notes].filter(Boolean).join(" "),
+      imported_at: importedAt,
+    },
+    reason: null,
+  };
 };
 
 const evidenceFile = (value: FormDataEntryValue | null) => {
@@ -237,16 +297,14 @@ export async function POST(request: Request) {
         !isOptionalUuid(body.driverId)
       )
         return jsonError("Equipe, veículo ou motorista inválido.");
-      const result = await supabase.from("operations").insert({
-        source: "manual",
-        event_name: body.eventName,
-        destination: body.destination,
-        scheduled_at: body.scheduledAt,
-        manager_id: auth.user.id,
-        team_id: body.teamId || null,
-        vehicle_id: body.vehicleId || null,
-        driver_id: body.driverId || null,
-        notes: body.notes || null,
+      const result = await supabase.rpc("create_manual_operation", {
+        p_event_name: body.eventName,
+        p_destination: body.destination,
+        p_scheduled_at: body.scheduledAt,
+        p_team_id: body.teamId || null,
+        p_vehicle_id: body.vehicleId || null,
+        p_driver_id: body.driverId || null,
+        p_notes: body.notes || null,
       });
       if (result.error) throw result.error;
       return NextResponse.json({ ok: true }, { status: 201 });
@@ -273,20 +331,15 @@ export async function POST(request: Request) {
         !isOptionalUuid(body.driverId)
       )
         return jsonError("Dados da escala inválidos.");
-      const result = await supabase
-        .from("operations")
-        .update({
-          destination: body.destination,
-          scheduled_at: body.scheduledAt,
-          team_id: body.teamId || null,
-          vehicle_id: body.vehicleId || null,
-          driver_id: body.driverId || null,
-          notes: body.notes || null,
-        })
-        .eq("id", body.id)
-        .eq("status", "active")
-        .select("id")
-        .maybeSingle();
+      const result = await supabase.rpc("update_operation_assignment", {
+        p_id: body.id,
+        p_destination: body.destination,
+        p_scheduled_at: body.scheduledAt,
+        p_team_id: body.teamId || null,
+        p_vehicle_id: body.vehicleId || null,
+        p_driver_id: body.driverId || null,
+        p_notes: body.notes || null,
+      });
       if (result.error) throw result.error;
       if (!result.data)
         return jsonError("A operação não está mais ativa. Atualize a torre.", 409);
@@ -298,22 +351,45 @@ export async function POST(request: Request) {
       const body = (await request.json()) as { id?: string; reason?: string };
       if (!body.id || !isUuid(body.id) || !body.reason || body.reason.trim().length < 3)
         return jsonError("Informe a operação e o motivo do cancelamento.");
-      const result = await supabase
-        .from("operations")
-        .update({ status: "cancelled", cancel_reason: body.reason.trim() })
-        .eq("id", body.id)
-        .eq("status", "active");
+      const result = await supabase.rpc("cancel_operation", {
+        p_id: body.id,
+        p_reason: body.reason.trim(),
+      });
       if (result.error) throw result.error;
+      if (!result.data)
+        return jsonError("A operação não está mais ativa. Atualize a torre.", 409);
       return NextResponse.json({ ok: true });
     }
 
     if (action === "sync-estoquenow") {
-      if (!manager) return jsonError("Apenas gestores importam operações.", 403);
-      const body = (await request.json()) as { startDate?: string; endDate?: string };
-      if (!body.startDate || !body.endDate || !validDateInput(body.startDate) || !validDateInput(body.endDate))
-        return jsonError("Informe o período da importação.");
-      const start = new Date(`${body.startDate}T00:00:00-03:00`);
-      const end = new Date(`${body.endDate}T23:59:59-03:00`);
+      if (!manager) return jsonError("Apenas gestores consultam a integração.", 403);
+      const body = (await request.json()) as {
+        startDate?: string;
+        endDate?: string;
+        mode?: "preview" | "canary" | "bulk";
+        externalId?: string;
+        reviewedEventName?: string;
+        reviewedDestination?: string;
+        reviewedScheduledAt?: string;
+      };
+      const startDate = body.startDate?.trim() ?? "";
+      const endDate = body.endDate?.trim() ?? "";
+      const mode = body.mode ?? "preview";
+      const externalId = body.externalId?.trim() ?? "";
+      if (!startDate || !endDate || !validDateInput(startDate) || !validDateInput(endDate))
+        return jsonError("Informe um período com datas válidas.");
+      if (mode === "bulk")
+        return jsonError("A importação em lote permanece bloqueada até validação do contrato.", 409);
+      if (mode !== "preview" && mode !== "canary") return jsonError("Modo de leitura inválido.");
+      if (mode === "canary" && process.env.ESTOQUENOW_IMPORT_ENABLED !== "true")
+        return jsonError("A gravação canário do EstoqueNOW está desabilitada por ambiente.", 403);
+      if (mode === "canary" && !externalId)
+        return jsonError("Informe exatamente um ID externo para a gravação canário.");
+      if (mode === "canary" && !isValidExternalId(externalId))
+        return jsonError("Informe um ID externo válido para a gravação canário.");
+
+      const start = new Date(`${startDate}T00:00:00-03:00`);
+      const end = new Date(`${endDate}T23:59:59-03:00`);
       const days = (end.getTime() - start.getTime()) / 86_400_000;
       if (days < 0 || days > 366) return jsonError("Use um período de até 366 dias.");
 
@@ -327,68 +403,125 @@ export async function POST(request: Request) {
         );
       }
       const importedAt = new Date().toISOString();
-      const rows = external.flatMap((operation) => {
-        const date = scheduledAt(operation.scheduledDate, operation.scheduledTime);
-        if (!date || operation.id.startsWith("logistica-")) return [];
-        const destination = [operation.venue, operation.city]
-          .filter((value, index, values) => value && values.indexOf(value) === index)
-          .join(" · ");
-        return [
-          {
-            source: "estoquenow" as const,
-            external_id: operation.id,
-            event_name: operation.eventName,
-            destination,
-            scheduled_at: date,
-            manager_id: auth.user.id,
-            notes: [
-              `Importado em modo somente leitura. Pedido ${operation.orderId}.`,
-              `Retorno previsto: ${operation.returnDate}.`,
-              `Marco externo: ${operation.nextMilestone}.`,
-            ].join(" "),
-            imported_at: importedAt,
-          },
-        ];
-      });
-      let insertedCount = 0;
-      let divergedCount = 0;
-      if (rows.length) {
-        for (let index = 0; index < rows.length; index += 100) {
-          const batch = rows.slice(index, index + 100);
-          const externalIds = batch.map((row) => row.external_id);
-          const existing = await supabase
-            .from("operations")
-            .select("external_id,event_name,destination,scheduled_at")
-            .eq("source", "estoquenow")
-            .in("external_id", externalIds);
-          if (existing.error) throw existing.error;
-          const incoming = new Map(batch.map((row) => [row.external_id, row]));
-          divergedCount += (existing.data ?? []).filter((operation) => {
-            const source = incoming.get(operation.external_id ?? "");
-            return source && sourceFieldsDiverged(operation, source);
-          }).length;
-          const inserted = await supabase
-            .from("operations")
-            .upsert(batch, {
-              onConflict: "source,external_id",
-              ignoreDuplicates: true,
-            })
-            .select("external_id");
-          if (inserted.error) throw inserted.error;
-          insertedCount += inserted.data?.length ?? 0;
-          const refreshed = await supabase
-            .from("operations")
-            .update({ imported_at: importedAt })
-            .eq("source", "estoquenow")
-            .in("external_id", externalIds);
-          if (refreshed.error) throw refreshed.error;
+      const skippedReasons: Record<EstoqueNowSkipReason, number> = {
+        missing_external_id: 0,
+        invalid_external_id: 0,
+        missing_event_name: 0,
+        invalid_event_name: 0,
+        missing_destination: 0,
+        invalid_destination: 0,
+        invalid_scheduled_date_or_time: 0,
+      };
+      const rows: EstoqueNowImportRow[] = [];
+      for (const operation of external) {
+        const candidate = estoqueNowImportRow(operation, importedAt);
+        if (candidate.row) rows.push(candidate.row);
+        else if (candidate.reason) skippedReasons[candidate.reason] += 1;
+      }
+
+      const existingById = new Map<
+        string,
+        { external_id: string | null; event_name: string; destination: string; scheduled_at: string }
+      >();
+      for (let index = 0; index < rows.length; index += 100) {
+        const externalIds = rows.slice(index, index + 100).map((row) => row.external_id);
+        const existing = await supabase
+          .from("operations")
+          .select("external_id,event_name,destination,scheduled_at")
+          .eq("source", "estoquenow")
+          .in("external_id", externalIds);
+        if (existing.error) throw existing.error;
+        for (const operation of existing.data ?? []) {
+          if (operation.external_id) existingById.set(operation.external_id, operation);
         }
       }
+
+      const candidates = rows.map((row) => {
+        const existing = existingById.get(row.external_id);
+        const state = !existing
+          ? ("new" as const)
+          : sourceFieldsDiverged(existing, row)
+            ? ("diverged" as const)
+            : ("unchanged" as const);
+        return {
+          externalId: row.external_id,
+          eventName: row.event_name,
+          destination: row.destination,
+          scheduledAt: row.scheduled_at,
+          state,
+          row,
+        };
+      });
+
+      if (mode === "preview") {
+        return NextResponse.json({
+          ok: true,
+          mode,
+          startDate,
+          endDate,
+          importEnabled: process.env.ESTOQUENOW_IMPORT_ENABLED === "true",
+          total: external.length,
+          candidates: candidates.map((candidate) => ({
+            externalId: candidate.externalId,
+            eventName: candidate.eventName,
+            destination: candidate.destination,
+            scheduledAt: candidate.scheduledAt,
+            state: candidate.state,
+          })),
+          counts: {
+            new: candidates.filter((candidate) => candidate.state === "new").length,
+            unchanged: candidates.filter((candidate) => candidate.state === "unchanged").length,
+            diverged: candidates.filter((candidate) => candidate.state === "diverged").length,
+            skipped: external.length - rows.length,
+          },
+          skippedReasons,
+        });
+      }
+
+      const matching = candidates.filter((candidate) => candidate.externalId === externalId);
+      if (matching.length !== 1)
+        return jsonError("O ID externo informado não corresponde a um único candidato válido.", 409);
+      const candidate = matching[0];
+      if (candidate.state === "diverged")
+        return jsonError(
+          "Divergência detectada. Nenhum dado foi gravado; revise a prévia antes de continuar.",
+          409,
+        );
+      if (
+        body.reviewedEventName !== candidate.eventName ||
+        body.reviewedDestination !== candidate.destination ||
+        body.reviewedScheduledAt !== candidate.scheduledAt
+      )
+        return jsonError(
+          "O registro mudou desde a prévia. Revise os dados novamente antes de confirmar.",
+          409,
+        );
+
+      const admin = createSupabaseAdminClient();
+      if (!admin) return jsonError("Chave secreta do Supabase não configurada.", 503);
+      const confirmed = await admin.rpc("confirm_estoquenow_canary", {
+        p_external_id: candidate.row.external_id,
+        p_event_name: candidate.row.event_name,
+        p_destination: candidate.row.destination,
+        p_scheduled_at: candidate.row.scheduled_at,
+        p_notes: candidate.row.notes,
+        p_imported_at: candidate.row.imported_at,
+        p_manager_id: auth.user.id,
+      });
+      if (
+        confirmed.error?.code === "23505" ||
+        confirmed.error?.message.includes("source divergence")
+      )
+        return jsonError("O canário mudou durante a confirmação. Execute uma nova prévia.", 409);
+      if (confirmed.error) throw confirmed.error;
+      const imported = confirmed.data === "new";
       return NextResponse.json({
         ok: true,
-        imported: insertedCount,
-        preserved: rows.length - insertedCount,
-        diverged: divergedCount,
+        mode,
+        externalId: candidate.externalId,
+        imported: imported ? 1 : 0,
+        preserved: imported ? 0 : 1,
+        diverged: 0,
         skipped: external.length - rows.length,
       });
     }
@@ -500,6 +633,11 @@ export async function POST(request: Request) {
           409,
         );
       }
+      if (
+        confirmed.data?.operation_id !== operationId ||
+        confirmed.data?.stage !== stageValue
+      )
+        return jsonError("A confirmação retornou uma etapa diferente. Atualize a operação.", 409);
       return NextResponse.json({ state: "confirmed", event: confirmed.data });
     }
 
@@ -582,14 +720,12 @@ export async function POST(request: Request) {
         !["open", "handling", "resolved"].includes(body.status ?? "")
       )
         return jsonError("Ocorrência ou status inválido.");
-      const result = await supabase
-        .from("incidents")
-        .update({
-          status: body.status,
-          resolved_at: body.status === "resolved" ? new Date().toISOString() : null,
-        })
-        .eq("id", body.id);
+      const result = await supabase.rpc("set_incident_status", {
+        p_id: body.id,
+        p_status: body.status,
+      });
       if (result.error) throw result.error;
+      if (!result.data) return jsonError("Ocorrência não encontrada.", 404);
       return NextResponse.json({ ok: true });
     }
   } catch {

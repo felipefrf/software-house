@@ -21,10 +21,12 @@ export function getEstoqueNowStatus(
   importedCount = 0,
 ): EstoqueNowStatus {
   const { clientId, clientSecret } = credentials();
+  const importEnabled = process.env.ESTOQUENOW_IMPORT_ENABLED === "true";
   if (!clientId || !clientSecret)
     return {
       source: "mock",
       configured: false,
+      import_enabled: importEnabled,
       notice: "Credenciais ausentes. Operações internas não vieram do EstoqueNOW.",
       last_sync_at: null,
       imported_count: 0,
@@ -33,9 +35,12 @@ export function getEstoqueNowStatus(
   return {
     source: lastSyncAt ? "estoquenow" : "mock",
     configured: true,
+    import_enabled: importEnabled,
     notice: lastSyncAt
-      ? "Última importação somente leitura confirmada."
-      : "Credenciais configuradas; a primeira importação somente leitura ainda não foi executada.",
+      ? "Último canário confirmado após leitura externa."
+      : importEnabled
+        ? "Leitura externa disponível; gravação canário habilitada por ambiente."
+        : "Leitura externa disponível; gravação canário desabilitada por ambiente.",
     last_sync_at: lastSyncAt,
     imported_count: importedCount,
   };

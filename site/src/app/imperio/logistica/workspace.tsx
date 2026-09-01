@@ -1,7 +1,7 @@
 "use client";
 
 import { LogOut, Monitor, Smartphone, X } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { FieldApp } from "./field-app";
 import type { LogisticsSnapshot } from "./types";
@@ -139,15 +139,67 @@ export function LogisticsWorkspace({
   );
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const refreshInFlightRef = useRef<Promise<void> | null>(null);
+  const refreshRequestedRef = useRef(false);
 
-  const refresh = async () => {
-    const response = await fetch("/api/imperio", { cache: "no-store" });
-    if (!response.ok) throw new Error("Não foi possível atualizar o sistema.");
-    const fresh = (await response.json()) as LogisticsSnapshot;
-    setSnapshot(fresh);
-    if (!fresh.operations.some((operation) => operation.id === selectedId))
-      setSelectedId(fresh.operations[0]?.id ?? "");
-  };
+  const refresh = useCallback(() => {
+    refreshRequestedRef.current = true;
+    if (refreshInFlightRef.current) return refreshInFlightRef.current;
+
+    const request = (async () => {
+      try {
+        while (refreshRequestedRef.current) {
+          refreshRequestedRef.current = false;
+          const response = await fetch("/api/imperio", { cache: "no-store" });
+          if (!response.ok)
+            throw new Error("Não foi possível atualizar o sistema.");
+          const fresh = (await response.json()) as LogisticsSnapshot;
+          setSnapshot(fresh);
+          setSelectedId((current) =>
+            fresh.operations.some((operation) => operation.id === current)
+              ? current
+              : (fresh.operations[0]?.id ?? ""),
+          );
+        }
+      } finally {
+        refreshInFlightRef.current = null;
+      }
+    })();
+
+    refreshInFlightRef.current = request;
+    return request;
+  }, []);
+
+  const pollingUserId = snapshot.configured ? snapshot.user?.id : undefined;
+
+  useEffect(() => {
+    if (!pollingUserId) return;
+
+    let timer: number | null = null;
+    const refreshWhenVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      void refresh().catch(() => undefined);
+    };
+    const schedulePolling = () => {
+      if (timer !== null) window.clearInterval(timer);
+      timer = null;
+      if (document.visibilityState !== "visible") return;
+      timer = window.setInterval(refreshWhenVisible, 30_000);
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") refreshWhenVisible();
+      schedulePolling();
+    };
+
+    schedulePolling();
+    window.addEventListener("focus", refreshWhenVisible);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      if (timer !== null) window.clearInterval(timer);
+      window.removeEventListener("focus", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [pollingUserId, refresh]);
 
   const run: Run = async (task, success) => {
     setBusy(true);

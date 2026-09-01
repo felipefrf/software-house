@@ -104,6 +104,7 @@ export type Incident = {
 export type EstoqueNowStatus = {
   source: "estoquenow" | "mock";
   configured: boolean;
+  import_enabled: boolean;
   notice: string;
   last_sync_at: string | null;
   imported_count: number;

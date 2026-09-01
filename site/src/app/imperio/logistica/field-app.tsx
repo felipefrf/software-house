@@ -208,7 +208,15 @@ export function FieldApp(props: Props) {
 
   const removeFromOutbox = (deviceActionId: string) => {
     const next = outbox.filter((item) => item.deviceActionId !== deviceActionId);
-    localStorage.setItem(outboxKey, JSON.stringify(next));
+    try {
+      localStorage.setItem(outboxKey, JSON.stringify(next));
+    } catch {
+      try {
+        localStorage.removeItem(outboxKey);
+      } catch {
+        // A confirmação no servidor não deve falhar por indisponibilidade local.
+      }
+    }
     setOutbox(next);
   };
 
@@ -218,6 +226,16 @@ export function FieldApp(props: Props) {
     setLocation(null);
     setArrivalAccess("");
   };
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      setChecks({});
+      setPhotoDataUrl("");
+      setLocation(null);
+      setArrivalAccess("");
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [selected?.id, selected?.stage]);
 
   const syncAction = async (pending: PendingAction) => {
     const form = new FormData();
@@ -285,7 +303,11 @@ export function FieldApp(props: Props) {
       photoDataUrl,
     };
     void props.run(async () => {
-      saveOutbox([...outbox, pending]);
+      try {
+        saveOutbox([...outbox, pending]);
+      } catch (error) {
+        if (!online) throw error;
+      }
       if (!online) return;
       await syncAction(pending);
     },

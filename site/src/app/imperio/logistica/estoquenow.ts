@@ -31,6 +31,7 @@ export const sourceFieldsDiverged = (current: SourceFields, incoming: SourceFiel
 const DEFAULT_BASE_URL = "https://api.estoquenow.com.br";
 const REQUEST_TIMEOUT_MS = 8_000;
 const PAGE_SIZE = 50;
+const MAX_PAGES = 100;
 
 const asObject = (value: unknown): JsonObject | null =>
   value !== null && typeof value === "object" && !Array.isArray(value)
@@ -38,7 +39,41 @@ const asObject = (value: unknown): JsonObject | null =>
     : null;
 
 const text = (value: unknown): string =>
-  typeof value === "string" || typeof value === "number" ? String(value) : "";
+  typeof value === "string" || typeof value === "number" ? String(value).trim() : "";
+
+export const isValidExternalId = (value: string) => {
+  const normalized = value.trim();
+  return (
+    normalized.length > 0 &&
+    normalized.length <= 200 &&
+    !/[\u0000-\u001f\u007f]/.test(normalized)
+  );
+};
+
+export const isValidIsoDate = (value: string) => {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  return (
+    parsed.getUTCFullYear() === year &&
+    parsed.getUTCMonth() === month - 1 &&
+    parsed.getUTCDate() === day
+  );
+};
+
+export const toScheduledAt = (date: string, time: string) => {
+  const dateValue = date.trim();
+  const dateMatch = dateValue.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  const isoDate = dateMatch
+    ? `${dateMatch[3]}-${dateMatch[2]}-${dateMatch[1]}`
+    : dateValue;
+  const timeMatch = time.trim().match(/^([01]\d|2[0-3]):([0-5]\d)$/);
+  if (!isValidIsoDate(isoDate) || !timeMatch) return null;
+  return new Date(`${isoDate}T${timeMatch[1]}:${timeMatch[2]}:00-03:00`).toISOString();
+};
 
 const nestedText = (record: JsonObject, ...paths: string[][]): string => {
   for (const keys of paths) {
@@ -80,7 +115,7 @@ const statusFrom = (record: JsonObject): EstoqueNowOperation["status"] => {
 };
 
 export const normalizeLogistics = (payload: unknown): EstoqueNowOperation[] =>
-  listFrom(payload).flatMap((value, index) => {
+  listFrom(payload).flatMap((value) => {
     const record = asObject(value);
     if (!record) return [];
     const id = nestedText(record, ["id"], ["logistic_id"]);
@@ -88,8 +123,8 @@ export const normalizeLogistics = (payload: unknown): EstoqueNowOperation[] =>
     const city = nestedText(record, ["address_city"], ["city"]);
     return [
       {
-        id: id || `logistica-${index + 1}`,
-        orderId: orderId || "Sem pedido",
+        id,
+        orderId,
         eventName:
           nestedText(
             record,
@@ -97,24 +132,22 @@ export const normalizeLogistics = (payload: unknown): EstoqueNowOperation[] =>
             ["local_name"],
             ["order", "event_name"],
             ["order", "client", "name"],
-          ) || `Operação ${orderId || id || index + 1}`,
+          ),
         venue:
-          nestedText(record, ["local_name"], ["venue"], ["address_street"]) ||
-          "Local não informado",
-        city: city || "Cidade não informada",
-        scheduledDate: nestedText(record, ["delivery_date"]) || "Sem data",
-        scheduledTime: nestedText(record, ["delivery_time"]) || "Sem horário",
-        returnDate: nestedText(record, ["return_date"]) || "Sem data",
+          nestedText(record, ["local_name"], ["venue"], ["address_street"]),
+        city,
+        scheduledDate: nestedText(record, ["delivery_date"]),
+        scheduledTime: nestedText(record, ["delivery_time"]),
+        returnDate: nestedText(record, ["return_date"]),
         status: statusFrom(record),
-        coordinator:
-          nestedText(record, ["coordinator", "name"], ["responsible", "name"]) ||
-          "Não informado",
-        crew: nestedText(record, ["crew_name"], ["team", "name"]) || "Não informada",
-        vehicle:
-          nestedText(record, ["vehicle", "name"], ["vehicle_plate"]) ||
-          "Não informado",
-        nextMilestone:
-          nestedText(record, ["next_milestone"]) || "Validar dados da operação",
+        coordinator: nestedText(
+          record,
+          ["coordinator", "name"],
+          ["responsible", "name"],
+        ),
+        crew: nestedText(record, ["crew_name"], ["team", "name"]),
+        vehicle: nestedText(record, ["vehicle", "name"], ["vehicle_plate"]),
+        nextMilestone: nestedText(record, ["next_milestone"]),
       },
     ];
   });
@@ -204,7 +237,7 @@ export class EstoqueNowClient {
 
   async listLogistics(startDate: string, endDate: string) {
     const operations = new Map<string, EstoqueNowOperation>();
-    for (let page = 1; page <= 100; page += 1) {
+    for (let page = 1; page <= MAX_PAGES; page += 1) {
       const query = new URLSearchParams({
         "order[id]": "desc",
         page: String(page),
@@ -212,14 +245,20 @@ export class EstoqueNowClient {
         start_date: startDate,
         end_date: endDate,
       });
-      const batch = normalizeLogistics(await this.request(`/v1/logistic?${query}`));
+      const payload = await this.request(`/v1/logistic?${query}`);
+      const rawCount = listFrom(payload).length;
+      const batch = normalizeLogistics(payload);
       for (const [index, operation] of batch.entries()) {
-        const id = operation.id.startsWith("logistica-")
-          ? `logistica-${page}-${index + 1}`
-          : operation.id;
-        operations.set(id, { ...operation, id });
+        const key = operation.id
+          ? `external:${operation.id}`
+          : `invalid:${page}:${index + 1}`;
+        const existing = operations.get(key);
+        if (existing && JSON.stringify(existing) !== JSON.stringify(operation))
+          throw new Error("ESTOQUENOW_DUPLICATE_ID_CONFLICT");
+        operations.set(key, operation);
       }
-      if (batch.length < PAGE_SIZE) break;
+      if (rawCount < PAGE_SIZE) break;
+      if (page === MAX_PAGES) throw new Error("ESTOQUENOW_PAGE_LIMIT");
     }
     return [...operations.values()];
   }

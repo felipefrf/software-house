@@ -66,6 +66,36 @@ type View =
   | "incidents"
   | "integrations";
 
+type EstoqueNowPreview = {
+  mode: "preview";
+  startDate: string;
+  endDate: string;
+  importEnabled: boolean;
+  total: number;
+  candidates: Array<{
+    externalId: string;
+    eventName: string;
+    destination: string;
+    scheduledAt: string;
+    state: "new" | "unchanged" | "diverged";
+  }>;
+  counts: {
+    new: number;
+    unchanged: number;
+    diverged: number;
+    skipped: number;
+  };
+  skippedReasons: {
+    missing_external_id: number;
+    invalid_external_id: number;
+    missing_event_name: number;
+    invalid_event_name: number;
+    missing_destination: number;
+    invalid_destination: number;
+    invalid_scheduled_date_or_time: number;
+  };
+};
+
 const formValue = (form: FormData, name: string) =>
   String(form.get(name) ?? "").trim();
 
@@ -123,6 +153,7 @@ function Input({
   required = true,
   defaultValue,
   minLength,
+  readOnly = false,
 }: {
   name: string;
   label: string;
@@ -130,17 +161,19 @@ function Input({
   required?: boolean;
   defaultValue?: string;
   minLength?: number;
+  readOnly?: boolean;
 }) {
   return (
     <label className="mt-3 block text-sm font-medium">
       {label}
       <input
-        className="mt-2 min-h-11 w-full rounded-lg border border-[#cbd4ce] bg-white px-3 py-2.5"
+        className="mt-2 min-h-11 w-full rounded-lg border border-[#cbd4ce] bg-white px-3 py-2.5 read-only:bg-[#edf1ee] read-only:text-[#5f7067]"
         name={name}
         type={type}
         required={required}
         defaultValue={defaultValue}
         minLength={minLength}
+        readOnly={readOnly}
       />
     </label>
   );
@@ -723,8 +756,9 @@ function OperationsView(props: Props & { openSelected?: boolean }) {
           {selected && selected.status === "active" && (
             <form key={selected.id} onSubmit={update} className="rounded-xl border border-[#d7dfd9] bg-white p-5">
               <h3 className="text-lg font-semibold">Editar escala</h3>
-              <Input name="destination" label="Destino" defaultValue={selected.destination} />
-              <Input name="scheduledAt" label="Data e horário" type="datetime-local" defaultValue={operationDateTimeInput(selected.scheduled_at)} />
+              <Input name="destination" label="Destino" defaultValue={selected.destination} readOnly={selected.source === "estoquenow"} />
+              <Input name="scheduledAt" label="Data e horário" type="datetime-local" defaultValue={operationDateTimeInput(selected.scheduled_at)} readOnly={selected.source === "estoquenow"} />
+              {selected.source === "estoquenow" && <p className="mt-2 text-xs text-[#5f7067]">Destino e horário vêm do EstoqueNOW; aqui você altera apenas a escala interna.</p>}
               <Select name="teamId" label="Equipe" required={false} defaultValue={selected.team_id ?? ""} options={props.snapshot.teams.map((team) => [team.id, team.name])} />
               <Select name="vehicleId" label="Veículo" required={false} defaultValue={selected.vehicle_id ?? ""} options={props.snapshot.vehicles.map((vehicle) => [vehicle.id, `${vehicle.name} · ${vehicle.plate}`])} />
               <Select name="driverId" label="Motorista" required={false} defaultValue={selected.driver_id ?? ""} options={props.snapshot.people.map((person) => [person.id, person.full_name])} />
@@ -1068,13 +1102,48 @@ function IntegrationsView(props: Props) {
   const today = new Date();
   const future = new Date(today);
   future.setDate(today.getDate() + 90);
+  const [preview, setPreview] = useState<EstoqueNowPreview | null>(null);
+  const [canaryId, setCanaryId] = useState("");
+  const selectedCanary = preview?.candidates.find(
+    (candidate) => candidate.externalId === canaryId,
+  );
   const sync = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    let result = "Importação somente leitura concluída.";
+    let result = "Prévia concluída sem gravar no banco da Império.";
     void props.run(async () => {
-      const imported = await postJson<{ imported: number; preserved: number; diverged: number; skipped: number }>("sync-estoquenow", { startDate: formValue(form, "startDate"), endDate: formValue(form, "endDate") });
-      result = `${imported.imported} importada(s) · ${imported.preserved} preservada(s) · ${imported.diverged} divergente(s) · ${imported.skipped} ignorada(s) por ID ou data inválida.`;
+      const nextPreview = await postJson<EstoqueNowPreview>("sync-estoquenow", {
+        mode: "preview",
+        startDate: formValue(form, "startDate"),
+        endDate: formValue(form, "endDate"),
+      });
+      setPreview(nextPreview);
+      setCanaryId("");
+      result = `${nextPreview.total} lida(s) · ${nextPreview.counts.new} nova(s) · ${nextPreview.counts.unchanged} já conciliada(s) · ${nextPreview.counts.diverged} divergente(s) · ${nextPreview.counts.skipped} inválida(s). Nenhuma gravação realizada.`;
+    }, () => result);
+  };
+  const confirmCanary = () => {
+    if (!preview || !selectedCanary) return;
+    let result = "Canário confirmado.";
+    void props.run(async () => {
+      const confirmed = await postJson<{
+        externalId: string;
+        imported: number;
+        preserved: number;
+      }>("sync-estoquenow", {
+        mode: "canary",
+        startDate: preview.startDate,
+        endDate: preview.endDate,
+        externalId: selectedCanary.externalId,
+        reviewedEventName: selectedCanary.eventName,
+        reviewedDestination: selectedCanary.destination,
+        reviewedScheduledAt: selectedCanary.scheduledAt,
+      });
+      result = confirmed.imported
+        ? `Canário ${confirmed.externalId} criado no banco da Império.`
+        : `Canário ${confirmed.externalId} já estava conciliado; dados operacionais foram preservados.`;
+      setPreview(null);
+      setCanaryId("");
       await props.refresh();
     }, () => result);
   };
@@ -1083,9 +1152,9 @@ function IntegrationsView(props: Props) {
       "Agenda e pedidos",
       "EstoqueNOW",
       props.snapshot.estoquenow.source === "estoquenow"
-        ? "Somente leitura · última importação confirmada"
+        ? "Leitura externa · último canário confirmado"
         : props.snapshot.estoquenow.configured
-          ? "Somente leitura · aguardando primeira importação"
+          ? "Leitura externa · aguardando primeiro canário"
           : "Somente leitura · aguardando credenciais",
     ],
     ["Pessoas, equipes e frota", "Império", "Cadastro persistente ativo"],
@@ -1096,8 +1165,68 @@ function IntegrationsView(props: Props) {
     <div>
       <div><p className="font-mono text-xs uppercase tracking-[0.16em] text-[#5f7067]">Integrações</p><h2 className="mt-1 text-3xl font-semibold tracking-tight">Conexões e fontes de verdade</h2></div>
       <div className="mt-5 grid gap-5 xl:grid-cols-2">
-        <article className="rounded-xl border border-[#d7dfd9] bg-white p-5"><div className="flex items-start justify-between gap-4"><div><Link2 size={21} className="text-[#3d7567]" /><h3 className="mt-3 text-xl font-semibold">EstoqueNOW</h3></div><Pill tone={props.snapshot.estoquenow.source === "estoquenow" ? "green" : "amber"}>{props.snapshot.estoquenow.source === "estoquenow" ? "Leitura confirmada" : props.snapshot.estoquenow.configured ? "Aguardando teste" : "Sem credenciais"}</Pill></div><p className="mt-3 text-sm text-[#65746c]">{props.snapshot.estoquenow.notice}</p><dl className="mt-4 grid grid-cols-2 gap-3 text-sm"><div><dt className="text-[#5f7067]">Operações importadas</dt><dd className="font-semibold">{props.snapshot.estoquenow.imported_count}</dd></div><div><dt className="text-[#5f7067]">Última leitura</dt><dd className="font-semibold">{props.snapshot.estoquenow.last_sync_at ? formatDate(props.snapshot.estoquenow.last_sync_at) : "Nunca"}</dd></div></dl><div className="mt-4 rounded-lg bg-[#fff6dd] p-3 text-xs text-[#705817]">Integração estritamente server-side e somente leitura. Entrega, devolução, locação e inventário nunca são alterados por este módulo.</div></article>
-        <form onSubmit={sync} className="rounded-xl border border-[#d7dfd9] bg-white p-5"><h3 className="text-xl font-semibold">Importar período</h3><p className="mt-2 text-sm text-[#65746c]">A lista de logísticas é conciliada por ID externo. Etapa, equipe, veículo e evidências internas são preservados.</p><div className="grid gap-x-4 sm:grid-cols-2"><Input name="startDate" label="Início" type="date" defaultValue={operationDateInput(today)} /><Input name="endDate" label="Fim" type="date" defaultValue={operationDateInput(future)} /></div><button disabled={props.busy || !props.snapshot.configured || !props.snapshot.estoquenow.configured} className="mt-5 min-h-11 w-full rounded-lg bg-[#5b4bcc] px-4 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">Executar importação somente leitura</button></form>
+        <article className="rounded-xl border border-[#d7dfd9] bg-white p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div><Link2 size={21} className="text-[#3d7567]" /><h3 className="mt-3 text-xl font-semibold">EstoqueNOW</h3></div>
+            <Pill tone={props.snapshot.estoquenow.source === "estoquenow" ? "green" : "amber"}>{props.snapshot.estoquenow.source === "estoquenow" ? "Canário confirmado" : props.snapshot.estoquenow.configured ? "Pronto para prévia" : "Sem credenciais"}</Pill>
+          </div>
+          <p className="mt-3 text-sm text-[#65746c]">{props.snapshot.estoquenow.notice}</p>
+          <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
+            <div><dt className="text-[#5f7067]">Canários no banco</dt><dd className="font-semibold">{props.snapshot.estoquenow.imported_count}</dd></div>
+            <div><dt className="text-[#5f7067]">Última confirmação</dt><dd className="font-semibold">{props.snapshot.estoquenow.last_sync_at ? formatDate(props.snapshot.estoquenow.last_sync_at) : "Nunca"}</dd></div>
+          </dl>
+          <div className="mt-4 rounded-lg bg-[#eef5f1] p-3 text-xs leading-relaxed text-[#285f50]">A consulta à API é somente leitura e ocorre no servidor. Apenas o canário escolhido abaixo pode criar ou confirmar uma operação no Postgres da Império.</div>
+          <div className={`mt-3 rounded-lg p-3 text-xs ${props.snapshot.estoquenow.import_enabled ? "bg-[#e3f2ec] text-[#28624f]" : "bg-[#fff6dd] text-[#705817]"}`}>
+            Gravação canário {props.snapshot.estoquenow.import_enabled ? "habilitada" : "bloqueada"} por ambiente. Importação em lote indisponível.
+          </div>
+        </article>
+        <form onSubmit={sync} className="rounded-xl border border-[#d7dfd9] bg-white p-5">
+          <p className="font-mono text-xs uppercase tracking-[0.14em] text-[#5f7067]">Passo 1</p>
+          <h3 className="mt-2 text-xl font-semibold">Pré-visualizar leitura</h3>
+          <p className="mt-2 text-sm leading-relaxed text-[#65746c]">Consulte um período e confira IDs, datas e divergências. Esta etapa nunca grava operações.</p>
+          <div className="grid gap-x-4 sm:grid-cols-2"><Input name="startDate" label="Início" type="date" defaultValue={operationDateInput(today)} /><Input name="endDate" label="Fim" type="date" defaultValue={operationDateInput(future)} /></div>
+          <button disabled={props.busy || !props.snapshot.configured || !props.snapshot.estoquenow.configured} className="mt-5 min-h-11 w-full rounded-lg bg-[#5b4bcc] px-4 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">Gerar prévia sem gravar</button>
+          {!props.snapshot.estoquenow.configured && <p className="mt-3 text-xs text-[#705817]">Adicione as credenciais apenas no servidor para liberar a prévia.</p>}
+        </form>
+        {preview && (
+          <article className="rounded-xl border border-[#d7dfd9] bg-white p-5 xl:col-span-2">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div><p className="font-mono text-xs uppercase tracking-[0.14em] text-[#5f7067]">Passo 2 · prévia sem escrita</p><h3 className="mt-2 text-xl font-semibold">Escolha exatamente um canário</h3><p className="mt-1 text-sm text-[#65746c]">Período {preview.startDate.split("-").reverse().join("/")} a {preview.endDate.split("-").reverse().join("/")}</p></div>
+              <Pill tone="green">Nenhuma gravação realizada</Pill>
+            </div>
+            <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
+              {[
+                ["Novas", preview.counts.new],
+                ["Conciliadas", preview.counts.unchanged],
+                ["Divergentes", preview.counts.diverged],
+                ["Inválidas", preview.counts.skipped],
+              ].map(([label, value]) => <div key={label} className="rounded-lg bg-[#f2f5f3] p-3"><p className="text-xs text-[#5f7067]">{label}</p><p className="mt-1 text-2xl font-semibold">{value}</p></div>)}
+            </div>
+            {preview.counts.diverged > 0 && <p className="mt-4 flex items-start gap-2 rounded-lg bg-[#fff3d1] p-3 text-sm text-[#705817]"><AlertTriangle className="mt-0.5 shrink-0" size={17} />{preview.counts.diverged} registro(s) divergem do banco da Império e estão bloqueados para gravação.</p>}
+            {preview.counts.skipped > 0 && <div className="mt-3 rounded-lg border border-[#eadcae] bg-[#fffaf0] p-3 text-xs text-[#705817]"><strong>Registros inválidos, sem gravação:</strong><p className="mt-1">{[
+              ["sem ID", preview.skippedReasons.missing_external_id],
+              ["ID inválido", preview.skippedReasons.invalid_external_id],
+              ["sem nome", preview.skippedReasons.missing_event_name],
+              ["nome inválido", preview.skippedReasons.invalid_event_name],
+              ["sem destino", preview.skippedReasons.missing_destination],
+              ["destino inválido", preview.skippedReasons.invalid_destination],
+              ["data ou hora inválida", preview.skippedReasons.invalid_scheduled_date_or_time],
+            ].filter(([, count]) => Number(count) > 0).map(([label, count]) => `${count} ${label}`).join(" · ")}</p></div>}
+            {preview.candidates.length > 0 ? (
+              <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,.8fr)]">
+                <label className="text-sm font-medium">ID externo do canário
+                  <select value={canaryId} onChange={(event) => setCanaryId(event.target.value)} className="mt-2 min-h-11 w-full rounded-lg border border-[#cbd4ce] bg-white px-3 py-2.5">
+                    <option value="">Selecione uma operação válida</option>
+                    {preview.candidates.map((candidate) => <option key={candidate.externalId} value={candidate.externalId} disabled={candidate.state === "diverged"}>{candidate.externalId} · {candidate.eventName}{candidate.state === "diverged" ? " · divergente" : candidate.state === "unchanged" ? " · já conciliada" : " · nova"}</option>)}
+                  </select>
+                </label>
+                {selectedCanary ? <div className="rounded-lg border border-[#dce3de] bg-[#f8faf8] p-4"><div className="flex items-center justify-between gap-3"><strong className="text-sm">{selectedCanary.eventName}</strong><Pill tone={selectedCanary.state === "new" ? "green" : selectedCanary.state === "diverged" ? "red" : "neutral"}>{selectedCanary.state === "new" ? "Nova" : selectedCanary.state === "diverged" ? "Divergente" : "Conciliada"}</Pill></div><p className="mt-2 text-xs text-[#5f7067]">{selectedCanary.destination}</p><p className="mt-1 text-xs text-[#5f7067]">{formatDate(selectedCanary.scheduledAt)}</p></div> : <div className="rounded-lg bg-[#f2f5f3] p-4 text-sm text-[#5f7067]">Selecione um ID para revisar o registro exato.</div>}
+              </div>
+            ) : <div className="mt-5"><Empty>Nenhum candidato válido neste período.</Empty></div>}
+            <button type="button" onClick={confirmCanary} disabled={props.busy || !props.snapshot.estoquenow.import_enabled || !selectedCanary || selectedCanary.state === "diverged"} className="mt-5 min-h-11 w-full rounded-lg bg-[#173d34] px-4 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">Confirmar somente este canário no banco da Império</button>
+            {!props.snapshot.estoquenow.import_enabled && <p className="mt-3 text-center text-xs text-[#705817]">Defina ESTOQUENOW_IMPORT_ENABLED=true no servidor somente após validar esta prévia.</p>}
+          </article>
+        )}
         <article className="rounded-xl border border-[#d7dfd9] bg-white p-5"><Settings2 size={21} /><h3 className="mt-3 text-xl font-semibold">Supabase</h3><Pill tone={props.snapshot.configured ? "green" : "amber"}>{props.snapshot.configured ? "Persistência ativa" : "Modo demonstrativo"}</Pill><p className="mt-3 text-sm text-[#65746c]">Postgres, Auth e Storage são configurados exclusivamente por ambiente. Nenhum segredo é enviado ao navegador.</p></article>
         <article className="rounded-xl border border-[#d7dfd9] bg-white p-5"><MapPin size={21} /><h3 className="mt-3 text-xl font-semibold">Google Maps</h3><Pill tone="green">URL universal ativa</Pill><p className="mt-3 text-sm text-[#65746c]">Abre a rota no app ou navegador. Sem chave paga, mapa embutido ou cálculo próprio de ETA.</p></article>
         <article className="overflow-hidden rounded-xl border border-[#d7dfd9] bg-white xl:col-span-2">
@@ -1118,8 +1247,8 @@ function IntegrationsView(props: Props) {
         <article className="rounded-xl border border-[#d7dfd9] bg-white p-5 xl:col-span-2">
           <h3 className="text-xl font-semibold">Prontidão do conector</h3>
           <div className="mt-4 grid gap-3 text-sm md:grid-cols-2">
-            {["OAuth e segredo apenas no servidor", "Cache do token com renovação em 401", "Retry limitado para 429", "Conciliação por ID externo preserva dados internos"].map((item) => <p key={item} className="flex items-center gap-2 rounded-lg bg-[#eef5f1] p-3 text-[#285f50]"><CheckCircle2 size={17} />{item}</p>)}
-            <p className="flex items-center gap-2 rounded-lg bg-[#fff6dd] p-3 text-[#705817] md:col-span-2"><AlertTriangle size={17} />Teste ponta a ponta real bloqueado somente pelas credenciais e pelo contrato final dos campos do EstoqueNOW.</p>
+            {["OAuth e segredo apenas no servidor", "Prévia sem escrita no banco da Império", "Canário unitário protegido por flag", "Divergências bloqueadas antes da gravação"].map((item) => <p key={item} className="flex items-center gap-2 rounded-lg bg-[#eef5f1] p-3 text-[#285f50]"><CheckCircle2 size={17} />{item}</p>)}
+            <p className="flex items-center gap-2 rounded-lg bg-[#fff6dd] p-3 text-[#705817] md:col-span-2"><AlertTriangle size={17} />Teste ponta a ponta real e importação em lote continuam bloqueados até receber credenciais e validar o contrato final dos campos do EstoqueNOW.</p>
           </div>
         </article>
       </div>

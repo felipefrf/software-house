@@ -3,8 +3,11 @@ import test from "node:test";
 
 import {
   EstoqueNowClient,
+  isValidExternalId,
+  isValidIsoDate,
   normalizeLogistics,
   sourceFieldsDiverged,
+  toScheduledAt,
 } from "./estoquenow.ts";
 
 test("detecta divergência sem confundir fusos equivalentes", () => {
@@ -41,7 +44,44 @@ test("normaliza lista sem presumir campos ausentes", () => {
   });
   assert.equal(operations[0]?.orderId, "42");
   assert.equal(operations[0]?.city, "São Paulo");
-  assert.equal(operations[0]?.coordinator, "Não informado");
+  assert.equal(operations[0]?.coordinator, "");
+});
+
+test("remove espaços e não fabrica ID, data, hora ou destino", () => {
+  const operation = normalizeLogistics({
+    data: [
+      {
+        id: "   ",
+        event_name: "  Festa da equipe  ",
+        delivery_date: " 31/08/2026 ",
+        delivery_time: " 14:30 ",
+      },
+    ],
+  })[0];
+  assert.equal(operation?.id, "");
+  assert.equal(operation?.eventName, "Festa da equipe");
+  assert.equal(operation?.scheduledDate, "31/08/2026");
+  assert.equal(operation?.scheduledTime, "14:30");
+  assert.equal(operation?.venue, "");
+  assert.equal(operation?.city, "");
+});
+
+test("valida calendário e horário sem aceitar normalização automática", () => {
+  assert.equal(isValidIsoDate("2028-02-29"), true);
+  assert.equal(isValidIsoDate("2026-02-29"), false);
+  assert.equal(isValidIsoDate("2026-02-31"), false);
+  assert.equal(toScheduledAt("31/08/2026", "23:59"), "2026-09-01T02:59:00.000Z");
+  assert.equal(toScheduledAt("31/02/2026", "08:00"), null);
+  assert.equal(toScheduledAt("31/08/2026", "24:00"), null);
+  assert.equal(toScheduledAt("31/08/2026", "08:00:30"), null);
+  assert.equal(toScheduledAt("31/08/2026", ""), null);
+});
+
+test("aceita IDs opacos, mas rejeita vazio, controle e tamanho excessivo", () => {
+  assert.equal(isValidExternalId("  logistica/ABC 42  "), true);
+  assert.equal(isValidExternalId("   "), false);
+  assert.equal(isValidExternalId("ABC\n42"), false);
+  assert.equal(isValidExternalId("x".repeat(201)), false);
 });
 
 test("reutiliza token e renova uma vez após 401", async () => {
@@ -111,7 +151,26 @@ test("pagina a listagem sem duplicar IDs", async () => {
   assert.equal(operations.length, 51);
 });
 
-test("não funde registros sem ID entre páginas", async () => {
+test("falha fechada quando o mesmo ID chega com conteúdo conflitante", async () => {
+  const fetchImpl: typeof fetch = async (input) => {
+    const url = String(input);
+    if (url.endsWith("/oauth2/token"))
+      return Response.json({ access_token: "token", expires_in: 1800 });
+    return Response.json({
+      data: [
+        { id: "duplicado", event_name: "Evento A" },
+        { id: "duplicado", event_name: "Evento B" },
+      ],
+    });
+  };
+  const client = new EstoqueNowClient({ clientId: "id", clientSecret: "secret", fetchImpl });
+  await assert.rejects(
+    client.listLogistics("01/08/2026", "31/08/2026"),
+    /ESTOQUENOW_DUPLICATE_ID_CONFLICT/,
+  );
+});
+
+test("preserva registros sem ID para que a prévia os conte como inválidos", async () => {
   const fetchImpl: typeof fetch = async (input) => {
     const url = String(input);
     if (url.endsWith("/oauth2/token"))
@@ -127,5 +186,35 @@ test("não funde registros sem ID entre páginas", async () => {
     fetchImpl,
   }).listLogistics("01/08/2026", "31/08/2026");
   assert.equal(operations.length, 51);
-  assert.equal(new Set(operations.map((operation) => operation.id)).size, 51);
+  assert.equal(operations.every((operation) => operation.id === ""), true);
+});
+
+test("preserva ID externo legítimo com prefixo logistica", async () => {
+  const fetchImpl: typeof fetch = async (input) =>
+    String(input).endsWith("/oauth2/token")
+      ? Response.json({ access_token: "token", expires_in: 1800 })
+      : Response.json({ data: [{ id: "  logistica-real  " }] });
+  const operations = await new EstoqueNowClient({
+    clientId: "id",
+    clientSecret: "secret",
+    fetchImpl,
+  }).listLogistics("01/08/2026", "31/08/2026");
+  assert.equal(operations[0]?.id, "logistica-real");
+});
+
+test("falha fechada quando a página máxima também vem cheia", async () => {
+  const fetchImpl: typeof fetch = async (input) => {
+    const url = String(input);
+    if (url.endsWith("/oauth2/token"))
+      return Response.json({ access_token: "token", expires_in: 1800 });
+    const page = Number(new URL(url).searchParams.get("page"));
+    return Response.json({
+      data: Array.from({ length: 50 }, (_, index) => ({ id: `${page}-${index}` })),
+    });
+  };
+  const client = new EstoqueNowClient({ clientId: "id", clientSecret: "secret", fetchImpl });
+  await assert.rejects(
+    client.listLogistics("01/08/2026", "31/08/2026"),
+    /ESTOQUENOW_PAGE_LIMIT/,
+  );
 });

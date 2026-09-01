@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = extensions, public;
 
-select plan(13);
+select plan(27);
 
 insert into auth.users (id, email, raw_user_meta_data)
 values
@@ -74,6 +74,13 @@ values
     '10000000-0000-4000-8000-000000000001',
     '10000000-0000-4000-8000-000000000001',
     '{}'
+  ),
+  (
+    'operation-evidence',
+    '40000000-0000-4000-8000-000000000001/60000000-0000-4000-8000-000000000004.jpg',
+    '10000000-0000-4000-8000-000000000002',
+    '10000000-0000-4000-8000-000000000002',
+    '{}'
   );
 
 set local role authenticated;
@@ -97,18 +104,15 @@ select results_eq(
   array[0::bigint],
   'funcionário não sobrescreve evidência de outro usuário'
 );
-select results_eq(
+select throws_ok(
   $$
-    with changed as (
-      update public.incidents
-      set status = 'resolved', resolved_at = now()
-      where id = '50000000-0000-4000-8000-000000000001'
-      returning 1
-    )
-    select count(*) from changed
+    update public.incidents
+    set status = 'resolved', resolved_at = now()
+    where id = '50000000-0000-4000-8000-000000000001'
   $$,
-  array[0::bigint],
-  'funcionário não encerra ocorrência'
+  '42501',
+  'permission denied for table incidents',
+  'funcionário não altera ocorrência diretamente pela Data API'
 );
 select throws_ok(
   $$
@@ -178,6 +182,70 @@ select is(
   1::bigint,
   'reenvio idempotente não duplica evento'
 );
+select throws_ok(
+  $$
+    select public.confirm_operation_action(
+      '40000000-0000-4000-8000-000000000001',
+      '60000000-0000-4000-8000-000000000001',
+      'departure',
+      now(),
+      '{}'::jsonb,
+      0,
+      0,
+      0,
+      '10000000-0000-4000-8000-000000000002',
+      null,
+      'ignorado-no-conflito'
+    )
+  $$,
+  'P0001',
+  'device action unavailable',
+  'device_action_id não confirma outra etapa da mesma operação'
+);
+select throws_ok(
+  $$
+    select public.confirm_operation_action(
+      '40000000-0000-4000-8000-000000000001',
+      '60000000-0000-4000-8000-000000000004',
+      'departure',
+      'infinity'::timestamptz,
+      '{
+        "Motorista e veículo confirmados":true,
+        "Toda a equipe presente":true,
+        "Carga fotografada e conferida":true
+      }'::jsonb,
+      -23.5,
+      -46.6,
+      10,
+      '10000000-0000-4000-8000-000000000002',
+      null,
+      '40000000-0000-4000-8000-000000000001/60000000-0000-4000-8000-000000000004.jpg'
+    )
+  $$,
+  'P0001',
+  'invalid device capture time',
+  'RPC rejeita horário de captura não finito'
+);
+select throws_ok(
+  $$
+    select public.confirm_operation_action(
+      '40000000-0000-4000-8000-000000000001',
+      '60000000-0000-4000-8000-000000000004',
+      'departure',
+      now(),
+      '{}'::jsonb,
+      -23.5,
+      -46.6,
+      'infinity'::double precision,
+      '10000000-0000-4000-8000-000000000002',
+      null,
+      'ignorado-no-gps-invalido'
+    )
+  $$,
+  'P0001',
+  'invalid location',
+  'RPC rejeita precisão GPS não finita'
+);
 select results_eq(
   $$
     with changed as (
@@ -240,18 +308,155 @@ select is(
 reset role;
 set local role authenticated;
 set local "request.jwt.claim.sub" = '10000000-0000-4000-8000-000000000001';
-select results_eq(
+select is(
+  public.update_operation_assignment(
+    '40000000-0000-4000-8000-000000000001',
+    'Destino atualizado pelo BFF',
+    now(),
+    '20000000-0000-4000-8000-000000000001',
+    '30000000-0000-4000-8000-000000000001',
+    '10000000-0000-4000-8000-000000000004',
+    'Escala atualizada'
+  ),
+  true,
+  'RPC estreito permite ao gestor atualizar a escala'
+);
+select throws_ok(
   $$
-    with changed as (
-      update public.incidents
-      set status = 'resolved', resolved_at = now()
-      where id = '50000000-0000-4000-8000-000000000001'
-      returning 1
+    select public.create_manual_operation(
+      'Operação com horário inválido',
+      'Destino completo válido',
+      'infinity'::timestamptz
     )
-    select count(*) from changed
   $$,
-  array[1::bigint],
-  'gestor pode encerrar ocorrência'
+  'P0001',
+  'invalid scheduled time',
+  'RPC rejeita horário não finito ao criar operação'
+);
+select throws_ok(
+  $$
+    select public.update_operation_assignment(
+      '40000000-0000-4000-8000-000000000001',
+      'Destino atualizado pelo BFF',
+      'infinity'::timestamptz
+    )
+  $$,
+  'P0001',
+  'invalid scheduled time',
+  'RPC rejeita horário não finito ao atualizar operação'
+);
+select throws_ok(
+  $$select public.cancel_operation('40000000-0000-4000-8000-000000000001', null)$$,
+  'P0001',
+  'invalid reason',
+  'RPC rejeita cancelamento sem motivo'
+);
+select is(
+  public.set_incident_status(
+    '50000000-0000-4000-8000-000000000001',
+    'resolved'
+  ),
+  true,
+  'RPC estreito permite ao gestor tratar ocorrência'
+);
+select throws_ok(
+  $$
+    select public.confirm_estoquenow_canary(
+      'external-canary-1',
+      'Canário EstoqueNOW',
+      'Destino externo válido',
+      now(),
+      'Leitura externa validada',
+      now(),
+      '10000000-0000-4000-8000-000000000001'
+    )
+  $$,
+  '42501',
+  'permission denied for function confirm_estoquenow_canary',
+  'gestor não contorna a flag chamando o canário pela Data API'
+);
+select throws_ok(
+  $$
+    insert into public.operations (
+      event_name, destination, scheduled_at, manager_id
+    ) values (
+      'Operação indevida',
+      'Destino completo indevido',
+      now(),
+      '10000000-0000-4000-8000-000000000001'
+    )
+  $$,
+  '42501',
+  'permission denied for table operations',
+  'gestor não insere operação diretamente pela Data API'
+);
+select throws_ok(
+  $$
+    update public.operations
+    set stage = 'inspection', status = 'completed', completed_at = now()
+    where id = '40000000-0000-4000-8000-000000000001'
+  $$,
+  '42501',
+  'permission denied for table operations',
+  'gestor não avança operação diretamente pela Data API'
+);
+select throws_ok(
+  $$
+    update public.incidents
+    set status = 'resolved', resolved_at = now()
+    where id = '50000000-0000-4000-8000-000000000001'
+  $$,
+  '42501',
+  'permission denied for table incidents',
+  'gestor não altera ocorrência diretamente pela Data API'
+);
+
+reset role;
+set local role service_role;
+select is(
+  public.confirm_estoquenow_canary(
+    'external-canary-1',
+    'Canário EstoqueNOW',
+    'Destino externo válido',
+    now(),
+    'Leitura externa validada',
+    now(),
+    '10000000-0000-4000-8000-000000000001'
+  ),
+  'new',
+  'RPC estreito cria exatamente um canário via backend privilegiado'
+);
+select throws_ok(
+  $$
+    select public.confirm_estoquenow_canary(
+      'external-canary-infinito',
+      'Canário inválido',
+      'Destino externo válido',
+      'infinity'::timestamptz,
+      'Leitura externa inválida',
+      now(),
+      '10000000-0000-4000-8000-000000000001'
+    )
+  $$,
+  'P0001',
+  'invalid source time',
+  'RPC rejeita horário externo não finito'
+);
+
+reset role;
+set local role authenticated;
+set local "request.jwt.claim.sub" = '10000000-0000-4000-8000-000000000001';
+select throws_ok(
+  $$
+    select public.update_operation_assignment(
+      (select id from public.operations where external_id = 'external-canary-1'),
+      'Destino adulterado na torre',
+      (select scheduled_at from public.operations where external_id = 'external-canary-1')
+    )
+  $$,
+  'P0001',
+  'source fields immutable',
+  'escala interna não altera campos canônicos do EstoqueNOW'
 );
 
 select * from finish();
