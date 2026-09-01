@@ -412,6 +412,16 @@ export function FieldApp(props: Props) {
         </span>
       </div>
 
+      <details className="pwa-install-hint mb-4 rounded-xl border border-[#d7dfd9] bg-white px-4 py-3 text-sm">
+        <summary className="min-h-11 cursor-pointer content-center font-semibold text-[#315f52]">
+          Instalar app neste celular
+        </summary>
+        <p className="mt-2 text-[#5f7067]">
+          iPhone: abra no Safari, toque em Compartilhar e em Adicionar à Tela de
+          Início. Android: abra o menu do Chrome e escolha Instalar app.
+        </p>
+      </details>
+
       {tab === "today" && (
         <>
           {!stageOpen ? (

@@ -56,6 +56,22 @@ body:has(.imperio-shell) > footer {
   outline-offset: 2px;
 }
 
+.imperio-app-header {
+  padding-top: calc(0.625rem + env(safe-area-inset-top));
+}
+
+@media (min-width: 48rem) {
+  .imperio-app-header {
+    padding-top: calc(0.75rem + env(safe-area-inset-top));
+  }
+}
+
+@media (display-mode: standalone) {
+  .pwa-install-hint {
+    display: none;
+  }
+}
+
 ::selection {
   background: rgba(10, 36, 115, 0.15);
   color: var(--foreground);

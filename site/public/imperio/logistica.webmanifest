@@ -4,7 +4,7 @@
   "description": "Torre web e operação de campo da Império Eventos.",
   "id": "/imperio/logistica",
   "scope": "/imperio/logistica",
-  "start_url": "/imperio/logistica",
+  "start_url": "/imperio/logistica?surface=field",
   "display": "standalone",
   "background_color": "#f4f6f4",
   "theme_color": "#173d34",

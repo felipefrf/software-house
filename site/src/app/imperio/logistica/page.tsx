@@ -19,10 +19,21 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: "#173d34",
+  viewportFit: "cover",
 };
 
 export const dynamic = "force-dynamic";
 
-export default async function LogisticsPage() {
-  return <LogisticsWorkspace initialSnapshot={await getAppSnapshot()} />;
+export default async function LogisticsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ surface?: string }>;
+}) {
+  const { surface } = await searchParams;
+  return (
+    <LogisticsWorkspace
+      initialSnapshot={await getAppSnapshot()}
+      initialSurface={surface === "field" ? "field" : "web"}
+    />
+  );
 }

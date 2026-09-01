@@ -127,12 +127,14 @@ function AccessCard({
 
 export function LogisticsWorkspace({
   initialSnapshot,
+  initialSurface,
 }: {
   initialSnapshot: LogisticsSnapshot;
+  initialSurface: "web" | "field";
 }) {
   const [snapshot, setSnapshot] = useState(initialSnapshot);
   const [surface, setSurface] = useState<"web" | "field">(
-    initialSnapshot.user?.role === "worker" ? "field" : "web",
+    initialSnapshot.user?.role === "worker" ? "field" : initialSurface,
   );
   const [selectedId, setSelectedId] = useState(
     initialSnapshot.operations[0]?.id ?? "",
@@ -216,6 +218,14 @@ export function LogisticsWorkspace({
     }
   };
 
+  const selectSurface = (next: "web" | "field") => {
+    setSurface(next);
+    const url = new URL(window.location.href);
+    if (next === "field") url.searchParams.set("surface", "field");
+    else url.searchParams.delete("surface");
+    window.history.replaceState(null, "", url);
+  };
+
   if (snapshot.configured && !snapshot.user)
     return (
       <AccessCard
@@ -258,15 +268,15 @@ export function LogisticsWorkspace({
     );
 
   return (
-    <div className="imperio-shell min-h-screen bg-[#f4f6f4] text-[#17231f]">
-      <header className="border-b border-[#d7dfd9] bg-white px-4 py-2.5 md:px-8 md:py-3">
+    <div className="imperio-shell min-h-dvh bg-[#f4f6f4] text-[#17231f]">
+      <header className="imperio-app-header border-b border-[#d7dfd9] bg-white px-4 pb-2.5 pt-2.5 md:px-8 md:pb-3 md:pt-3">
         <div className="mx-auto flex max-w-[1500px] items-center justify-between gap-3">
           <div>
             <p className="font-mono text-xs uppercase tracking-[0.18em] text-[#3d7567]">
               Império Eventos
             </p>
             <h1 className="text-lg font-semibold tracking-tight md:text-xl">
-              Núcleo de logística
+              {surface === "field" ? "App de campo" : "Núcleo de logística"}
             </h1>
           </div>
           <div className="flex items-center gap-2">
@@ -276,7 +286,7 @@ export function LogisticsWorkspace({
                 aria-label="Superfície do sistema"
               >
                 <button
-                  onClick={() => setSurface("web")}
+                  onClick={() => selectSurface("web")}
                   aria-label="Torre web"
                   aria-pressed={surface === "web"}
                   className={`flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium ${surface === "web" ? "border border-[#d7dfd9] bg-white text-[#234e42]" : "text-[#587067]"}`}
@@ -284,7 +294,7 @@ export function LogisticsWorkspace({
                   <Monitor size={16} /> <span className="hidden sm:inline">Torre web</span>
                 </button>
                 <button
-                  onClick={() => setSurface("field")}
+                  onClick={() => selectSurface("field")}
                   aria-label="App de campo"
                   aria-pressed={surface === "field"}
                   className={`flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium ${surface === "field" ? "border border-[#d7dfd9] bg-white text-[#234e42]" : "text-[#587067]"}`}
