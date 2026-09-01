@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = extensions, public;
 
-select plan(27);
+select plan(29);
 
 insert into auth.users (id, email, raw_user_meta_data)
 values
@@ -303,6 +303,17 @@ select is(
   (select count(*) from public.profiles),
   1::bigint,
   'senha temporária libera somente o próprio perfil'
+);
+
+reset role;
+set local role service_role;
+select lives_ok(
+  $$select count(*) from public.profiles$$,
+  'service role consulta perfis para validar o bootstrap'
+);
+select lives_ok(
+  $$update public.profiles set full_name = full_name where false$$,
+  'service role atualiza somente perfis pelo backend validado'
 );
 
 reset role;
