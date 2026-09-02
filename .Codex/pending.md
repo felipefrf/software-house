@@ -1,4 +1,5 @@
 - [x] Credenciais e contrato real de listagem do EstoqueNOW validados por OAuth e prévia somente leitura em produção; segredos permanecem server-only.
+- [ ] Colocar a importação individual do EstoqueNOW em operação — aplicar o lock idempotente, publicar o site, habilitar `ESTOQUENOW_IMPORT_ENABLED` e reconciliar a primeira operação real antes de ampliar o volume.
 - [ ] Escritas de entrega/retorno no EstoqueNOW estão conectadas apenas em código e mock — manter flags falsas e homologar somente após autorização específica do cliente.
 - [ ] Proteção contra senhas vazadas está desabilitada no Supabase — habilitar no painel após validar o impacto no fluxo de login dos usuários reais.
 - [ ] Sessão, cache, outbox e fotos do app de campo ficam em armazenamento local sem criptografia — adotar SecureStore/SQLCipher antes de guardar dados reais sensíveis no aparelho.

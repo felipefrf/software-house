@@ -1414,7 +1414,7 @@ function IntegrationsView(props: Props) {
   };
   const confirmCanary = () => {
     if (!preview || !selectedCanary) return;
-    let result = "Canário confirmado.";
+    let result = "Importação individual confirmada.";
     void props.run(async () => {
       const confirmed = await postJson<{
         externalId: string;
@@ -1430,8 +1430,8 @@ function IntegrationsView(props: Props) {
         reviewedScheduledAt: selectedCanary.scheduledAt,
       });
       result = confirmed.imported
-        ? `Canário ${confirmed.externalId} criado no banco da Império.`
-        : `Canário ${confirmed.externalId} já estava conciliado; dados operacionais foram preservados.`;
+        ? `Operação ${confirmed.externalId} importada para o banco da Império.`
+        : `Operação ${confirmed.externalId} já estava conciliada; dados operacionais foram preservados.`;
       setPreview(null);
       setCanaryId("");
       await props.refresh();
@@ -1442,7 +1442,7 @@ function IntegrationsView(props: Props) {
       "Agenda e pedidos",
       "EstoqueNOW",
       props.snapshot.estoquenow.source === "estoquenow"
-        ? "Leitura externa · último canário confirmado"
+        ? "Leitura externa · última importação confirmada"
         : props.snapshot.estoquenow.configured
           ? "Leitura externa sob demanda · prévias não persistidas"
           : "Somente leitura · aguardando credenciais",
@@ -1458,16 +1458,16 @@ function IntegrationsView(props: Props) {
         <article className="rounded-xl border border-[#d7dfd9] bg-white p-5">
           <div className="flex items-start justify-between gap-4">
             <div><Link2 size={21} className="text-[#3d7567]" /><h3 className="mt-3 text-xl font-semibold">EstoqueNOW</h3></div>
-            <Pill tone={props.snapshot.estoquenow.source === "estoquenow" ? "green" : "amber"}>{props.snapshot.estoquenow.source === "estoquenow" ? "Canário confirmado" : props.snapshot.estoquenow.configured ? "Credenciais no servidor" : "Sem credenciais"}</Pill>
+            <Pill tone={props.snapshot.estoquenow.source === "estoquenow" ? "green" : "amber"}>{props.snapshot.estoquenow.source === "estoquenow" ? "Importação ativa" : props.snapshot.estoquenow.configured ? "Credenciais no servidor" : "Sem credenciais"}</Pill>
           </div>
           <p className="mt-3 text-sm text-[#65746c]">{props.snapshot.estoquenow.notice}</p>
           <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
-            <div><dt className="text-[#5f7067]">Canários no banco</dt><dd className="font-semibold">{props.snapshot.estoquenow.imported_count}</dd></div>
-            <div><dt className="text-[#5f7067]">Última confirmação</dt><dd className="font-semibold">{props.snapshot.estoquenow.last_sync_at ? formatDate(props.snapshot.estoquenow.last_sync_at) : "Nunca"}</dd></div>
+            <div><dt className="text-[#5f7067]">Operações importadas</dt><dd className="font-semibold">{props.snapshot.estoquenow.imported_count}</dd></div>
+            <div><dt className="text-[#5f7067]">Última importação</dt><dd className="font-semibold">{props.snapshot.estoquenow.last_sync_at ? formatDate(props.snapshot.estoquenow.last_sync_at) : "Nunca"}</dd></div>
           </dl>
-          <div className="mt-4 rounded-lg bg-[#eef5f1] p-3 text-xs leading-relaxed text-[#285f50]">A consulta à API é somente leitura e ocorre no servidor. Apenas o canário escolhido abaixo pode criar ou confirmar uma operação no Postgres da Império.</div>
+          <div className="mt-4 rounded-lg bg-[#eef5f1] p-3 text-xs leading-relaxed text-[#285f50]">A consulta à API é somente leitura e ocorre no servidor. Cada confirmação importa exatamente uma operação para o Postgres da Império.</div>
           <div className={`mt-3 rounded-lg p-3 text-xs ${props.snapshot.estoquenow.import_enabled ? "bg-[#e3f2ec] text-[#28624f]" : "bg-[#fff6dd] text-[#705817]"}`}>
-            Gravação canário {props.snapshot.estoquenow.import_enabled ? "habilitada" : "bloqueada"} por ambiente. Importação em lote indisponível.
+            Importação individual {props.snapshot.estoquenow.import_enabled ? "habilitada" : "bloqueada"} por ambiente. Importação em lote indisponível.
           </div>
         </article>
         <form onSubmit={sync} className="rounded-xl border border-[#d7dfd9] bg-white p-5">
@@ -1481,7 +1481,7 @@ function IntegrationsView(props: Props) {
         {preview && (
           <article className="rounded-xl border border-[#d7dfd9] bg-white p-5 xl:col-span-2">
             <div className="flex flex-wrap items-start justify-between gap-4">
-              <div><p className="font-mono text-xs uppercase tracking-[0.14em] text-[#5f7067]">Passo 2 · prévia sem escrita</p><h3 className="mt-2 text-xl font-semibold">Escolha exatamente um canário</h3><p className="mt-1 text-sm text-[#65746c]">Período {preview.startDate.split("-").reverse().join("/")} a {preview.endDate.split("-").reverse().join("/")}</p></div>
+              <div><p className="font-mono text-xs uppercase tracking-[0.14em] text-[#5f7067]">Passo 2 · prévia sem escrita</p><h3 className="mt-2 text-xl font-semibold">Escolha exatamente uma operação</h3><p className="mt-1 text-sm text-[#65746c]">Período {preview.startDate.split("-").reverse().join("/")} a {preview.endDate.split("-").reverse().join("/")}</p></div>
               <Pill tone="green">Nenhuma gravação realizada</Pill>
             </div>
             <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -1504,7 +1504,7 @@ function IntegrationsView(props: Props) {
             ].filter(([, count]) => Number(count) > 0).map(([label, count]) => `${count} ${label}`).join(" · ")}</p></div>}
             {preview.candidates.length > 0 ? (
               <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,.8fr)]">
-                <label className="text-sm font-medium">ID externo do canário
+                <label className="text-sm font-medium">ID externo da operação
                   <select value={canaryId} onChange={(event) => setCanaryId(event.target.value)} className="mt-2 min-h-11 w-full rounded-lg border border-[#cbd4ce] bg-white px-3 py-2.5">
                     <option value="">Selecione uma operação válida</option>
                     {preview.candidates.map((candidate) => <option key={candidate.externalId} value={candidate.externalId} disabled={candidate.state === "diverged"}>{candidate.externalId} · {candidate.eventName}{candidate.state === "diverged" ? " · divergente" : candidate.state === "unchanged" ? " · já conciliada" : " · nova"}</option>)}
@@ -1526,8 +1526,8 @@ function IntegrationsView(props: Props) {
                 </div>
               </div>
             </details>
-            <button type="button" onClick={confirmCanary} disabled={props.busy || !props.snapshot.estoquenow.import_enabled || !selectedCanary || selectedCanary.state === "diverged"} className="mt-5 min-h-11 w-full rounded-lg bg-[#173d34] px-4 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">Confirmar somente este canário no banco da Império</button>
-            {!props.snapshot.estoquenow.import_enabled && <p className="mt-3 text-center text-xs text-[#705817]">Defina ESTOQUENOW_IMPORT_ENABLED=true no servidor somente após validar esta prévia.</p>}
+            <button type="button" onClick={confirmCanary} disabled={props.busy || !props.snapshot.estoquenow.import_enabled || !selectedCanary || selectedCanary.state === "diverged"} className="mt-5 min-h-11 w-full rounded-lg bg-[#173d34] px-4 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">Importar somente esta operação para a Império</button>
+            {!props.snapshot.estoquenow.import_enabled && <p className="mt-3 text-center text-xs text-[#705817]">Defina ESTOQUENOW_IMPORT_ENABLED=true no servidor somente após validar esta prévia e obter autorização operacional.</p>}
           </article>
         )}
         <article className="rounded-xl border border-[#d7dfd9] bg-white p-5"><Settings2 size={21} /><h3 className="mt-3 text-xl font-semibold">Supabase</h3><Pill tone={props.snapshot.configured ? "green" : "amber"}>{props.snapshot.configured ? "Persistência ativa" : "Modo demonstrativo"}</Pill><p className="mt-3 text-sm text-[#65746c]">Postgres, Auth e Storage são configurados exclusivamente por ambiente. Nenhum segredo é enviado ao navegador.</p></article>
@@ -1550,7 +1550,7 @@ function IntegrationsView(props: Props) {
         <article className="rounded-xl border border-[#d7dfd9] bg-white p-5 xl:col-span-2">
           <h3 className="text-xl font-semibold">Prontidão do conector</h3>
           <div className="mt-4 grid gap-3 text-sm md:grid-cols-2">
-            {["OAuth real validado no servidor", "Prévia externa sem escrita", "Canário no Postgres protegido por flag", "Divergências bloqueadas antes da gravação"].map((item) => <p key={item} className="flex items-center gap-2 rounded-lg bg-[#eef5f1] p-3 text-[#285f50]"><CheckCircle2 size={17} />{item}</p>)}
+            {["OAuth real validado no servidor", "Prévia externa sem escrita", "Importação individual protegida por flag", "Divergências bloqueadas antes da gravação"].map((item) => <p key={item} className="flex items-center gap-2 rounded-lg bg-[#eef5f1] p-3 text-[#285f50]"><CheckCircle2 size={17} />{item}</p>)}
             <p className="flex items-start gap-2 rounded-lg bg-[#fff6dd] p-3 text-[#705817] md:col-span-2"><AlertTriangle className="mt-0.5 shrink-0" size={17} />Confirmação de entrega/devolução: conectado em código, não homologado no EstoqueNOW. Ações e escrita externa permanecem bloqueadas.</p>
           </div>
         </article>

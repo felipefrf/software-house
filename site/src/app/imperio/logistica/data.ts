@@ -37,10 +37,10 @@ export function getEstoqueNowStatus(
     configured: true,
     import_enabled: importEnabled,
     notice: lastSyncAt
-      ? "Último canário confirmado após leitura externa."
+      ? "Última importação individual confirmada após leitura externa."
       : importEnabled
-        ? "Leitura externa disponível; gravação canário habilitada por ambiente."
-        : "Credenciais no servidor; prévias de leitura não são persistidas. Gravação canário desabilitada.",
+        ? "Leitura externa disponível; importação individual habilitada por ambiente."
+        : "Credenciais no servidor; prévias de leitura não são persistidas. Importação individual desabilitada.",
     last_sync_at: lastSyncAt,
     imported_count: importedCount,
   };

@@ -64,11 +64,11 @@ de data/hora; PDFs exibem apenas status, tipo e tamanho. O arquivo local deve ma
 | Pré-visualizar candidatos | Torre web | Fluxo real, manager-only, sem persistência | Nenhuma |
 | Detalhe, PDF e checklist logístico | Harness local | Rotas GET em allowlist; ainda sem homologação runtime | Nenhuma |
 | Confirmar entrega ou retorno | Cliente server-only | Schema e contrato cobertos por mock | Bloqueada por padrão; não homologada no EstoqueNOW |
-| Importar canário no Postgres da Império | Torre web | Implementado, mas desabilitado por ambiente | Não escreve no EstoqueNOW |
+| Importar uma operação no Postgres da Império | Torre web | Confirmação individual, idempotente por ID externo e protegida por ambiente | Não escreve no EstoqueNOW |
 | Importação em lote | Nenhum | Bloqueada até prévia válida e autorização específica | Nenhuma |
 | Locação, inventário e financeiro | Nenhum | Não implementado sem evidência do contrato real | Nenhuma |
 
 O runtime da listagem observado em 02/09/2026 usa `client_name`, `local_name`,
 `movement_date` e `movement_time`; datas vieram em `YYYY-MM-DD` e horas em
 `HH:MM[:SS]`. Os 94 movimentos do período correspondiam a 47 IDs logísticos e
-permanecem em reconciliação por categoria antes de qualquer canário.
+estão aptos à importação individual após revisão da prévia.

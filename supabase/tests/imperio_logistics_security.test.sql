@@ -4,7 +4,7 @@ set local role postgres;
 create extension if not exists pgtap with schema extensions;
 set local search_path = extensions, public;
 
-select plan(38);
+select plan(40);
 
 insert into auth.users (id, email, raw_user_meta_data)
 values
@@ -576,7 +576,7 @@ select is(
     'external-canary-1',
     'Canário EstoqueNOW',
     'Destino externo válido',
-    now(),
+    '2026-09-02 12:00:00-03'::timestamptz,
     'Leitura externa validada',
     now(),
     '10000000-0000-4000-8000-000000000001'
@@ -584,6 +584,26 @@ select is(
   'new',
   'RPC estreito cria exatamente um canário via backend privilegiado'
 );
+select is(
+  public.confirm_estoquenow_canary(
+    'external-canary-1',
+    'Canário EstoqueNOW',
+    'Destino externo válido',
+    '2026-09-02 12:00:00-03'::timestamptz,
+    'Leitura externa validada',
+    now(),
+    '10000000-0000-4000-8000-000000000001'
+  ),
+  'unchanged',
+  'reimportação do mesmo ID externo é idempotente'
+);
+set local role postgres;
+select is(
+  (select count(*) from public.operations where external_id = 'external-canary-1'),
+  1::bigint,
+  'reimportação não duplica operação'
+);
+set local role service_role;
 select throws_ok(
   $$
     select public.confirm_estoquenow_canary(

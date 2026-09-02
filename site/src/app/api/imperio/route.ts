@@ -382,11 +382,11 @@ export async function POST(request: Request) {
         return jsonError("A importação em lote permanece bloqueada até validação do contrato.", 409);
       if (mode !== "preview" && mode !== "canary") return jsonError("Modo de leitura inválido.");
       if (mode === "canary" && process.env.ESTOQUENOW_IMPORT_ENABLED !== "true")
-        return jsonError("A gravação canário do EstoqueNOW está desabilitada por ambiente.", 403);
+        return jsonError("A importação individual do EstoqueNOW está desabilitada por ambiente.", 403);
       if (mode === "canary" && !externalId)
-        return jsonError("Informe exatamente um ID externo para a gravação canário.");
+        return jsonError("Informe exatamente um ID externo para a importação.");
       if (mode === "canary" && !isValidExternalId(externalId))
-        return jsonError("Informe um ID externo válido para a gravação canário.");
+        return jsonError("Informe um ID externo válido para a importação.");
 
       const start = new Date(`${startDate}T00:00:00-03:00`);
       const end = new Date(`${endDate}T23:59:59-03:00`);
@@ -517,7 +517,7 @@ export async function POST(request: Request) {
         confirmed.error?.code === "23505" ||
         confirmed.error?.message.includes("source divergence")
       )
-        return jsonError("O canário mudou durante a confirmação. Execute uma nova prévia.", 409);
+        return jsonError("A operação mudou durante a confirmação. Execute uma nova prévia.", 409);
       if (confirmed.error) throw confirmed.error;
       const imported = confirmed.data === "new";
       return NextResponse.json({
