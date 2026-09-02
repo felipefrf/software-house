@@ -34,3 +34,26 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## EstoqueNOW somente leitura
+
+O harness aceita apenas GETs logísticos em allowlist, nunca imprime o token e
+substitui valores da resposta por tipos e formatos. A flag de importação deve
+continuar falsa.
+
+```bash
+npm run estoquenow:readonly -- self-test
+
+# Preferido: injeta os segredos diretamente do projeto Vercel vinculado.
+npx vercel env run -e production -- npm run estoquenow:readonly -- token
+npx vercel env run -e production -- npm run estoquenow:readonly -- get '/v1/logistic?page=1&per_page=25'
+
+# Alternativa local: exporte ESTOQUENOW_CLIENT_ID e ESTOQUENOW_CLIENT_SECRET
+# a partir de um arquivo .env* ignorado e mantenha:
+export ESTOQUENOW_IMPORT_ENABLED=false
+npm run estoquenow:readonly -- get '/v1/logistic/123'
+```
+
+O token temporário fica com permissão `0600` no diretório temporário do sistema.
+Respostas JSON exibem somente envelope, nomes de campos, nulabilidade e formatos
+de data/hora; PDFs exibem apenas status, tipo e tamanho.

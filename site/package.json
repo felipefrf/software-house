@@ -9,6 +9,7 @@
     "lint": "eslint",
     "test": "node --test --experimental-strip-types src/app/imperio/logistica/*.test.ts",
     "smoke:estoquenow": "node --experimental-strip-types src/app/imperio/logistica/smoke-estoquenow.ts",
+    "estoquenow:readonly": "bash scripts/estoquenow-readonly.sh",
     "bootstrap:imperio-manager": "node --experimental-strip-types scripts/bootstrap-imperio-manager.ts"
   },
   "dependencies": {

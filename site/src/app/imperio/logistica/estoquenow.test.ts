@@ -93,7 +93,7 @@ test("aceita o token real, reutiliza e renova uma vez após 401", async () => {
       tokens += 1;
       return Response.json({
         token: `token-${tokens}`,
-        expires: "2026-09-02 12:27:59",
+        expires: "2099-09-02 12:27:59",
       });
     }
     reads += 1;
@@ -152,6 +152,83 @@ test("pagina a listagem sem duplicar IDs", async () => {
   const operations = await client.listLogistics("01/08/2026", "31/08/2026");
   assert.deepEqual(pages, ["1", "2"]);
   assert.equal(operations.length, 51);
+});
+
+test("respeita paginação real do servidor e redige valores do contrato", async () => {
+  const pages: string[] = [];
+  const fetchImpl: typeof fetch = async (input) => {
+    const url = String(input);
+    if (url.endsWith("/oauth2/token"))
+      return Response.json({ access_token: "token", expires_in: 1800 });
+    const page = new URL(url).searchParams.get("page") ?? "";
+    pages.push(page);
+    const start = page === "1" ? 1 : 26;
+    const count = page === "1" ? 25 : 22;
+    return Response.json({
+      page: Number(page),
+      perPage: 25,
+      recordsTotal: 47,
+      recordsFiltered: 47,
+      data: Array.from({ length: count }, (_, index) => ({
+        id: start + index,
+        event_name: "Nome privado",
+        delivery_date: "31/08/2026",
+        delivery_time: "manha",
+      })),
+    });
+  };
+  const result = await new EstoqueNowClient({
+    clientId: "id",
+    clientSecret: "secret",
+    fetchImpl,
+  }).listLogisticsWithContract("01/08/2026", "31/08/2026");
+  assert.deepEqual(pages, ["1", "2"]);
+  assert.equal(result.operations.length, 47);
+  assert.equal(JSON.stringify(result.contract).includes("Nome privado"), false);
+  assert.deepEqual(
+    result.contract.fields.find((field) => field.path === "data.[].delivery_time")?.signatures,
+    ["turno"],
+  );
+});
+
+test("bloqueia escrita por padrão e valida o contrato somente com mock", async () => {
+  let called = false;
+  const blocked = new EstoqueNowClient({
+    clientId: "id",
+    clientSecret: "secret",
+    fetchImpl: async () => {
+      called = true;
+      return Response.json({});
+    },
+  });
+  await assert.rejects(blocked.confirmDelivery(7, 1), /ESTOQUENOW_WRITE_DISABLED/);
+  assert.equal(called, false);
+
+  const requests: Array<{ url: string; body: string }> = [];
+  const mocked = new EstoqueNowClient({
+    clientId: "id",
+    clientSecret: "secret",
+    writeEnabled: true,
+    fetchImpl: async (input, init) => {
+      const url = String(input);
+      if (url.endsWith("/oauth2/token"))
+        return Response.json({ access_token: "mock-token", expires_in: 1800 });
+      requests.push({ url, body: String(init?.body) });
+      return Response.json({ type: "success" });
+    },
+  });
+  await mocked.confirmDelivery(7, 1);
+  await mocked.confirmReturn(7, 0);
+  assert.deepEqual(requests, [
+    {
+      url: "https://api.estoquenow.com.br/v1/logistic/execute_confirmation_delivery/7",
+      body: '{"is_concluded_delivery":1}',
+    },
+    {
+      url: "https://api.estoquenow.com.br/v1/logistic/execute_confirmation_return/7",
+      body: '{"is_concluded_return":0}',
+    },
+  ]);
 });
 
 test("falha fechada quando o mesmo ID chega com conteúdo conflitante", async () => {

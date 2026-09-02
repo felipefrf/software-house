@@ -1,4 +1,4 @@
-import { EstoqueNowClient, type EstoqueNowOperation } from "./estoquenow";
+import { EstoqueNowClient } from "./estoquenow";
 import type { EstoqueNowStatus } from "./types";
 
 const dateForApi = (date: Date) =>
@@ -40,22 +40,20 @@ export function getEstoqueNowStatus(
       ? "Último canário confirmado após leitura externa."
       : importEnabled
         ? "Leitura externa disponível; gravação canário habilitada por ambiente."
-        : "Leitura externa disponível; gravação canário desabilitada por ambiente.",
+        : "Credenciais no servidor; prévias de leitura não são persistidas. Gravação canário desabilitada.",
     last_sync_at: lastSyncAt,
     imported_count: importedCount,
   };
 }
 
-export async function readEstoqueNowOperations(
-  startDate: Date,
-  endDate: Date,
-): Promise<EstoqueNowOperation[]> {
+export async function inspectEstoqueNowOperations(startDate: Date, endDate: Date) {
   const { clientId, clientSecret } = credentials();
   if (!clientId || !clientSecret) throw new Error("ESTOQUENOW_NOT_CONFIGURED");
   liveClient ??= new EstoqueNowClient({
     clientId,
     clientSecret,
     baseUrl: process.env.ESTOQUENOW_API_URL,
+    writeEnabled: process.env.ESTOQUENOW_WRITE_ENABLED === "true",
   });
-  return liveClient.listLogistics(dateForApi(startDate), dateForApi(endDate));
+  return liveClient.listLogisticsWithContract(dateForApi(startDate), dateForApi(endDate));
 }

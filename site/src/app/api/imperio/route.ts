@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { checklistForStage, operationStages } from "@/app/imperio/logistica/action";
-import { readEstoqueNowOperations } from "@/app/imperio/logistica/data";
+import { inspectEstoqueNowOperations } from "@/app/imperio/logistica/data";
 import {
   isValidExternalId,
   isValidIsoDate,
@@ -394,8 +394,11 @@ export async function POST(request: Request) {
       if (days < 0 || days > 366) return jsonError("Use um período de até 366 dias.");
 
       let external;
+      let contract;
       try {
-        external = await readEstoqueNowOperations(start, end);
+        const inspected = await inspectEstoqueNowOperations(start, end);
+        external = inspected.operations;
+        contract = inspected.contract;
       } catch {
         return jsonError(
           "A leitura do EstoqueNOW falhou. Verifique credenciais, URL e disponibilidade da API.",
@@ -475,6 +478,7 @@ export async function POST(request: Request) {
             skipped: external.length - rows.length,
           },
           skippedReasons,
+          contract,
         });
       }
 
@@ -556,7 +560,7 @@ export async function POST(request: Request) {
 
       const existing = await supabase
         .from("operation_events")
-        .select("id,operation_id,stage")
+        .select("id,operation_id,stage,actor_id")
         .eq("device_action_id", deviceActionId)
         .maybeSingle();
       if (existing.error)
@@ -564,7 +568,8 @@ export async function POST(request: Request) {
       if (existing.data) {
         if (
           existing.data.operation_id !== operationId ||
-          existing.data.stage !== stageValue
+          existing.data.stage !== stageValue ||
+          existing.data.actor_id !== auth.user.id
         )
           return jsonError("O identificador da ação já pertence a outro registro.", 409);
         return NextResponse.json({ state: "confirmed", event: existing.data });

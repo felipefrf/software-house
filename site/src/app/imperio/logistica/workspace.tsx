@@ -345,7 +345,7 @@ export function LogisticsWorkspace({
       >
         {snapshot.configured ? (
           <>
-            AMBIENTE OPERACIONAL · Supabase ativo · {snapshot.estoquenow.source === "estoquenow" ? "EstoqueNOW lido" : "EstoqueNOW aguardando leitura"}
+            AMBIENTE OPERACIONAL · Supabase ativo · {snapshot.estoquenow.source === "estoquenow" ? "Canário EstoqueNOW no banco" : snapshot.estoquenow.configured ? "EstoqueNOW configurado" : "EstoqueNOW não configurado"}
           </>
         ) : (
           <>DADOS DE DEMONSTRAÇÃO · Nada é persistido · EstoqueNOW não conectado</>

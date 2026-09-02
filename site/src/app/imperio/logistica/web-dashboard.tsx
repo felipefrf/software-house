@@ -99,6 +99,16 @@ type EstoqueNowPreview = {
     invalid_destination: number;
     invalid_scheduled_date_or_time: number;
   };
+  contract: {
+    pages: Array<{
+      page: number | null;
+      perPage: number | null;
+      recordsTotal: number | null;
+      recordsFiltered: number | null;
+      records: number;
+    }>;
+    fields: Array<{ path: string; signatures: string[]; occurrences: number }>;
+  };
 };
 
 const formValue = (form: FormData, name: string) =>
@@ -1432,7 +1442,7 @@ function IntegrationsView(props: Props) {
       props.snapshot.estoquenow.source === "estoquenow"
         ? "Leitura externa · último canário confirmado"
         : props.snapshot.estoquenow.configured
-          ? "Leitura externa · aguardando primeiro canário"
+          ? "Leitura externa sob demanda · prévias não persistidas"
           : "Somente leitura · aguardando credenciais",
     ],
     ["Pessoas, equipes e frota", "Império", props.snapshot.configured ? "Cadastro persistente ativo" : "Dado demonstrativo"],
@@ -1446,7 +1456,7 @@ function IntegrationsView(props: Props) {
         <article className="rounded-xl border border-[#d7dfd9] bg-white p-5">
           <div className="flex items-start justify-between gap-4">
             <div><Link2 size={21} className="text-[#3d7567]" /><h3 className="mt-3 text-xl font-semibold">EstoqueNOW</h3></div>
-            <Pill tone={props.snapshot.estoquenow.source === "estoquenow" ? "green" : "amber"}>{props.snapshot.estoquenow.source === "estoquenow" ? "Canário confirmado" : props.snapshot.estoquenow.configured ? "Pronto para prévia" : "Sem credenciais"}</Pill>
+            <Pill tone={props.snapshot.estoquenow.source === "estoquenow" ? "green" : "amber"}>{props.snapshot.estoquenow.source === "estoquenow" ? "Canário confirmado" : props.snapshot.estoquenow.configured ? "Credenciais no servidor" : "Sem credenciais"}</Pill>
           </div>
           <p className="mt-3 text-sm text-[#65746c]">{props.snapshot.estoquenow.notice}</p>
           <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
@@ -1501,6 +1511,18 @@ function IntegrationsView(props: Props) {
                 {selectedCanary ? <div className="rounded-lg border border-[#dce3de] bg-[#f8faf8] p-4"><div className="flex items-center justify-between gap-3"><strong className="text-sm">{selectedCanary.eventName}</strong><Pill tone={selectedCanary.state === "new" ? "green" : selectedCanary.state === "diverged" ? "red" : "neutral"}>{selectedCanary.state === "new" ? "Nova" : selectedCanary.state === "diverged" ? "Divergente" : "Conciliada"}</Pill></div><p className="mt-2 text-xs text-[#5f7067]">{selectedCanary.destination}</p><p className="mt-1 text-xs text-[#5f7067]">{formatDate(selectedCanary.scheduledAt)}</p></div> : <div className="rounded-lg bg-[#f2f5f3] p-4 text-sm text-[#5f7067]">Selecione um ID para revisar o registro exato.</div>}
               </div>
             ) : <div className="mt-5"><Empty>Nenhum candidato válido neste período.</Empty></div>}
+            <details className="mt-5 rounded-lg border border-[#dce3de] bg-[#f8faf8] p-4">
+              <summary className="min-h-11 cursor-pointer text-sm font-semibold">Contrato sanitizado observado</summary>
+              <p className="mt-2 text-xs leading-relaxed text-[#5f7067]">Somente nomes de campos, tipos, formatos e contagens. Valores, tokens e dados pessoais não são retornados.</p>
+              <div className="mt-3 max-h-72 overflow-auto text-xs">
+                <p className="font-semibold">Paginação</p>
+                {preview.contract.pages.map((page, index) => <p key={`${page.page ?? index}-${index}`} className="mt-1 font-mono text-[#52655d]">página {page.page ?? index + 1} · {page.records} registro(s) · perPage {page.perPage ?? "não informado"} · filtrados {page.recordsFiltered ?? "não informado"} · total {page.recordsTotal ?? "não informado"}</p>)}
+                <p className="mt-4 font-semibold">Campos observados</p>
+                <div className="mt-2 divide-y divide-[#e1e7e3]">
+                  {preview.contract.fields.map((field) => <p key={field.path} className="grid gap-1 py-2 sm:grid-cols-[minmax(0,1fr)_auto]"><code className="break-all">{field.path}</code><span className="text-[#5f7067]">{field.signatures.join(" | ")} · {field.occurrences}x</span></p>)}
+                </div>
+              </div>
+            </details>
             <button type="button" onClick={confirmCanary} disabled={props.busy || !props.snapshot.estoquenow.import_enabled || !selectedCanary || selectedCanary.state === "diverged"} className="mt-5 min-h-11 w-full rounded-lg bg-[#173d34] px-4 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">Confirmar somente este canário no banco da Império</button>
             {!props.snapshot.estoquenow.import_enabled && <p className="mt-3 text-center text-xs text-[#705817]">Defina ESTOQUENOW_IMPORT_ENABLED=true no servidor somente após validar esta prévia.</p>}
           </article>
@@ -1525,8 +1547,8 @@ function IntegrationsView(props: Props) {
         <article className="rounded-xl border border-[#d7dfd9] bg-white p-5 xl:col-span-2">
           <h3 className="text-xl font-semibold">Prontidão do conector</h3>
           <div className="mt-4 grid gap-3 text-sm md:grid-cols-2">
-            {["OAuth e segredo apenas no servidor", "Prévia sem escrita no banco da Império", "Canário unitário protegido por flag", "Divergências bloqueadas antes da gravação"].map((item) => <p key={item} className="flex items-center gap-2 rounded-lg bg-[#eef5f1] p-3 text-[#285f50]"><CheckCircle2 size={17} />{item}</p>)}
-            <p className="flex items-center gap-2 rounded-lg bg-[#fff6dd] p-3 text-[#705817] md:col-span-2"><AlertTriangle size={17} />Teste ponta a ponta real e importação em lote continuam bloqueados até receber credenciais e validar o contrato final dos campos do EstoqueNOW.</p>
+            {["OAuth real validado no servidor", "Prévia externa sem escrita", "Canário no Postgres protegido por flag", "Divergências bloqueadas antes da gravação"].map((item) => <p key={item} className="flex items-center gap-2 rounded-lg bg-[#eef5f1] p-3 text-[#285f50]"><CheckCircle2 size={17} />{item}</p>)}
+            <p className="flex items-start gap-2 rounded-lg bg-[#fff6dd] p-3 text-[#705817] md:col-span-2"><AlertTriangle className="mt-0.5 shrink-0" size={17} />Confirmação de entrega/devolução: conectado em código, não homologado no EstoqueNOW. Ações e escrita externa permanecem bloqueadas.</p>
           </div>
         </article>
       </div>

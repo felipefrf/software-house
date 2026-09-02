@@ -14,8 +14,21 @@ export type EstoqueNowOperation = {
   nextMilestone: string;
 };
 
+export type EstoqueNowContract = {
+  pages: Array<{
+    page: number | null;
+    perPage: number | null;
+    recordsTotal: number | null;
+    recordsFiltered: number | null;
+    records: number;
+  }>;
+  fields: Array<{ path: string; signatures: string[]; occurrences: number }>;
+};
+
 type JsonObject = Record<string, unknown>;
 type FetchLike = typeof fetch;
+
+export type EstoqueNowConfirmation = 0 | 1;
 
 type SourceFields = {
   event_name: string;
@@ -40,6 +53,56 @@ const asObject = (value: unknown): JsonObject | null =>
 
 const text = (value: unknown): string =>
   typeof value === "string" || typeof value === "number" ? String(value).trim() : "";
+
+const numberOrNull = (value: unknown) => {
+  const parsed = Number(value);
+  return value !== null && value !== "" && Number.isFinite(parsed) ? parsed : null;
+};
+
+const signature = (value: unknown) => {
+  if (value === null) return "null";
+  if (Array.isArray(value)) return "array";
+  if (typeof value !== "string") return typeof value;
+  if (!value.length) return "empty-string";
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(value)) return "DD/MM/YYYY";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return "YYYY-MM-DD";
+  if (/^\d{2}:\d{2}(:\d{2})?$/.test(value)) return "HH:MM[:SS]";
+  if (/^\d{4}-\d{2}-\d{2}[T ]/.test(value)) return "datetime";
+  if (/^(manha|tarde|noite)$/i.test(value)) return "turno";
+  return "string";
+};
+
+const contractFrom = (payload: unknown) => {
+  const fields = new Map<string, { signatures: Set<string>; occurrences: number }>();
+  const visit = (value: unknown, path: string) => {
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item, path ? `${path}.[]` : "[]");
+      return;
+    }
+    const record = asObject(value);
+    if (record) {
+      for (const [key, item] of Object.entries(record)) visit(item, path ? `${path}.${key}` : key);
+      return;
+    }
+    const current = fields.get(path) ?? { signatures: new Set<string>(), occurrences: 0 };
+    current.signatures.add(signature(value));
+    current.occurrences += 1;
+    fields.set(path, current);
+  };
+  visit(payload, "");
+  return fields;
+};
+
+const pageMetadata = (payload: unknown, records: number) => {
+  const record = asObject(payload);
+  return {
+    page: numberOrNull(record?.page),
+    perPage: numberOrNull(record?.perPage ?? record?.per_page),
+    recordsTotal: numberOrNull(record?.recordsTotal ?? record?.records_total),
+    recordsFiltered: numberOrNull(record?.recordsFiltered ?? record?.records_filtered),
+    records,
+  };
+};
 
 export const isValidExternalId = (value: string) => {
   const normalized = value.trim();
@@ -160,6 +223,7 @@ export class EstoqueNowClient {
     baseUrl?: string;
     fetchImpl?: FetchLike;
     sleep?: (milliseconds: number) => Promise<void>;
+    writeEnabled?: boolean;
   };
 
   constructor(
@@ -169,6 +233,7 @@ export class EstoqueNowClient {
       baseUrl?: string;
       fetchImpl?: FetchLike;
       sleep?: (milliseconds: number) => Promise<void>;
+      writeEnabled?: boolean;
     },
   ) {
     this.config = config;
@@ -193,10 +258,16 @@ export class EstoqueNowClient {
     const payload = asObject(await response.json());
     const accessToken = text(payload?.access_token ?? payload?.token);
     const expiresIn = Number(payload?.expires_in ?? 1800);
+    const expires = text(payload?.expires);
     if (!accessToken) throw new Error("ESTOQUENOW_INVALID_TOKEN_RESPONSE");
+    const absoluteExpiry = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(expires)
+      ? new Date(`${expires.replace(" ", "T")}-03:00`).getTime()
+      : Date.parse(expires);
     this.token = {
       value: accessToken,
-      expiresAt: Date.now() + Math.max(60, expiresIn - 30) * 1000,
+      expiresAt: Number.isFinite(absoluteExpiry)
+        ? Math.max(Date.now(), absoluteExpiry - 30_000)
+        : Date.now() + Math.max(60, expiresIn - 30) * 1000,
     };
     return accessToken;
   }
@@ -235,8 +306,42 @@ export class EstoqueNowClient {
     return response.json();
   }
 
-  async listLogistics(startDate: string, endDate: string) {
+  private async write(path: string, body: JsonObject) {
+    if (!this.config.writeEnabled) throw new Error("ESTOQUENOW_WRITE_DISABLED");
+    const response = await (this.config.fetchImpl ?? fetch)(
+      `${this.config.baseUrl ?? DEFAULT_BASE_URL}${path}`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${await this.accessToken()}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      },
+    );
+    if (!response.ok) throw new Error(`ESTOQUENOW_WRITE_HTTP_${response.status}`);
+    return response.json();
+  }
+
+  confirmDelivery(id: number, value: EstoqueNowConfirmation) {
+    if (!Number.isInteger(id) || id <= 0) throw new Error("ESTOQUENOW_INVALID_LOGISTIC_ID");
+    return this.write(`/v1/logistic/execute_confirmation_delivery/${id}`, {
+      is_concluded_delivery: value,
+    });
+  }
+
+  confirmReturn(id: number, value: EstoqueNowConfirmation) {
+    if (!Number.isInteger(id) || id <= 0) throw new Error("ESTOQUENOW_INVALID_LOGISTIC_ID");
+    return this.write(`/v1/logistic/execute_confirmation_return/${id}`, {
+      is_concluded_return: value,
+    });
+  }
+
+  async listLogisticsWithContract(startDate: string, endDate: string) {
     const operations = new Map<string, EstoqueNowOperation>();
+    const fields = new Map<string, { signatures: Set<string>; occurrences: number }>();
+    const pages: EstoqueNowContract["pages"] = [];
     for (let page = 1; page <= MAX_PAGES; page += 1) {
       const query = new URLSearchParams({
         "order[id]": "desc",
@@ -247,6 +352,14 @@ export class EstoqueNowClient {
       });
       const payload = await this.request(`/v1/logistic?${query}`);
       const rawCount = listFrom(payload).length;
+      const metadata = pageMetadata(payload, rawCount);
+      pages.push(metadata);
+      for (const [path, incoming] of contractFrom(payload)) {
+        const current = fields.get(path) ?? { signatures: new Set<string>(), occurrences: 0 };
+        for (const item of incoming.signatures) current.signatures.add(item);
+        current.occurrences += incoming.occurrences;
+        fields.set(path, current);
+      }
       const batch = normalizeLogistics(payload);
       for (const [index, operation] of batch.entries()) {
         const key = operation.id
@@ -257,9 +370,28 @@ export class EstoqueNowClient {
           throw new Error("ESTOQUENOW_DUPLICATE_ID_CONFLICT");
         operations.set(key, operation);
       }
-      if (rawCount < PAGE_SIZE) break;
+      const total = metadata.recordsFiltered ?? metadata.recordsTotal;
+      const currentPage = metadata.page ?? page;
+      const serverPageSize = metadata.perPage ?? rawCount;
+      if (total !== null ? currentPage * serverPageSize >= total : rawCount < PAGE_SIZE) break;
       if (page === MAX_PAGES) throw new Error("ESTOQUENOW_PAGE_LIMIT");
     }
-    return [...operations.values()];
+    return {
+      operations: [...operations.values()],
+      contract: {
+        pages,
+        fields: [...fields.entries()]
+          .map(([path, field]) => ({
+            path,
+            signatures: [...field.signatures].sort(),
+            occurrences: field.occurrences,
+          }))
+          .sort((left, right) => left.path.localeCompare(right.path)),
+      },
+    };
+  }
+
+  async listLogistics(startDate: string, endDate: string) {
+    return (await this.listLogisticsWithContract(startDate, endDate)).operations;
   }
 }
