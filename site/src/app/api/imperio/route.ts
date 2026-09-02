@@ -371,11 +371,11 @@ export async function POST(request: Request) {
       };
       const admin = createSupabaseAdminClient();
       if (!admin) return jsonError("Chave secreta do Supabase não configurada.", 503);
-      const manualCount = await admin
+      const manualCount = await supabase
         .from("operations")
         .select("id", { count: "exact", head: true })
         .eq("source", "manual");
-      const operations = await admin
+      const operations = await supabase
         .from("operations")
         .select("*")
         .eq("source", "manual")
@@ -392,8 +392,8 @@ export async function POST(request: Request) {
         return jsonError("O inventário mudou; nenhuma limpeza foi executada.", 409);
 
       const operationIds = operations.data.map((operation) => operation.id);
-      const events = await admin.from("operation_events").select("*").in("operation_id", operationIds);
-      const incidents = await admin.from("incidents").select("*").in("operation_id", operationIds);
+      const events = await supabase.from("operation_events").select("*").in("operation_id", operationIds);
+      const incidents = await supabase.from("incidents").select("*").in("operation_id", operationIds);
       if (events.error || incidents.error)
         return jsonError("Não foi possível exportar as dependências.", 500);
       const evidence: string[] = [];
