@@ -90,12 +90,17 @@ type EstoqueNowPreview = {
     externalStatus: string | null;
     externalConcluded: boolean | null;
     itemCount: string | null;
-    state: "new" | "unchanged" | "update" | "diverged";
+    sourceVersion: string | null;
+    returnExternalStatus: string | null;
+    returnExternalConcluded: boolean | null;
+    changedFields: string[];
+    state: "new" | "unchanged" | "update" | "diverged" | "blocked";
   }>;
   counts: {
     new: number;
     unchanged: number;
     update: number;
+    blocked: number;
     diverged: number;
     skipped: number;
   };
@@ -1454,7 +1459,7 @@ function IntegrationsView(props: Props) {
       setPreview(nextPreview);
       setDetailPreview(null);
       setCanaryId("");
-      result = `${nextPreview.total} logística(s), ${nextPreview.movementsTotal} movimento(s) · ${nextPreview.counts.new} nova(s) · ${nextPreview.counts.update} atualização(ões) · ${nextPreview.counts.unchanged} conciliada(s) · ${nextPreview.counts.diverged} divergente(s) · ${nextPreview.counts.skipped} inválida(s). Nenhuma gravação realizada.`;
+      result = `${nextPreview.total} logística(s), ${nextPreview.movementsTotal} movimento(s) · ${nextPreview.counts.new} nova(s) · ${nextPreview.counts.update} atualização(ões) · ${nextPreview.counts.unchanged} conciliada(s) · ${nextPreview.counts.diverged} divergente(s) · ${nextPreview.counts.blocked} histórica(s) bloqueada(s) · ${nextPreview.counts.skipped} inválida(s). Nenhuma gravação realizada.`;
     }, () => result);
   };
   const inspectDetail = () => {
@@ -1546,16 +1551,18 @@ function IntegrationsView(props: Props) {
               <div><p className="font-mono text-xs uppercase tracking-[0.14em] text-[#5f7067]">Passo 2 · prévia sem escrita</p><h3 className="mt-2 text-xl font-semibold">Escolha exatamente uma operação</h3><p className="mt-1 text-sm text-[#65746c]">Período {preview.startDate.split("-").reverse().join("/")} a {preview.endDate.split("-").reverse().join("/")}</p></div>
               <Pill tone="green">Nenhuma gravação realizada</Pill>
             </div>
-            <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-5">
+            <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
               {[
                 ["Novas", preview.counts.new],
                 ["Atualizações", preview.counts.update],
                 ["Conciliadas", preview.counts.unchanged],
                 ["Divergentes", preview.counts.diverged],
+                ["Histórico bloqueado", preview.counts.blocked],
                 ["Inválidas", preview.counts.skipped],
               ].map(([label, value]) => <div key={label} className="rounded-lg bg-[#f2f5f3] p-3"><p className="text-xs text-[#5f7067]">{label}</p><p className="mt-1 text-2xl font-semibold">{value}</p></div>)}
             </div>
             {preview.counts.diverged > 0 && <p className="mt-4 flex items-start gap-2 rounded-lg bg-[#fff3d1] p-3 text-sm text-[#705817]"><AlertTriangle className="mt-0.5 shrink-0" size={17} />{preview.counts.diverged} registro(s) mudaram no EstoqueNOW. Selecione um por vez e revise antes de atualizar.</p>}
+            {preview.counts.blocked > 0 && <p className="mt-3 flex items-start gap-2 rounded-lg bg-[#fbe9e7] p-3 text-sm text-[#8a3025]"><AlertTriangle className="mt-0.5 shrink-0" size={17} />{preview.counts.blocked} operação(ões) têm histórico e não podem reescrever rótulo, endereço ou agenda.</p>}
             {preview.counts.skipped > 0 && <div className="mt-3 rounded-lg border border-[#eadcae] bg-[#fffaf0] p-3 text-xs text-[#705817]"><strong>Registros inválidos, sem gravação:</strong><p className="mt-1">{[
               ["sem ID", preview.skippedReasons.missing_external_id],
               ["ID inválido", preview.skippedReasons.invalid_external_id],
@@ -1570,10 +1577,10 @@ function IntegrationsView(props: Props) {
                 <label className="text-sm font-medium">ID externo da operação
                   <select value={canaryId} onChange={(event) => { setCanaryId(event.target.value); setDetailPreview(null); }} className="mt-2 min-h-11 w-full rounded-lg border border-[#cbd4ce] bg-white px-3 py-2.5">
                     <option value="">Selecione uma operação válida</option>
-                    {preview.candidates.map((candidate) => <option key={candidate.externalId} value={candidate.externalId}>{candidate.externalId} · {candidate.eventName}{candidate.state === "diverged" ? " · divergência canônica" : candidate.state === "update" ? " · atualização disponível" : candidate.state === "unchanged" ? " · já conciliada" : " · nova"}</option>)}
+                    {preview.candidates.map((candidate) => <option key={candidate.externalId} value={candidate.externalId}>{candidate.externalId} · {candidate.eventName}{candidate.state === "blocked" ? " · histórico bloqueado" : candidate.state === "diverged" ? " · divergência canônica" : candidate.state === "update" ? " · atualização disponível" : candidate.state === "unchanged" ? " · já conciliada" : " · nova"}</option>)}
                   </select>
                 </label>
-                {selectedCanary ? <div className="rounded-lg border border-[#dce3de] bg-[#f8faf8] p-4"><div className="flex items-center justify-between gap-3"><strong className="text-sm">{selectedCanary.eventName}</strong><Pill tone={selectedCanary.state === "new" ? "green" : selectedCanary.state === "diverged" ? "red" : "neutral"}>{selectedCanary.state === "new" ? "Nova" : selectedCanary.state === "diverged" ? "Divergente" : selectedCanary.state === "update" ? "Atualização" : "Conciliada"}</Pill></div><p className="mt-2 text-xs text-[#5f7067]">{selectedCanary.destination}</p><p className="mt-1 text-xs text-[#5f7067]">Entrega {formatDate(selectedCanary.scheduledAt)}{selectedCanary.returnAt ? ` · devolução ${formatDate(selectedCanary.returnAt)}` : ""}</p><p className="mt-1 text-xs text-[#5f7067]">Pedido {selectedCanary.orderId ?? "não informado"} · status {selectedCanary.externalStatus ?? "não informado"}{selectedCanary.externalConcluded === true ? " · concluído" : ""} · itens {selectedCanary.itemCount ?? "não informado"}</p></div> : <div className="rounded-lg bg-[#f2f5f3] p-4 text-sm text-[#5f7067]">Selecione um ID para revisar o registro exato.</div>}
+                {selectedCanary ? <div className="rounded-lg border border-[#dce3de] bg-[#f8faf8] p-4"><div className="flex items-center justify-between gap-3"><strong className="text-sm">{selectedCanary.eventName}</strong><Pill tone={selectedCanary.state === "new" ? "green" : selectedCanary.state === "diverged" || selectedCanary.state === "blocked" ? "red" : "neutral"}>{selectedCanary.state === "new" ? "Nova" : selectedCanary.state === "blocked" ? "Histórico bloqueado" : selectedCanary.state === "diverged" ? "Divergente" : selectedCanary.state === "update" ? "Atualização" : "Conciliada"}</Pill></div><p className="mt-2 text-xs text-[#5f7067]">{selectedCanary.destination}</p><p className="mt-1 text-xs text-[#5f7067]">Entrega {formatDate(selectedCanary.scheduledAt)}{selectedCanary.returnAt ? ` · devolução ${formatDate(selectedCanary.returnAt)}` : ""}</p><p className="mt-1 text-xs text-[#5f7067]">Pedido {selectedCanary.orderId ?? "não informado"} · entrega {selectedCanary.externalStatus ?? "não informada"}{selectedCanary.externalConcluded === true ? " concluída" : ""} · devolução {selectedCanary.returnExternalStatus ?? "não informada"}{selectedCanary.returnExternalConcluded === true ? " concluída" : ""}</p><p className="mt-1 text-xs text-[#5f7067]">Itens {selectedCanary.itemCount ?? "não informado"} · versão {selectedCanary.sourceVersion ?? "não informada"}</p>{selectedCanary.changedFields.length > 0 && <p className="mt-2 text-xs font-medium text-[#705817]">Mudou: {selectedCanary.changedFields.join(" · ")}</p>}</div> : <div className="rounded-lg bg-[#f2f5f3] p-4 text-sm text-[#5f7067]">Selecione um ID para revisar o registro exato.</div>}
               </div>
             ) : <div className="mt-5"><Empty>Nenhum candidato válido neste período.</Empty></div>}
             {selectedCanary && (
@@ -1603,7 +1610,7 @@ function IntegrationsView(props: Props) {
                 </div>
               </div>
             </details>
-            <button type="button" onClick={confirmCanary} disabled={props.busy || !props.snapshot.estoquenow.import_enabled || !selectedCanary} className="mt-5 min-h-11 w-full rounded-lg bg-[#173d34] px-4 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">{selectedCanary?.state === "diverged" || selectedCanary?.state === "update" ? "Atualizar somente esta operação após revisão" : "Importar somente esta operação para a Império"}</button>
+            <button type="button" onClick={confirmCanary} disabled={props.busy || !props.snapshot.estoquenow.import_enabled || !selectedCanary || selectedCanary.state === "blocked"} className="mt-5 min-h-11 w-full rounded-lg bg-[#173d34] px-4 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">{selectedCanary?.state === "blocked" ? "Histórico protegido contra reescrita" : selectedCanary?.state === "diverged" || selectedCanary?.state === "update" ? "Atualizar somente esta operação após revisão" : "Importar somente esta operação para a Império"}</button>
             {!props.snapshot.estoquenow.import_enabled && <p className="mt-3 text-center text-xs text-[#705817]">Defina ESTOQUENOW_IMPORT_ENABLED=true no servidor somente após validar esta prévia e obter autorização operacional.</p>}
           </article>
         )}

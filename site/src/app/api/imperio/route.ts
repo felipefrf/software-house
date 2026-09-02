@@ -138,6 +138,43 @@ const mutableSourceContextDiverged = (
     (key) => current[key as keyof EstoqueNowSourceContext] !== incoming[key as keyof EstoqueNowSourceContext],
   );
 
+const sourceContextChanges = (
+  current: EstoqueNowSourceContext | null,
+  incoming: EstoqueNowSourceContext,
+) => {
+  if (!current) return ["contexto estruturado"];
+  const labels: Record<keyof EstoqueNowSourceContext, string> = {
+    order_id: "pedido",
+    protocol: "protocolo",
+    source_version: "versão externa",
+    return_at: "devolução",
+    venue: "local",
+    address_zipcode: "CEP",
+    address_street: "rua",
+    address_number: "número",
+    address_complement: "complemento",
+    address_neighborhood: "bairro",
+    address_city: "cidade",
+    address_state: "UF",
+    delivery_status_id: "status de entrega",
+    delivery_status_type: "situação da entrega",
+    delivery_concluded: "conclusão da entrega",
+    return_status_id: "status de devolução",
+    return_status_type: "situação da devolução",
+    return_concluded: "conclusão da devolução",
+    item_count: "contagem de itens",
+    order_type: "tipo do pedido",
+    logistic_type_id: "tipo logístico",
+  };
+  return (Object.keys(incoming) as Array<keyof EstoqueNowSourceContext>)
+    .filter((key) =>
+      key === "return_at" && current.return_at && incoming.return_at
+        ? Date.parse(current.return_at) !== Date.parse(incoming.return_at)
+        : current[key] !== incoming[key],
+    )
+    .map((key) => labels[key]);
+};
+
 const estoqueNowImportRow = (
   operation: EstoqueNowOperation,
   importedAt: string,
@@ -552,6 +589,8 @@ export async function POST(request: Request) {
           scheduled_at: string;
           notes: string | null;
           imported_at: string | null;
+          status: "active" | "completed" | "cancelled";
+          has_history: boolean;
           source_context: EstoqueNowSourceContext | null;
         }
       >();
@@ -560,21 +599,36 @@ export async function POST(request: Request) {
         const existing = await supabase
           .from("operations")
           .select(
-            "external_id,event_name,destination,scheduled_at,notes,imported_at,source_context:estoquenow_operation_contexts(order_id,protocol,source_version,return_at,venue,address_zipcode,address_street,address_number,address_complement,address_neighborhood,address_city,address_state,delivery_status_id,delivery_status_type,delivery_concluded,return_status_id,return_status_type,return_concluded,item_count,order_type,logistic_type_id)",
+            "id,external_id,event_name,destination,scheduled_at,notes,imported_at,status,source_context:estoquenow_operation_contexts(order_id,protocol,source_version,return_at,venue,address_zipcode,address_street,address_number,address_complement,address_neighborhood,address_city,address_state,delivery_status_id,delivery_status_type,delivery_concluded,return_status_id,return_status_type,return_concluded,item_count,order_type,logistic_type_id)",
           )
           .eq("source", "estoquenow")
           .in("external_id", externalIds);
         if (existing.error) throw existing.error;
-        for (const operation of (existing.data ?? []) as unknown as Array<{
+        const existingRows = (existing.data ?? []) as unknown as Array<{
+          id: string;
           external_id: string | null;
           event_name: string;
           destination: string;
           scheduled_at: string;
           notes: string | null;
           imported_at: string | null;
+          status: "active" | "completed" | "cancelled";
           source_context: EstoqueNowSourceContext | null;
-        }>) {
-          if (operation.external_id) existingById.set(operation.external_id, operation);
+        }>;
+        const events = existingRows.length
+          ? await supabase
+              .from("operation_events")
+              .select("operation_id")
+              .in("operation_id", existingRows.map((operation) => operation.id))
+          : { data: [], error: null };
+        if (events.error) throw events.error;
+        const withHistory = new Set((events.data ?? []).map((event) => event.operation_id));
+        for (const { id, ...operation } of existingRows) {
+          if (operation.external_id)
+            existingById.set(operation.external_id, {
+              ...operation,
+              has_history: operation.status !== "active" || withHistory.has(id),
+            });
         }
       }
 
@@ -587,13 +641,16 @@ export async function POST(request: Request) {
           existing.destination === row.legacy_destination &&
           new Date(existing.scheduled_at).getTime() === new Date(row.scheduled_at).getTime() &&
           existing.notes === row.legacy_notes;
+        const stableChanged = existing
+          ? sourceFieldsDiverged(existing, row) ||
+            sourceContextDiverged(existing.source_context, row.source_context)
+          : false;
         const state = !existing
           ? ("new" as const)
           : legacyBackfill
-            ? ("update" as const)
-            : sourceFieldsDiverged(existing, row) ||
-                sourceContextDiverged(existing.source_context, row.source_context)
-              ? ("diverged" as const)
+            ? existing.has_history ? ("blocked" as const) : ("update" as const)
+            : stableChanged
+              ? existing.has_history ? ("blocked" as const) : ("diverged" as const)
               : mutableSourceContextDiverged(existing.source_context, row.source_context)
                 ? ("update" as const)
                 : ("unchanged" as const);
@@ -609,6 +666,19 @@ export async function POST(request: Request) {
           externalStatus: row.source_context.delivery_status_type,
           externalConcluded: row.source_context.delivery_concluded,
           itemCount: row.source_context.item_count,
+          sourceVersion: row.source_context.source_version,
+          returnExternalStatus: row.source_context.return_status_type,
+          returnExternalConcluded: row.source_context.return_concluded,
+          changedFields: existing
+            ? [
+                ...(existing.event_name !== row.event_name ? ["rótulo operacional"] : []),
+                ...(existing.destination !== row.destination ? ["endereço de entrega"] : []),
+                ...(new Date(existing.scheduled_at).getTime() !== new Date(row.scheduled_at).getTime()
+                  ? ["data de entrega"]
+                  : []),
+                ...sourceContextChanges(existing.source_context, row.source_context),
+              ]
+            : [],
           state,
           row,
         };
@@ -635,12 +705,17 @@ export async function POST(request: Request) {
             externalStatus: candidate.externalStatus,
             externalConcluded: candidate.externalConcluded,
             itemCount: candidate.itemCount,
+            sourceVersion: candidate.sourceVersion,
+            returnExternalStatus: candidate.returnExternalStatus,
+            returnExternalConcluded: candidate.returnExternalConcluded,
+            changedFields: candidate.changedFields,
             state: candidate.state,
           })),
           counts: {
             new: candidates.filter((candidate) => candidate.state === "new").length,
             unchanged: candidates.filter((candidate) => candidate.state === "unchanged").length,
             update: candidates.filter((candidate) => candidate.state === "update").length,
+            blocked: candidates.filter((candidate) => candidate.state === "blocked").length,
             diverged: candidates.filter((candidate) => candidate.state === "diverged").length,
             skipped: external.length - rows.length,
           },
