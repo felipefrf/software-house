@@ -829,6 +829,7 @@ export async function POST(request: Request) {
           ok: true,
           externalId,
           ...detail,
+          itemsChanged: Boolean(itemsChanged),
           itemsBlocked:
             Boolean(itemsChanged) &&
             Boolean(current && (current.status !== "active" || current.events.length > 0)),
