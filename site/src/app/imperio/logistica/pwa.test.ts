@@ -77,3 +77,13 @@ test("ocorrências passam pela RPC idempotente", async () => {
   assert.match(route, /rpc\("create_operation_incident"/);
   assert.doesNotMatch(route, /from\("incidents"\)\.insert/);
 });
+
+test("reenvio de ação exige o mesmo ator", async () => {
+  const route = await readFile(
+    new URL("../../api/imperio/route.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(route, /select\("id,operation_id,stage,actor_id"\)/);
+  assert.match(route, /existing\.data\.actor_id !== auth\.user\.id/);
+});

@@ -108,6 +108,7 @@ type EstoqueNowPreview = {
       records: number;
     }>;
     fields: Array<{ path: string; signatures: string[]; occurrences: number }>;
+    facets: Array<{ field: string; values: Array<{ value: string; occurrences: number }> }>;
   };
 };
 
@@ -1517,6 +1518,7 @@ function IntegrationsView(props: Props) {
               <div className="mt-3 max-h-72 overflow-auto text-xs">
                 <p className="font-semibold">Paginação</p>
                 {preview.contract.pages.map((page, index) => <p key={`${page.page ?? index}-${index}`} className="mt-1 font-mono text-[#52655d]">página {page.page ?? index + 1} · {page.records} registro(s) · perPage {page.perPage ?? "não informado"} · filtrados {page.recordsFiltered ?? "não informado"} · total {page.recordsTotal ?? "não informado"}</p>)}
+                {preview.contract.facets.length > 0 && <><p className="mt-4 font-semibold">Categorias operacionais</p>{preview.contract.facets.map((facet) => <p key={facet.field} className="mt-1 font-mono text-[#52655d]"><code>{facet.field}</code> · {facet.values.map((value) => `${value.value} (${value.occurrences}x)`).join(" · ")}</p>)}</>}
                 <p className="mt-4 font-semibold">Campos observados</p>
                 <div className="mt-2 divide-y divide-[#e1e7e3]">
                   {preview.contract.fields.map((field) => <p key={field.path} className="grid gap-1 py-2 sm:grid-cols-[minmax(0,1fr)_auto]"><code className="break-all">{field.path}</code><span className="text-[#5f7067]">{field.signatures.join(" | ")} · {field.occurrences}x</span></p>)}

@@ -189,6 +189,31 @@ test("respeita paginação real do servidor e redige valores do contrato", async
     result.contract.fields.find((field) => field.path === "data.[].delivery_time")?.signatures,
     ["turno"],
   );
+  assert.deepEqual(result.contract.facets, []);
+});
+
+test("expõe somente categorias operacionais explicitamente permitidas", async () => {
+  const fetchImpl: typeof fetch = async (input) =>
+    String(input).endsWith("/oauth2/token")
+      ? Response.json({ access_token: "token", expires_in: 1800 })
+      : Response.json({
+          data: [
+            { type: "delivery", type_name: "Entrega", status_type: "pending", client_name: "Privado" },
+            { type: "return", type_name: "Retorno", status_type: "pending", client_phone: "000" },
+          ],
+        });
+  const result = await new EstoqueNowClient({
+    clientId: "id",
+    clientSecret: "secret",
+    fetchImpl,
+  }).listLogisticsWithContract("01/08/2026", "31/08/2026");
+  assert.deepEqual(result.contract.facets, [
+    { field: "type", values: [{ value: "delivery", occurrences: 1 }, { value: "return", occurrences: 1 }] },
+    { field: "type_name", values: [{ value: "Entrega", occurrences: 1 }, { value: "Retorno", occurrences: 1 }] },
+    { field: "status_type", values: [{ value: "pending", occurrences: 2 }] },
+  ]);
+  assert.equal(JSON.stringify(result.contract.facets).includes("Privado"), false);
+  assert.equal(JSON.stringify(result.contract.facets).includes("000"), false);
 });
 
 test("bloqueia escrita por padrão e valida o contrato somente com mock", async () => {

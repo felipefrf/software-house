@@ -23,6 +23,7 @@ export type EstoqueNowContract = {
     records: number;
   }>;
   fields: Array<{ path: string; signatures: string[]; occurrences: number }>;
+  facets: Array<{ field: string; values: Array<{ value: string; occurrences: number }> }>;
 };
 
 type JsonObject = Record<string, unknown>;
@@ -45,6 +46,7 @@ const DEFAULT_BASE_URL = "https://api.estoquenow.com.br";
 const REQUEST_TIMEOUT_MS = 8_000;
 const PAGE_SIZE = 50;
 const MAX_PAGES = 100;
+const SAFE_FACET_FIELDS = ["type", "type_name", "status_type", "is_concluded"] as const;
 
 const asObject = (value: unknown): JsonObject | null =>
   value !== null && typeof value === "object" && !Array.isArray(value)
@@ -341,6 +343,7 @@ export class EstoqueNowClient {
   async listLogisticsWithContract(startDate: string, endDate: string) {
     const operations = new Map<string, EstoqueNowOperation>();
     const fields = new Map<string, { signatures: Set<string>; occurrences: number }>();
+    const facets = new Map<string, Map<string, number>>();
     const pages: EstoqueNowContract["pages"] = [];
     for (let page = 1; page <= MAX_PAGES; page += 1) {
       const query = new URLSearchParams({
@@ -351,7 +354,8 @@ export class EstoqueNowClient {
         end_date: endDate,
       });
       const payload = await this.request(`/v1/logistic?${query}`);
-      const rawCount = listFrom(payload).length;
+      const records = listFrom(payload);
+      const rawCount = records.length;
       const metadata = pageMetadata(payload, rawCount);
       pages.push(metadata);
       for (const [path, incoming] of contractFrom(payload)) {
@@ -359,6 +363,17 @@ export class EstoqueNowClient {
         for (const item of incoming.signatures) current.signatures.add(item);
         current.occurrences += incoming.occurrences;
         fields.set(path, current);
+      }
+      for (const value of records) {
+        const record = asObject(value);
+        if (!record) continue;
+        for (const field of SAFE_FACET_FIELDS) {
+          const value = text(record[field]);
+          if (!value || value.length > 80 || /[\u0000-\u001f\u007f]/.test(value)) continue;
+          const counts = facets.get(field) ?? new Map<string, number>();
+          counts.set(value, (counts.get(value) ?? 0) + 1);
+          facets.set(field, counts);
+        }
       }
       const batch = normalizeLogistics(payload);
       for (const [index, operation] of batch.entries()) {
@@ -387,6 +402,12 @@ export class EstoqueNowClient {
             occurrences: field.occurrences,
           }))
           .sort((left, right) => left.path.localeCompare(right.path)),
+        facets: [...facets.entries()].map(([field, values]) => ({
+          field,
+          values: [...values.entries()]
+            .map(([value, occurrences]) => ({ value, occurrences }))
+            .sort((left, right) => left.value.localeCompare(right.value)),
+        })),
       },
     };
   }
