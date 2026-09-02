@@ -346,7 +346,8 @@ function StageFocus({
           {evidence ? (
             <dl className="mt-3 space-y-2 text-sm">
               <div><dt className="text-[#5f7067]">Confirmação</dt><dd className="font-medium">{formatDate(evidence.server_received_at)}</dd></div>
-              <div><dt className="text-[#5f7067]">Responsável</dt><dd className="font-medium">{evidence.responsible_name || evidence.actor_name}</dd></div>
+              <div><dt className="text-[#5f7067]">Executado por</dt><dd className="font-medium">{evidence.actor_name}</dd></div>
+              <div><dt className="text-[#5f7067]">Responsável</dt><dd className="font-medium">{evidence.responsible_name}</dd></div>
               <div><dt className="text-[#5f7067]">GPS</dt><dd className="font-medium">{evidence.latitude.toFixed(5)}, {evidence.longitude.toFixed(5)} · precisão {Math.round(evidence.accuracy)} m</dd></div>
               {evidence.photo_url && <div><dt className="text-[#5f7067]">Foto</dt><dd><a href={evidence.photo_url} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center font-semibold underline">Abrir evidência</a></dd></div>}
             </dl>
@@ -498,8 +499,9 @@ function TimelineEvent({ event }: { event: OperationEvent }) {
         <span className="text-[#38705f]">Confirmado pelo servidor</span>
       </div>
       <p className="mt-1 text-[#617068]">
-        {event.actor_name} · {formatDate(event.server_received_at)} · {formatDuration(event.duration_seconds)}
+        Executado por {event.actor_name} · {formatDate(event.server_received_at)} · {formatDuration(event.duration_seconds)}
       </p>
+      <p className="text-[#617068]">Responsável: {event.responsible_name}</p>
       <p className="text-[#617068]">
         GPS {event.latitude.toFixed(5)}, {event.longitude.toFixed(5)} · precisão {Math.round(event.accuracy)} m
       </p>
@@ -809,27 +811,17 @@ function CalendarView({
   const selectedDate = new Date(`${reference}T12:00:00`);
   const monday = new Date(selectedDate);
   monday.setDate(selectedDate.getDate() - ((selectedDate.getDay() + 6) % 7));
-  const days = Array.from({ length: 5 }, (_, index) => {
-    const date = new Date(monday);
-    date.setDate(monday.getDate() + index);
-    return date;
-  });
-  const weekendDays = [5, 6].map((index) => {
+  const days = Array.from({ length: 7 }, (_, index) => {
     const date = new Date(monday);
     date.setDate(monday.getDate() + index);
     return date;
   });
   const slots = [0, 6, 12, 18];
   const dayKeys = new Set(days.map(operationDateInput));
-  const weekKeys = new Set([...days, ...weekendDays].map(operationDateInput));
   const visibleOperations = snapshot.operations.filter(
     (operation) =>
-      weekKeys.has(operationDateInput(new Date(operation.scheduled_at))) &&
+      dayKeys.has(operationDateInput(new Date(operation.scheduled_at))) &&
       (teamFilter === "all" || operation.team_id === teamFilter),
-  );
-  const weekendOperations = visibleOperations.filter(
-    (operation) =>
-      !dayKeys.has(operationDateInput(new Date(operation.scheduled_at))),
   );
   const shiftWeek = (daysToAdd: number) => {
     const next = new Date(selectedDate);
@@ -851,20 +843,23 @@ function CalendarView({
         </div>
       </div>
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-[#5f7067]">Cinco dias úteis · fim de semana destacado · horários de São Paulo</p>
+        <p className="text-sm text-[#5f7067]">Semana completa · sábado e domingo em destaque · horários de São Paulo</p>
         <select aria-label="Filtrar agenda por equipe" value={teamFilter} onChange={(event) => setTeamFilter(event.target.value)} className="min-h-11 w-full rounded-lg border border-[#cbd4ce] bg-white px-3 py-2 text-sm sm:w-auto">
           <option value="all">Todas as equipes</option>
           {snapshot.teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
         </select>
       </div>
       <div className="mt-4 overflow-x-auto rounded-xl border border-[#d7dfd9] bg-white">
-        <div className="grid min-w-[820px] grid-cols-[76px_repeat(5,minmax(140px,1fr))]">
+        <div className="grid min-w-[1100px] grid-cols-[76px_repeat(7,minmax(140px,1fr))]">
           <div className="border-b border-r border-[#e1e7e3] bg-[#f7f9f7]" />
-          {days.map((day) => (
-            <h3 key={operationDateInput(day)} className="border-b border-r border-[#e1e7e3] bg-[#f7f9f7] px-3 py-3 text-xs font-semibold uppercase tracking-[0.1em] text-[#5f7067] last:border-r-0">
-              {new Intl.DateTimeFormat("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit" }).format(day)}
-            </h3>
-          ))}
+          {days.map((day) => {
+            const weekend = day.getDay() === 0 || day.getDay() === 6;
+            return (
+              <h3 key={operationDateInput(day)} className={`border-b border-r border-[#e1e7e3] px-3 py-3 text-xs font-semibold uppercase tracking-[0.1em] last:border-r-0 ${weekend ? "bg-[#fff7e8] text-[#7a5911]" : "bg-[#f7f9f7] text-[#5f7067]"}`}>
+                {new Intl.DateTimeFormat("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit" }).format(day)}
+              </h3>
+            );
+          })}
           {slots.map((slot) => (
             <div className="contents" key={slot}>
               <time className="border-b border-r border-[#e1e7e3] px-3 py-3 font-mono text-xs tabular-nums text-[#5f7067]">{String(slot).padStart(2, "0")}:00</time>
@@ -875,8 +870,9 @@ function CalendarView({
                   const hour = Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", hour: "2-digit", hourCycle: "h23" }).format(new Date(operation.scheduled_at)));
                   return hour >= slot && hour < slot + 6;
                 });
+                const weekend = day.getDay() === 0 || day.getDay() === 6;
                 return (
-                  <section key={`${key}-${slot}`} aria-label={`${key}, ${slot}:00`} className="min-h-28 border-b border-r border-[#e1e7e3] p-2 last:border-r-0">
+                  <section key={`${key}-${slot}`} aria-label={`${key}, ${slot}:00`} className={`min-h-28 border-b border-r border-[#e1e7e3] p-2 last:border-r-0 ${weekend ? "bg-[#fffdf8]" : ""}`}>
                     <div className="space-y-2">
                       {operations.map((operation) => (
                         <button key={operation.id} onClick={() => { setSelectedId(operation.id); onOpenOperation(); }} className="min-h-11 w-full rounded-lg bg-[#eef4f0] p-2 text-left text-xs hover:bg-[#e2eee7]">
@@ -893,35 +889,6 @@ function CalendarView({
           ))}
         </div>
       </div>
-      {weekendOperations.length > 0 && (
-        <section className="mt-4 rounded-xl border border-[#d7dfd9] bg-white p-4">
-          <p className="font-mono text-xs uppercase tracking-[0.14em] text-[#5f7067]">Fim de semana</p>
-          <div className="mt-3 grid gap-3 md:grid-cols-2">
-            {weekendDays.map((day) => {
-              const key = operationDateInput(day);
-              const operations = weekendOperations.filter(
-                (operation) => operationDateInput(new Date(operation.scheduled_at)) === key,
-              );
-              return (
-                <article key={key} className="rounded-lg border border-[#e1e7e3] p-3">
-                  <h3 className="text-xs font-semibold uppercase tracking-[0.1em] text-[#5f7067]">
-                    {new Intl.DateTimeFormat("pt-BR", { weekday: "long", day: "2-digit", month: "2-digit" }).format(day)}
-                  </h3>
-                  <div className="mt-2 space-y-2">
-                    {operations.map((operation) => (
-                      <button key={operation.id} onClick={() => { setSelectedId(operation.id); onOpenOperation(); }} className="min-h-11 w-full rounded-lg bg-[#eef4f0] p-3 text-left text-sm hover:bg-[#e2eee7]">
-                        <strong>{new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" }).format(new Date(operation.scheduled_at))} · {operation.event_name}</strong>
-                        <span className="mt-1 block text-xs text-[#5f7067]">{stageLabels[operation.stage]}</span>
-                      </button>
-                    ))}
-                    {!operations.length && <p className="text-sm text-[#5f7067]">Sem operação.</p>}
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        </section>
-      )}
       {!visibleOperations.length && <div className="mt-4"><Empty>Nenhuma operação corresponde à semana e à equipe selecionadas.</Empty></div>}
     </div>
   );
@@ -1069,7 +1036,7 @@ function EvidenceView({ snapshot }: Props) {
         {evidence.map(({ operation, event }) => (
           <article key={event.id} className="overflow-hidden rounded-xl border border-[#d7dfd9] bg-white">
             {event.photo_url ? <a href={event.photo_url} target="_blank" rel="noreferrer" className="grid h-40 place-items-end bg-cover bg-center p-4 text-sm font-semibold text-white" style={{ backgroundImage: `linear-gradient(180deg, transparent 35%, rgba(17, 35, 29, .82)), url(${JSON.stringify(event.photo_url)})` }}><span className="flex items-center gap-2"><Camera size={18} />Abrir evidência</span></a> : <div className="grid h-28 place-items-center bg-[#edf1ee] text-xs text-[#5f7067]">Sem foto nesta etapa</div>}
-            <div className="p-4"><Pill tone="green">Servidor confirmado</Pill><h3 className="mt-3 font-semibold">{operation.event_name}</h3><p className="text-sm text-[#65746c]">{stageLabels[event.stage]} · {event.actor_name}</p><p className="mt-2 text-xs text-[#5f7067]">{formatDate(event.server_received_at)} · GPS {event.latitude.toFixed(5)}, {event.longitude.toFixed(5)}</p></div>
+            <div className="p-4"><Pill tone="green">Servidor confirmado</Pill><h3 className="mt-3 font-semibold">{operation.event_name}</h3><p className="text-sm text-[#65746c]">{stageLabels[event.stage]} · executado por {event.actor_name}</p><p className="text-sm text-[#65746c]">Responsável: {event.responsible_name}</p><p className="mt-2 text-xs text-[#5f7067]">{formatDate(event.server_received_at)} · GPS {event.latitude.toFixed(5)}, {event.longitude.toFixed(5)}</p></div>
           </article>
         ))}
       </div>
