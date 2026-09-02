@@ -71,10 +71,48 @@ test("valida calendário e horário sem aceitar normalização automática", () 
   assert.equal(isValidIsoDate("2026-02-29"), false);
   assert.equal(isValidIsoDate("2026-02-31"), false);
   assert.equal(toScheduledAt("31/08/2026", "23:59"), "2026-09-01T02:59:00.000Z");
+  assert.equal(toScheduledAt("31/08/2026", "23:59:30"), "2026-09-01T02:59:30.000Z");
   assert.equal(toScheduledAt("31/02/2026", "08:00"), null);
   assert.equal(toScheduledAt("31/08/2026", "24:00"), null);
-  assert.equal(toScheduledAt("31/08/2026", "08:00:30"), null);
   assert.equal(toScheduledAt("31/08/2026", ""), null);
+});
+
+test("agrupa entrega e devolução conforme o contrato real sanitizado", () => {
+  const operation = normalizeLogistics({
+    data: [
+      {
+        id: "logistica-1",
+        order_id: "pedido-1",
+        type: "return",
+        type_name: "Devolução",
+        client_name: "Cliente exemplo",
+        local_name: "Pavilhão exemplo",
+        address_city: "Salvador",
+        movement_date: "2026-09-04",
+        movement_time: "18:00:00",
+        status_type: "pending",
+        is_concluded: "0",
+      },
+      {
+        id: "logistica-1",
+        order_id: "pedido-1",
+        type: "delivery",
+        type_name: "Entrega",
+        client_name: "Cliente exemplo",
+        local_name: "Pavilhão exemplo",
+        address_city: "Salvador",
+        movement_date: "2026-09-03",
+        movement_time: "08:30:15",
+        status_type: "pending",
+        is_concluded: "0",
+      },
+    ],
+  })[0];
+  assert.equal(operation?.eventName, "Cliente exemplo");
+  assert.equal(operation?.scheduledDate, "2026-09-03");
+  assert.equal(operation?.scheduledTime, "08:30:15");
+  assert.equal(operation?.returnDate, "2026-09-04");
+  assert.equal(operation?.status, "preparation");
 });
 
 test("aceita IDs opacos, mas rejeita vazio, controle e tamanho excessivo", () => {

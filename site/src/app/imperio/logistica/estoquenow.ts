@@ -135,9 +135,11 @@ export const toScheduledAt = (date: string, time: string) => {
   const isoDate = dateMatch
     ? `${dateMatch[3]}-${dateMatch[2]}-${dateMatch[1]}`
     : dateValue;
-  const timeMatch = time.trim().match(/^([01]\d|2[0-3]):([0-5]\d)$/);
+  const timeMatch = time.trim().match(/^([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/);
   if (!isValidIsoDate(isoDate) || !timeMatch) return null;
-  return new Date(`${isoDate}T${timeMatch[1]}:${timeMatch[2]}:00-03:00`).toISOString();
+  return new Date(
+    `${isoDate}T${timeMatch[1]}:${timeMatch[2]}:${timeMatch[3] ?? "00"}-03:00`,
+  ).toISOString();
 };
 
 const nestedText = (record: JsonObject, ...paths: string[][]): string => {
@@ -164,11 +166,22 @@ const listFrom = (payload: unknown): unknown[] => {
 };
 
 const statusFrom = (record: JsonObject): EstoqueNowOperation["status"] => {
+  if (record.is_concluded === 1 || record.is_concluded === "1" || record.is_concluded === true)
+    return nestedText(record, ["type"]).toLowerCase() === "return"
+      ? "completed"
+      : "return";
   if (record.is_concluded_return === 1 || record.is_concluded_return === "1")
     return "completed";
   if (record.is_concluded_delivery === 1 || record.is_concluded_delivery === "1")
     return "return";
-  const raw = nestedText(record, ["status"], ["logistic_status"], ["situation"])
+  const raw = nestedText(
+    record,
+    ["status_name"],
+    ["status_type"],
+    ["status"],
+    ["logistic_status"],
+    ["situation"],
+  )
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
@@ -179,43 +192,54 @@ const statusFrom = (record: JsonObject): EstoqueNowOperation["status"] => {
   return "preparation";
 };
 
-export const normalizeLogistics = (payload: unknown): EstoqueNowOperation[] =>
-  listFrom(payload).flatMap((value) => {
+export const normalizeLogistics = (payload: unknown): EstoqueNowOperation[] => {
+  const groups = new Map<string, Map<string, JsonObject>>();
+  for (const [index, value] of listFrom(payload).entries()) {
     const record = asObject(value);
-    if (!record) return [];
+    if (!record) continue;
     const id = nestedText(record, ["id"], ["logistic_id"]);
-    const orderId = nestedText(record, ["order_id"], ["order", "id"]);
-    const city = nestedText(record, ["address_city"], ["city"]);
-    return [
-      {
-        id,
-        orderId,
-        eventName:
-          nestedText(
-            record,
-            ["event_name"],
-            ["local_name"],
-            ["order", "event_name"],
-            ["order", "client", "name"],
-          ),
-        venue:
-          nestedText(record, ["local_name"], ["venue"], ["address_street"]),
-        city,
-        scheduledDate: nestedText(record, ["delivery_date"]),
-        scheduledTime: nestedText(record, ["delivery_time"]),
-        returnDate: nestedText(record, ["return_date"]),
-        status: statusFrom(record),
-        coordinator: nestedText(
-          record,
-          ["coordinator", "name"],
-          ["responsible", "name"],
-        ),
-        crew: nestedText(record, ["crew_name"], ["team", "name"]),
-        vehicle: nestedText(record, ["vehicle", "name"], ["vehicle_plate"]),
-        nextMilestone: nestedText(record, ["next_milestone"]),
-      },
-    ];
+    const type = nestedText(record, ["type"]).toLowerCase() || "unspecified";
+    const key = id ? `external:${id}` : `invalid:${index}`;
+    const movements = groups.get(key) ?? new Map<string, JsonObject>();
+    const existing = movements.get(type);
+    if (existing && JSON.stringify(existing) !== JSON.stringify(record))
+      throw new Error("ESTOQUENOW_DUPLICATE_ID_CONFLICT");
+    movements.set(type, record);
+    groups.set(key, movements);
+  }
+
+  return [...groups.values()].map((movements) => {
+    const delivery = movements.get("delivery");
+    const returnMovement = movements.get("return");
+    const record = delivery ?? returnMovement ?? [...movements.values()][0];
+    const id = nestedText(record, ["id"], ["logistic_id"]);
+    return {
+      id,
+      orderId: nestedText(record, ["order_id"], ["order", "id"]),
+      eventName: nestedText(
+        record,
+        ["client_name"],
+        ["event_name"],
+        ["local_name"],
+        ["order", "event_name"],
+        ["order", "client", "name"],
+      ),
+      venue: nestedText(record, ["local_name"], ["venue"], ["address_street"]),
+      city: nestedText(record, ["address_city"], ["city"]),
+      scheduledDate: nestedText(delivery ?? record, ["movement_date"], ["delivery_date"]),
+      scheduledTime: nestedText(delivery ?? record, ["movement_time"], ["delivery_time"]),
+      returnDate: nestedText(returnMovement ?? record, ["movement_date"], ["return_date"]),
+      status:
+        statusFrom(returnMovement ?? {}) === "completed"
+          ? "completed"
+          : statusFrom(delivery ?? record),
+      coordinator: nestedText(record, ["coordinator", "name"], ["responsible", "name"]),
+      crew: nestedText(record, ["crew_name"], ["team", "name"]),
+      vehicle: nestedText(record, ["vehicle", "name"], ["vehicle_plate"]),
+      nextMilestone: nestedText(record, ["next_milestone"]),
+    };
   });
+};
 
 export class EstoqueNowClient {
   private token: { value: string; expiresAt: number } | null = null;
@@ -341,7 +365,7 @@ export class EstoqueNowClient {
   }
 
   async listLogisticsWithContract(startDate: string, endDate: string) {
-    const operations = new Map<string, EstoqueNowOperation>();
+    const records: unknown[] = [];
     const fields = new Map<string, { signatures: Set<string>; occurrences: number }>();
     const facets = new Map<string, Map<string, number>>();
     const pages: EstoqueNowContract["pages"] = [];
@@ -354,8 +378,9 @@ export class EstoqueNowClient {
         end_date: endDate,
       });
       const payload = await this.request(`/v1/logistic?${query}`);
-      const records = listFrom(payload);
-      const rawCount = records.length;
+      const pageRecords = listFrom(payload);
+      records.push(...pageRecords);
+      const rawCount = pageRecords.length;
       const metadata = pageMetadata(payload, rawCount);
       pages.push(metadata);
       for (const [path, incoming] of contractFrom(payload)) {
@@ -364,7 +389,7 @@ export class EstoqueNowClient {
         current.occurrences += incoming.occurrences;
         fields.set(path, current);
       }
-      for (const value of records) {
+      for (const value of pageRecords) {
         const record = asObject(value);
         if (!record) continue;
         for (const field of SAFE_FACET_FIELDS) {
@@ -375,16 +400,6 @@ export class EstoqueNowClient {
           facets.set(field, counts);
         }
       }
-      const batch = normalizeLogistics(payload);
-      for (const [index, operation] of batch.entries()) {
-        const key = operation.id
-          ? `external:${operation.id}`
-          : `invalid:${page}:${index + 1}`;
-        const existing = operations.get(key);
-        if (existing && JSON.stringify(existing) !== JSON.stringify(operation))
-          throw new Error("ESTOQUENOW_DUPLICATE_ID_CONFLICT");
-        operations.set(key, operation);
-      }
       const total = metadata.recordsFiltered ?? metadata.recordsTotal;
       const currentPage = metadata.page ?? page;
       const serverPageSize = metadata.perPage ?? rawCount;
@@ -392,7 +407,7 @@ export class EstoqueNowClient {
       if (page === MAX_PAGES) throw new Error("ESTOQUENOW_PAGE_LIMIT");
     }
     return {
-      operations: [...operations.values()],
+      operations: normalizeLogistics({ data: records }),
       contract: {
         pages,
         fields: [...fields.entries()]

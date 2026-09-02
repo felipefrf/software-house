@@ -77,6 +77,7 @@ type EstoqueNowPreview = {
   endDate: string;
   importEnabled: boolean;
   total: number;
+  movementsTotal: number;
   candidates: Array<{
     externalId: string;
     eventName: string;
@@ -1408,7 +1409,7 @@ function IntegrationsView(props: Props) {
       });
       setPreview(nextPreview);
       setCanaryId("");
-      result = `${nextPreview.total} lida(s) · ${nextPreview.counts.new} nova(s) · ${nextPreview.counts.unchanged} já conciliada(s) · ${nextPreview.counts.diverged} divergente(s) · ${nextPreview.counts.skipped} inválida(s). Nenhuma gravação realizada.`;
+      result = `${nextPreview.total} logística(s), ${nextPreview.movementsTotal} movimento(s) · ${nextPreview.counts.new} nova(s) · ${nextPreview.counts.unchanged} já conciliada(s) · ${nextPreview.counts.diverged} divergente(s) · ${nextPreview.counts.skipped} inválida(s). Nenhuma gravação realizada.`;
     }, () => result);
   };
   const confirmCanary = () => {

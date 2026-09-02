@@ -574,6 +574,7 @@ export async function POST(request: Request) {
           endDate,
           importEnabled: process.env.ESTOQUENOW_IMPORT_ENABLED === "true",
           total: external.length,
+          movementsTotal: contract.pages.reduce((total, page) => total + page.records, 0),
           candidates: candidates.map((candidate) => ({
             externalId: candidate.externalId,
             eventName: candidate.eventName,
