@@ -381,6 +381,49 @@ export async function POST(request: Request) {
         .eq("source", "manual")
         .in("event_name", SYNTHETIC_QA_NAMES);
       if (
+        body.mode === "delete" &&
+        manualCount.count === 0 &&
+        operations.data?.length === 0 &&
+        /^2026-09-02\/[0-9a-f-]{36}$/i.test(body.backupPrefix ?? "")
+      ) {
+        const backupPrefix = body.backupPrefix ?? "";
+        const downloaded = await admin.storage
+          .from(QA_BACKUP_BUCKET)
+          .download(`${backupPrefix}/manifest.json`);
+        if (downloaded.error)
+          return jsonError("O manifesto do backup não confere.", 409);
+        const manifest = JSON.parse(await downloaded.data.text()) as {
+          operations?: Array<{ event_name?: unknown }>;
+          evidence?: Array<{ original?: unknown }>;
+        };
+        const originals = (manifest.evidence ?? []).map((item) => item.original);
+        if (
+          manifest.operations?.length !== 2 ||
+          !SYNTHETIC_QA_NAMES.every((name) =>
+            manifest.operations?.some((operation) => operation.event_name === name),
+          ) ||
+          originals.length !== 4 ||
+          !originals.every(
+            (path): path is string =>
+              typeof path === "string" &&
+              /^[0-9a-f-]{36}\/[^/]+\.(jpe?g|png|webp)$/i.test(path),
+          ) ||
+          new Set(originals).size !== originals.length
+        )
+          return jsonError("O manifesto não corresponde ao inventário aprovado.", 409);
+        const removedEvidence = await admin.storage
+          .from("operation-evidence")
+          .remove(originals);
+        if (removedEvidence.error || removedEvidence.data?.length !== 4)
+          return jsonError("As linhas foram removidas, mas restaram evidências originais.", 500);
+        return NextResponse.json({
+          ok: true,
+          backupPrefix,
+          before: { operations: 2, events: 4, incidents: 0, evidence: 4 },
+          after: { operations: 0, events: 0, incidents: 0, evidence: 0 },
+        });
+      }
+      if (
         manualCount.error ||
         operations.error ||
         manualCount.count !== 2 ||
