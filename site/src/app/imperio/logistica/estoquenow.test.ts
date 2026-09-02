@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  canonicalItems,
   EstoqueNowClient,
   isValidExternalId,
   isValidIsoDate,
@@ -10,6 +11,13 @@ import {
   sourceFieldsDiverged,
   toScheduledAt,
 } from "./estoquenow.ts";
+
+test("canonicaliza itens sem depender da ordem das chaves", () => {
+  assert.equal(
+    JSON.stringify(canonicalItems([{ name: "Mesa", orderId: "order-1", itemId: "item-1", id: "row-1" }])),
+    '[{"id":"row-1","itemId":"item-1","orderId":"order-1","name":"Mesa"}]',
+  );
+});
 
 test("detecta divergência sem confundir fusos equivalentes", () => {
   const current = {
@@ -231,7 +239,7 @@ test("aguarda e repete após 429", async () => {
   assert.equal(reads, 2);
 });
 
-test("inspeciona detalhe por GET e retorna somente contrato sanitizado", async () => {
+test("inspeciona detalhe por GET e normaliza somente os itens permitidos", async () => {
   const paths: string[] = [];
   const fetchImpl: typeof fetch = async (input) => {
     const url = String(input);
@@ -239,19 +247,40 @@ test("inspeciona detalhe por GET e retorna somente contrato sanitizado", async (
     paths.push(new URL(url).pathname);
     return Response.json({
       id: "123",
-      order_items: [{ product_name: "Item privado", quantity: 2 }],
+      order_items: [
+        { id: "row-2", item_id: "item-2", order_id: "order-1", item_name: "Cadeira" },
+        { id: "row-1", item_id: "item-1", order_id: "order-1", item_name: "Mesa" },
+      ],
       private_dynamic_map: { Alice: "valor privado" },
     });
   };
   const client = new EstoqueNowClient({ clientId: "id", clientSecret: "secret", fetchImpl });
-  const contract = await client.inspectLogisticDetail("123");
+  const inspection = await client.inspectLogisticDetail("123");
   assert.deepEqual(paths, ["/v1/logistic/123"]);
   assert.deepEqual(
-    contract.fields.map((field) => field.path),
-    ["[redacted].[redacted]", "id", "order_items.[].product_name", "order_items.[].quantity"],
+    inspection.contract.fields.map((field) => field.path),
+    ["[redacted].[redacted]", "id", "order_items.[].id", "order_items.[].item_id", "order_items.[].item_name", "order_items.[].order_id"],
   );
-  assert.equal(/Item privado|Alice|valor privado/.test(JSON.stringify(contract)), false);
+  assert.deepEqual(inspection.items, [
+    { id: "row-1", itemId: "item-1", orderId: "order-1", name: "Mesa" },
+    { id: "row-2", itemId: "item-2", orderId: "order-1", name: "Cadeira" },
+  ]);
+  assert.equal(/Alice|valor privado/.test(JSON.stringify(inspection)), false);
   await assert.rejects(() => client.inspectLogisticDetail(""), /INVALID_LOGISTIC_ID/);
+});
+
+test("rejeita item duplicado conflitante no detalhe", async () => {
+  const fetchImpl: typeof fetch = async (input) =>
+    String(input).endsWith("/oauth2/token")
+      ? Response.json({ token: "redacted" })
+      : Response.json({
+          order_items: [
+            { id: "row-1", item_id: "item-1", order_id: "order-1", item_name: "Mesa" },
+            { id: "row-1", item_id: "item-2", order_id: "order-1", item_name: "Cadeira" },
+          ],
+        });
+  const client = new EstoqueNowClient({ clientId: "id", clientSecret: "secret", fetchImpl });
+  await assert.rejects(() => client.inspectLogisticDetail("123"), /ORDER_ITEM_CONFLICT/);
 });
 
 test("pagina a listagem sem duplicar IDs", async () => {

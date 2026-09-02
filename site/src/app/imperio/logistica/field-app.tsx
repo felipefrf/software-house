@@ -507,7 +507,8 @@ export function FieldApp(props: Props) {
             </h1>
             <p className="mt-1 text-sm text-[#65746c]">{selected.destination}</p>
             {selected.estoquenow_context && (
-              <p className="mt-2 text-sm text-[#3f554a]">
+              <div className="mt-2 text-sm text-[#3f554a]">
+              <p>
                 Pedido {selected.estoquenow_context.order_id ?? "não informado"}
                 {selected.estoquenow_context.return_at
                   ? ` · devolução ${formatDate(selected.estoquenow_context.return_at)}`
@@ -516,6 +517,8 @@ export function FieldApp(props: Props) {
                   ? ` · ${selected.estoquenow_context.item_count} item(ns)`
                   : ""}
               </p>
+              {selected.estoquenow_context.items.length > 0 && <details className="mt-2"><summary className="min-h-11 cursor-pointer py-2 font-semibold">Linhas de item · {selected.estoquenow_context.items.length}</summary><ul className="list-disc space-y-1 pl-5">{selected.estoquenow_context.items.map((item) => <li key={item.id}>{item.name}</li>)}</ul></details>}
+              </div>
             )}
             <StageRail operation={selected} />
             <div className="mt-4 grid grid-cols-2 gap-3 text-sm">

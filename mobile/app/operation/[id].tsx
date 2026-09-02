@@ -93,6 +93,9 @@ export default function OperationScreen() {
               : ""}
           </Text>
         ) : null}
+        {operation.estoquenow_context?.items.map((item) => (
+          <Text key={item.id} style={styles.cacheAge}>Item · {item.name}</Text>
+        ))}
         {work ? (
           <Text style={styles.cacheAge}>
             Escala carregada em {formatDate(work.fetchedAt)}

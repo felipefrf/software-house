@@ -67,6 +67,7 @@ export type EstoqueNowOperationContext = {
   item_count: string | null;
   order_type: string | null;
   logistic_type_id: string | null;
+  items: Array<{ id: string; itemId: string; orderId: string; name: string }>;
 };
 
 export type Operation = {

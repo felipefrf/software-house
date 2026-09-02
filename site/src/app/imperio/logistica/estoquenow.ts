@@ -53,6 +53,22 @@ export type EstoqueNowDetailContract = {
   fields: Array<{ path: string; signatures: string[]; occurrences: number }>;
 };
 
+export type EstoqueNowItem = {
+  id: string;
+  itemId: string;
+  orderId: string;
+  name: string;
+};
+
+export const canonicalItems = (items: EstoqueNowItem[]) =>
+  items
+    .map(({ id, itemId, orderId, name }) => ({ id, itemId, orderId, name }))
+    .sort((left, right) =>
+      left.id < right.id ? -1 : left.id > right.id ? 1 :
+      left.itemId < right.itemId ? -1 : left.itemId > right.itemId ? 1 :
+      left.orderId < right.orderId ? -1 : left.orderId > right.orderId ? 1 : 0,
+    );
+
 type JsonObject = Record<string, unknown>;
 type FetchLike = typeof fetch;
 
@@ -222,6 +238,38 @@ const listFrom = (payload: unknown): unknown[] => {
     if (Array.isArray(nested?.data)) return nested.data;
   }
   return [];
+};
+
+export const itemsFromDetail = (payload: unknown): EstoqueNowItem[] => {
+  const root = asObject(payload);
+  const detail = asObject(root?.data) ?? root;
+  const rawItems = detail?.order_items;
+  if (!Array.isArray(rawItems) || rawItems.length > 1_000)
+    throw new Error("ESTOQUENOW_INVALID_ORDER_ITEMS");
+  const items = new Map<string, EstoqueNowItem>();
+  for (const value of rawItems) {
+    const item = asObject(value);
+    const normalized = {
+      id: nestedText(item ?? {}, ["id"]),
+      itemId: nestedText(item ?? {}, ["item_id"]),
+      orderId: nestedText(item ?? {}, ["order_id"]),
+      name: nestedText(item ?? {}, ["item_name"]),
+    };
+    if (
+      !item ||
+      !isValidExternalId(normalized.id) ||
+      !isValidExternalId(normalized.itemId) ||
+      !isValidExternalId(normalized.orderId) ||
+      normalized.name.length < 1 ||
+      normalized.name.length > 500
+    )
+      throw new Error("ESTOQUENOW_INVALID_ORDER_ITEMS");
+    const current = items.get(normalized.id);
+    if (current && JSON.stringify(current) !== JSON.stringify(normalized))
+      throw new Error("ESTOQUENOW_ORDER_ITEM_CONFLICT");
+    items.set(normalized.id, normalized);
+  }
+  return canonicalItems([...items.values()]);
 };
 
 const statusFrom = (record: JsonObject): EstoqueNowOperation["status"] => {
@@ -519,20 +567,28 @@ export class EstoqueNowClient {
     return (await this.listLogisticsWithContract(startDate, endDate)).operations;
   }
 
-  async inspectLogisticDetail(id: string): Promise<EstoqueNowDetailContract> {
+  async inspectLogisticDetail(id: string) {
     if (!isValidExternalId(id)) throw new Error("ESTOQUENOW_INVALID_LOGISTIC_ID");
-    const fields = contractFrom(
-      await this.request(`/v1/logistic/${encodeURIComponent(id.trim())}`),
-      SAFE_DETAIL_KEYS,
-    );
+    const payload = await this.request(`/v1/logistic/${encodeURIComponent(id.trim())}`);
+    const fields = contractFrom(payload, SAFE_DETAIL_KEYS);
     return {
-      fields: [...fields.entries()]
-        .map(([path, field]) => ({
-          path,
-          signatures: [...field.signatures].sort(),
-          occurrences: field.occurrences,
-        }))
-        .sort((left, right) => left.path.localeCompare(right.path)),
+      contract: {
+        fields: [...fields.entries()]
+          .map(([path, field]) => ({
+            path,
+            signatures: [...field.signatures].sort(),
+            occurrences: field.occurrences,
+          }))
+          .sort((left, right) => left.path.localeCompare(right.path)),
+      } satisfies EstoqueNowDetailContract,
+      items: itemsFromDetail(payload),
     };
+  }
+
+  async listLogisticItems(id: string): Promise<EstoqueNowItem[]> {
+    if (!isValidExternalId(id)) throw new Error("ESTOQUENOW_INVALID_LOGISTIC_ID");
+    return itemsFromDetail(
+      await this.request(`/v1/logistic/${encodeURIComponent(id.trim())}`),
+    );
   }
 }

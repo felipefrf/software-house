@@ -128,6 +128,9 @@ type EstoqueNowPreview = {
 
 type EstoqueNowDetailPreview = {
   externalId: string;
+  itemsToken: string;
+  itemsBlocked: boolean;
+  items: Array<{ id: string; itemId: string; orderId: string; name: string }>;
   contract: {
     fields: Array<{ path: string; signatures: string[]; occurrences: number }>;
   };
@@ -499,32 +502,42 @@ function OperationDetail({
         />
       </div>
       {operation.estoquenow_context && (
-        <dl className="mt-4 grid gap-px overflow-hidden rounded-lg border border-[#dce3de] bg-[#dce3de] text-sm sm:grid-cols-2 lg:grid-cols-4">
-          <div className="bg-[#f8faf8] p-3">
-            <dt className="text-[#5f7067]">Pedido EstoqueNOW</dt>
-            <dd className="font-medium">{operation.estoquenow_context.order_id ?? "Não informado"}</dd>
-          </div>
-          <div className="bg-[#f8faf8] p-3">
-            <dt className="text-[#5f7067]">Devolução prevista</dt>
-            <dd className="font-medium">
-              {operation.estoquenow_context.return_at
-                ? formatDate(operation.estoquenow_context.return_at)
-                : "Não informada"}
-            </dd>
-          </div>
-          <div className="bg-[#f8faf8] p-3">
-            <dt className="text-[#5f7067]">Status externo</dt>
-            <dd className="font-medium">
-              {operation.estoquenow_context.delivery_status_type ?? "Não informado"}
-            </dd>
-          </div>
-          <div className="bg-[#f8faf8] p-3">
-            <dt className="text-[#5f7067]">Itens previstos</dt>
-            <dd className="font-medium">
-              {operation.estoquenow_context.item_count ?? "Não informado"}
-            </dd>
-          </div>
-        </dl>
+        <div className="mt-4 overflow-hidden rounded-lg border border-[#dce3de]">
+          <dl className="grid gap-px bg-[#dce3de] text-sm sm:grid-cols-2 lg:grid-cols-4">
+            <div className="bg-[#f8faf8] p-3">
+              <dt className="text-[#5f7067]">Pedido EstoqueNOW</dt>
+              <dd className="font-medium">{operation.estoquenow_context.order_id ?? "Não informado"}</dd>
+            </div>
+            <div className="bg-[#f8faf8] p-3">
+              <dt className="text-[#5f7067]">Devolução prevista</dt>
+              <dd className="font-medium">
+                {operation.estoquenow_context.return_at
+                  ? formatDate(operation.estoquenow_context.return_at)
+                  : "Não informada"}
+              </dd>
+            </div>
+            <div className="bg-[#f8faf8] p-3">
+              <dt className="text-[#5f7067]">Status externo</dt>
+              <dd className="font-medium">
+                {operation.estoquenow_context.delivery_status_type ?? "Não informado"}
+              </dd>
+            </div>
+            <div className="bg-[#f8faf8] p-3">
+              <dt className="text-[#5f7067]">Itens previstos</dt>
+              <dd className="font-medium">
+                {operation.estoquenow_context.item_count ?? "Não informado"}
+              </dd>
+            </div>
+          </dl>
+          {operation.estoquenow_context.items.length > 0 && (
+            <details className="bg-[#f8faf8] p-3 text-sm">
+              <summary className="min-h-11 cursor-pointer py-2 font-semibold">Equipamentos importados · {operation.estoquenow_context.items.length}</summary>
+              <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+                {operation.estoquenow_context.items.map((item) => <li key={item.id} className="rounded-md bg-white p-2">{item.name}</li>)}
+              </ul>
+            </details>
+          )}
+        </div>
       )}
       {operationIncidents.length > 0 && (
         <div className="mt-5 border-l-4 border-[#d69f38] bg-[#fff7e3] p-4 text-sm text-[#755615]">
@@ -1469,10 +1482,11 @@ function IntegrationsView(props: Props) {
         externalId: selectedCanary.externalId,
       });
       setDetailPreview(detail);
-    }, "Detalhe lido sem gravar; somente o contrato sanitizado foi retornado.");
+    }, "Detalhe lido sem gravar; equipamentos revisáveis e contrato sanitizado foram retornados.");
   };
   const confirmCanary = () => {
-    if (!preview || !selectedCanary) return;
+    if (!preview || !selectedCanary || detailPreview?.externalId !== selectedCanary.externalId)
+      return;
     let result = "Importação individual confirmada.";
     void props.run(async () => {
       const confirmed = await postJson<{
@@ -1491,6 +1505,7 @@ function IntegrationsView(props: Props) {
         reviewedScheduledAt: selectedCanary.scheduledAt,
         reviewedToken: selectedCanary.reviewToken,
         reviewedDatabaseImportedAt: selectedCanary.databaseImportedAt,
+        reviewedItemsToken: detailPreview.itemsToken,
       });
       result = confirmed.imported
         ? `Operação ${confirmed.externalId} importada para o banco da Império.`
@@ -1591,10 +1606,15 @@ function IntegrationsView(props: Props) {
             {detailPreview && (
               <details open className="mt-4 rounded-lg border border-[#dce3de] bg-[#f8faf8] p-4">
                 <summary className="min-h-11 cursor-pointer text-sm font-semibold">Contrato sanitizado do detalhe</summary>
-                <p className="mt-2 text-xs text-[#5f7067]">O corpo e os valores não são retornados; chaves fora da allowlist aparecem redigidas.</p>
+                <p className="mt-2 text-xs text-[#5f7067]">O corpo completo não é retornado. Somente os campos operacionais dos itens abaixo são exibidos; demais chaves aparecem redigidas.</p>
                 <div className="mt-2 max-h-64 divide-y divide-[#e1e7e3] overflow-auto text-xs">
                   {detailPreview.contract.fields.map((field) => <p key={field.path} className="grid gap-1 py-2 sm:grid-cols-[minmax(0,1fr)_auto]"><code className="break-all">{field.path}</code><span className="text-[#5f7067]">{field.signatures.join(" | ")} · {field.occurrences}x</span></p>)}
                 </div>
+                <p className="mt-4 text-sm font-semibold">Linhas de item · {detailPreview.items.length}</p>
+                <ul className="mt-2 max-h-64 divide-y divide-[#e1e7e3] overflow-auto text-sm">
+                  {detailPreview.items.map((item) => <li key={item.id} className="py-2"><strong>{item.name}</strong><span className="ml-2 font-mono text-xs text-[#5f7067]">item {item.itemId}</span></li>)}
+                </ul>
+                {detailPreview.itemsBlocked && <p className="mt-3 rounded-lg bg-[#fff1ee] p-3 text-xs font-semibold text-[#8a3c2d]">A lista histórica difere e está protegida contra reescrita.</p>}
               </details>
             )}
             <details className="mt-5 rounded-lg border border-[#dce3de] bg-[#f8faf8] p-4">
@@ -1610,7 +1630,7 @@ function IntegrationsView(props: Props) {
                 </div>
               </div>
             </details>
-            <button type="button" onClick={confirmCanary} disabled={props.busy || !props.snapshot.estoquenow.import_enabled || !selectedCanary || selectedCanary.state === "blocked"} className="mt-5 min-h-11 w-full rounded-lg bg-[#173d34] px-4 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">{selectedCanary?.state === "blocked" ? "Histórico protegido contra reescrita" : selectedCanary?.state === "diverged" || selectedCanary?.state === "update" ? "Atualizar somente esta operação após revisão" : "Importar somente esta operação para a Império"}</button>
+            <button type="button" onClick={confirmCanary} disabled={props.busy || !props.snapshot.estoquenow.import_enabled || !selectedCanary || selectedCanary.state === "blocked" || detailPreview?.itemsBlocked || detailPreview?.externalId !== selectedCanary.externalId} className="mt-5 min-h-11 w-full rounded-lg bg-[#173d34] px-4 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">{selectedCanary?.state === "blocked" || detailPreview?.itemsBlocked ? "Histórico protegido contra reescrita" : detailPreview?.externalId !== selectedCanary?.externalId ? "Inspecione os itens antes de confirmar" : selectedCanary?.state === "diverged" || selectedCanary?.state === "update" ? "Atualizar somente esta operação após revisão" : "Importar somente esta operação para a Império"}</button>
             {!props.snapshot.estoquenow.import_enabled && <p className="mt-3 text-center text-xs text-[#705817]">Defina ESTOQUENOW_IMPORT_ENABLED=true no servidor somente após validar esta prévia e obter autorização operacional.</p>}
           </article>
         )}

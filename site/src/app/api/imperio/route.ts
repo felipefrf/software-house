@@ -5,14 +5,17 @@ import { checklistForStage, operationStages } from "@/app/imperio/logistica/acti
 import {
   inspectEstoqueNowDetail,
   inspectEstoqueNowOperations,
+  readEstoqueNowItems,
 } from "@/app/imperio/logistica/data";
 import {
+  canonicalItems,
   isValidExternalId,
   isValidIsoDate,
   operationDestination,
   sourceFieldsDiverged,
   toScheduledAt,
   type EstoqueNowOperation,
+  type EstoqueNowItem,
 } from "@/app/imperio/logistica/estoquenow";
 import { getAppSnapshot } from "@/app/imperio/logistica/server";
 import type { OperationStage } from "@/app/imperio/logistica/types";
@@ -38,6 +41,9 @@ const isStage = (value: string): value is OperationStage =>
 const isOptionalUuid = (value?: string) => !value || isUuid(value);
 
 const validDateInput = (value: string) => isValidIsoDate(value);
+
+const itemsTokenFor = (items: EstoqueNowItem[]) =>
+  createHash("sha256").update(JSON.stringify(canonicalItems(items))).digest("hex");
 
 type EstoqueNowImportRow = {
   source: "estoquenow";
@@ -529,6 +535,7 @@ export async function POST(request: Request) {
         reviewedScheduledAt?: string;
         reviewedToken?: string;
         reviewedDatabaseImportedAt?: string | null;
+        reviewedItemsToken?: string;
       };
       const startDate = body.startDate?.trim() ?? "";
       const endDate = body.endDate?.trim() ?? "";
@@ -739,6 +746,23 @@ export async function POST(request: Request) {
           "O registro mudou desde a prévia. Revise os dados novamente antes de confirmar.",
           409,
         );
+      if (!body.reviewedItemsToken)
+        return jsonError("Inspecione e revise os equipamentos antes de confirmar.", 409);
+      let items;
+      try {
+        items = await readEstoqueNowItems(candidate.externalId);
+      } catch {
+        return jsonError("Não foi possível reler os equipamentos no EstoqueNOW.", 502);
+      }
+      const candidateOrderId = candidate.row.source_context.order_id;
+      if (items.some((item) => !candidateOrderId || item.orderId !== candidateOrderId))
+        return jsonError("Os itens do detalhe não pertencem ao pedido revisado.", 409);
+      const itemsToken = itemsTokenFor(items);
+      if (itemsToken !== body.reviewedItemsToken)
+        return jsonError(
+          "A lista de equipamentos mudou desde a revisão. Inspecione o detalhe novamente.",
+          409,
+        );
 
       const admin = createSupabaseAdminClient();
       if (!admin) return jsonError("Chave secreta do Supabase não configurada.", 503);
@@ -755,6 +779,7 @@ export async function POST(request: Request) {
         p_legacy_destination: candidate.row.legacy_destination,
         p_legacy_notes: candidate.row.legacy_notes,
         p_expected_imported_at: candidate.databaseImportedAt,
+        p_items: items,
       });
       if (
         confirmed.error?.code === "23505" ||
@@ -782,10 +807,32 @@ export async function POST(request: Request) {
       const externalId = body.externalId?.trim() ?? "";
       if (!isValidExternalId(externalId)) return jsonError("Informe um ID logístico válido.");
       try {
+        const [detail, currentResult] = await Promise.all([
+          inspectEstoqueNowDetail(externalId),
+          supabase
+            .from("operations")
+            .select("status,events:operation_events(id),source_context:estoquenow_operation_contexts(items)")
+            .eq("source", "estoquenow")
+            .eq("external_id", externalId)
+            .maybeSingle(),
+        ]);
+        if (currentResult.error) throw currentResult.error;
+        const current = currentResult.data as null | {
+          status: "active" | "completed" | "cancelled";
+          events: Array<{ id: string }>;
+          source_context: { items: typeof detail.items } | null;
+        };
+        const itemsChanged =
+          Boolean(current?.source_context) &&
+          itemsTokenFor(current?.source_context?.items ?? []) !== itemsTokenFor(detail.items);
         return NextResponse.json({
           ok: true,
           externalId,
-          contract: await inspectEstoqueNowDetail(externalId),
+          ...detail,
+          itemsBlocked:
+            Boolean(itemsChanged) &&
+            Boolean(current && (current.status !== "active" || current.events.length > 0)),
+          itemsToken: itemsTokenFor(detail.items),
         });
       } catch {
         return jsonError("Não foi possível ler o detalhe sanitizado no EstoqueNOW.", 502);

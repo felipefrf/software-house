@@ -4,7 +4,7 @@ set local role postgres;
 create extension if not exists pgtap with schema extensions;
 set local search_path = extensions, public;
 
-select plan(58);
+select plan(64);
 
 select has_table(
   'public',
@@ -555,6 +555,7 @@ select throws_ok(
       'Canário EstoqueNOW',
       'Destino externo válido',
       'Leitura externa validada',
+      '[]'::jsonb,
       null
     )
   $$,
@@ -620,6 +621,7 @@ select is(
     'Canário EstoqueNOW',
     'Destino externo válido',
     'Leitura externa validada',
+    '[{"id":"line-2","itemId":"item-2","orderId":"pedido-1","name":"Cadeira"},{"id":"line-1","itemId":"item-1","orderId":"pedido-1","name":"Mesa"}]'::jsonb,
     null
   ),
   'new',
@@ -636,7 +638,7 @@ select is(
 select results_eq(
   $$
     select c.order_id, c.return_at, c.address_city, c.delivery_status_type,
-      c.delivery_concluded, c.item_count
+      c.delivery_concluded, c.item_count, c.items
     from public.estoquenow_operation_contexts c
     join public.operations o on o.id = c.operation_id
     where o.external_id = 'external-canary-1'
@@ -647,7 +649,8 @@ select results_eq(
     'Salvador'::text,
     'pending'::text,
     false,
-    '12'::text
+    '12'::text,
+    '[{"id":"line-1","name":"Mesa","itemId":"item-1","orderId":"pedido-1"},{"id":"line-2","name":"Cadeira","itemId":"item-2","orderId":"pedido-1"}]'::jsonb
   )$$,
   'contexto preserva pedido, retorno, endereço, status e contagem'
 );
@@ -672,6 +675,7 @@ select is(
     'Canário EstoqueNOW',
     'Destino externo válido',
     'Leitura externa validada',
+    '[{"id":"line-1","itemId":"item-1","orderId":"pedido-1","name":"Mesa"},{"id":"line-2","itemId":"item-2","orderId":"pedido-1","name":"Cadeira"}]'::jsonb,
     '2026-09-02 12:05:00-03'::timestamptz
   ),
   'unchanged',
@@ -706,6 +710,7 @@ select is(
       "item_count":"12"
     }'::jsonb,
     'Canário EstoqueNOW', 'Destino externo válido', 'Leitura externa validada',
+    '[{"id":"line-1","itemId":"item-1","orderId":"pedido-alterado","name":"Mesa"},{"id":"line-2","itemId":"item-2","orderId":"pedido-alterado","name":"Cadeira"}]'::jsonb,
     '2026-09-02 12:06:00-03'::timestamptz
   ),
   'updated',
@@ -728,6 +733,7 @@ select throws_ok(
       '10000000-0000-4000-8000-000000000001',
       '{"order_id":"pedido-alterado"}'::jsonb,
       'Canário EstoqueNOW', 'Destino externo válido', '',
+      '[{"id":"line-1","itemId":"item-1","orderId":"pedido-alterado","name":"Mesa"},{"id":"line-2","itemId":"item-2","orderId":"pedido-alterado","name":"Cadeira"}]'::jsonb,
       '2026-09-02 12:06:00-03'
     )
   $$,
@@ -752,6 +758,7 @@ select throws_ok(
       '10000000-0000-4000-8000-000000000001',
       '{"order_id":"pedido-alterado"}'::jsonb,
       'Canário EstoqueNOW', 'Destino externo válido', '',
+      '[{"id":"line-1","itemId":"item-1","orderId":"pedido-alterado","name":"Mesa"},{"id":"line-2","itemId":"item-2","orderId":"pedido-alterado","name":"Cadeira"}]'::jsonb,
       '2026-09-02 12:07:00-03'
     )
   $$,
@@ -773,15 +780,117 @@ select is(
       "item_count":"12"
     }'::jsonb,
     'Canário EstoqueNOW', 'Destino externo válido', '',
+    '[{"id":"line-1","itemId":"item-1","orderId":"pedido-alterado","name":"Mesa"},{"id":"line-2","itemId":"item-2","orderId":"pedido-alterado","name":"Cadeira"}]'::jsonb,
     '2026-09-02 12:07:00-03'
   ),
   'updated',
   'operação concluída ainda atualiza somente status externo'
 );
+select is(
+  public.confirm_estoquenow_canary(
+    'external-canary-1', 'Canário EstoqueNOW', 'Destino externo válido',
+    '2026-09-02 12:00:00-03', '', '2026-09-02 12:09:15-03',
+    '10000000-0000-4000-8000-000000000001',
+    '{
+      "order_id":"pedido-alterado",
+      "return_at":"2026-09-03T18:00:00-03:00",
+      "address_city":"Salvador",
+      "delivery_status_type":"completed",
+      "delivery_concluded":true,
+      "item_count":"12"
+    }'::jsonb,
+    'Canário EstoqueNOW', 'Destino externo válido', '',
+    '[{"id":"line-2","itemId":"item-2","orderId":"pedido-alterado","name":"Cadeira"},{"id":"line-1","itemId":"item-1","orderId":"pedido-alterado","name":"Mesa"}]'::jsonb,
+    '2026-09-02 12:09:00-03'
+  ),
+  'unchanged',
+  'ordem diferente da mesma lista não cria divergência histórica'
+);
+select throws_ok(
+  $$
+    select public.confirm_estoquenow_canary(
+      'external-canary-1', 'Canário EstoqueNOW', 'Destino externo válido',
+      '2026-09-02 12:00:00-03', '', '2026-09-02 12:09:30-03',
+      '10000000-0000-4000-8000-000000000001',
+      '{"order_id":"pedido-alterado","delivery_status_type":"completed","delivery_concluded":true}'::jsonb,
+      'Canário EstoqueNOW', 'Destino externo válido', '',
+      '[{"id":"line-1","itemId":"item-1","orderId":"pedido-alterado","name":"Mesa alterada"}]'::jsonb,
+      '2026-09-02 12:09:15-03'
+    )
+  $$,
+  'P0001',
+  'historic item divergence',
+  'operação concluída não reescreve a lista histórica de equipamentos'
+);
 set local role postgres;
 update public.operations set status = 'active'
 where external_id = 'external-canary-1';
+set local role service_role;
+select is(
+  public.confirm_estoquenow_canary(
+    'external-canary-1', 'Canário EstoqueNOW', 'Destino externo válido',
+    '2026-09-02 12:00:00-03', '', '2026-09-02 12:10:00-03',
+    '10000000-0000-4000-8000-000000000001',
+    '{
+      "order_id":"pedido-alterado",
+      "return_at":"2026-09-03T18:00:00-03:00",
+      "address_city":"Salvador",
+      "delivery_status_type":"completed",
+      "delivery_concluded":true,
+      "item_count":"12"
+    }'::jsonb,
+    'Canário EstoqueNOW', 'Destino externo válido', '',
+    '[{"id":"line-1","itemId":"item-1","orderId":"pedido-alterado","name":"Mesa"},{"id":"line-2","itemId":"item-2","orderId":"pedido-alterado","name":"Cadeira dobrável"}]'::jsonb,
+    '2026-09-02 12:09:15-03'
+  ),
+  'updated',
+  'operação ativa recebe lista de equipamentos revisada'
+);
+set local role postgres;
+select ok(
+  (select jsonb_array_length(c.items) = 2
+      and c.items @> '[{"id":"line-2","name":"Cadeira dobrável"}]'::jsonb
+    from public.estoquenow_operation_contexts c
+    join public.operations o on o.id = c.operation_id
+    where o.external_id = 'external-canary-1')
+    and (select count(*) = 1 from public.operations where external_id = 'external-canary-1'),
+  'atualização de equipamentos preserva uma única operação e um único contexto'
+);
+set local role service_role;
+select throws_ok(
+  $$
+    select public.confirm_estoquenow_canary(
+      'external-canary-1', 'Canário EstoqueNOW', 'Destino externo válido',
+      '2026-09-02 12:00:00-03', '', '2026-09-02 12:11:00-03',
+      '10000000-0000-4000-8000-000000000001',
+      '{"order_id":"pedido-alterado","delivery_status_type":"completed","delivery_concluded":true}'::jsonb,
+      'Canário EstoqueNOW', 'Destino externo válido', '',
+      '[{"id":"line-1","itemId":"item-1","orderId":"pedido-alterado","name":"Mesa","extra":"indevido"}]'::jsonb,
+      '2026-09-02 12:10:00-03'
+    )
+  $$,
+  'P0001',
+  'invalid source items',
+  'RPC rejeita equipamento fora do schema observado'
+);
+select throws_ok(
+  $$
+    select public.confirm_estoquenow_canary(
+      'external-canary-1', 'Canário EstoqueNOW', 'Destino externo válido',
+      '2026-09-02 12:00:00-03', '', '2026-09-02 12:11:00-03',
+      '10000000-0000-4000-8000-000000000001',
+      '{"order_id":"pedido-alterado","delivery_status_type":"completed","delivery_concluded":true}'::jsonb,
+      'Canário EstoqueNOW', 'Destino externo válido', '',
+      '[{"id":"line-1","itemId":"item-1","orderId":"pedido-alterado","name":"Mesa"},{"id":" line-1 ","itemId":"item-2","orderId":"pedido-alterado","name":"Cadeira"}]'::jsonb,
+      '2026-09-02 12:10:00-03'
+    )
+  $$,
+  'P0001',
+  'invalid source items',
+  'RPC rejeita IDs duplicados após normalização'
+);
 
+set local role postgres;
 insert into public.operations (
   id, source, external_id, event_name, destination, scheduled_at, manager_id, notes, imported_at
 ) values (
@@ -800,6 +909,7 @@ select is(
     '{"order_id":"legado","address_street":"Rua A"}'::jsonb,
     'Operação legada',
     'Local · Salvador', 'Importado por leitura do EstoqueNOW. Pedido legado.',
+    '[]'::jsonb,
     '2026-09-02 11:00:00-03'::timestamptz
   ),
   'backfilled',
@@ -833,6 +943,7 @@ select throws_ok(
       '{"order_id":"legado"}'::jsonb,
       'Operação legada',
       'Local · Salvador', 'Importado por leitura do EstoqueNOW. Pedido legado.',
+      '[]'::jsonb,
       '2026-09-02 11:00:00-03'::timestamptz
     )
   $$,
@@ -866,6 +977,7 @@ select throws_ok(
       'Canário inválido',
       'Destino externo válido',
       'Leitura externa inválida',
+      '[]'::jsonb,
       null
     )
   $$,
@@ -880,7 +992,7 @@ select throws_ok(
       '2026-09-05 12:00:00-03'::timestamptz, '', now(),
       '10000000-0000-4000-8000-000000000001',
       '{"return_at":"2026-09-05T11:00:00-03:00"}'::jsonb,
-      'Canário inválido', 'Destino externo válido', '', null
+      'Canário inválido', 'Destino externo válido', '', '[]'::jsonb, null
     )
   $$,
   'P0001',
