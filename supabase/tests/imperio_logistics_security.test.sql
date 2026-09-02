@@ -1,5 +1,6 @@
 begin;
 
+set local role postgres;
 create extension if not exists pgtap with schema extensions;
 set local search_path = extensions, public;
 
@@ -73,6 +74,13 @@ values
     '40000000-0000-4000-8000-000000000001/60000000-0000-4000-8000-000000000002.jpg',
     '10000000-0000-4000-8000-000000000001',
     '10000000-0000-4000-8000-000000000001',
+    '{}'
+  ),
+  (
+    'operation-evidence',
+    '40000000-0000-4000-8000-000000000001/60000000-0000-4000-8000-000000000003.jpg',
+    '10000000-0000-4000-8000-000000000002',
+    '10000000-0000-4000-8000-000000000002',
     '{}'
   ),
   (
@@ -378,7 +386,7 @@ select throws_ok(
       'infinity'::double precision,
       '10000000-0000-4000-8000-000000000002',
       null,
-      'ignorado-no-gps-invalido'
+      '40000000-0000-4000-8000-000000000001/60000000-0000-4000-8000-000000000004.jpg'
     )
   $$,
   'P0001',
@@ -427,7 +435,7 @@ select throws_ok(
   'reenvio idempotente não vaza evento para usuário sem acesso'
 );
 
-reset role;
+set local role postgres;
 update public.profiles
 set must_change_password = true
 where id = '10000000-0000-4000-8000-000000000002';
@@ -444,7 +452,7 @@ select is(
   'senha temporária libera somente o próprio perfil'
 );
 
-reset role;
+set local role postgres;
 set local role service_role;
 select lives_ok(
   $$select count(*) from public.profiles$$,
@@ -455,7 +463,7 @@ select lives_ok(
   'service role atualiza somente perfis pelo backend validado'
 );
 
-reset role;
+set local role postgres;
 set local role authenticated;
 set local "request.jwt.claim.sub" = '10000000-0000-4000-8000-000000000001';
 select is(
@@ -561,7 +569,7 @@ select throws_ok(
   'gestor não altera ocorrência diretamente pela Data API'
 );
 
-reset role;
+set local role postgres;
 set local role service_role;
 select is(
   public.confirm_estoquenow_canary(
@@ -593,7 +601,7 @@ select throws_ok(
   'RPC rejeita horário externo não finito'
 );
 
-reset role;
+set local role postgres;
 set local role authenticated;
 set local "request.jwt.claim.sub" = '10000000-0000-4000-8000-000000000001';
 select throws_ok(
