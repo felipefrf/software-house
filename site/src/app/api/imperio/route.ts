@@ -34,6 +34,7 @@ const isOptionalUuid = (value?: string) => !value || isUuid(value);
 
 const validDateInput = (value: string) => isValidIsoDate(value);
 const SYNTHETIC_QA_NAMES = ["Canário logística", "Operação E2E domingo"];
+const QA_BACKUP_BUCKET = "imperio-qa-backup";
 
 type EstoqueNowImportRow = {
   source: "estoquenow";
@@ -405,42 +406,73 @@ export async function POST(request: Request) {
       }
 
       if (body.mode === "backup") {
-        const backupPrefix = `qa-backup/2026-09-02/${crypto.randomUUID()}`;
+        const bucket = await admin.storage.createBucket(QA_BACKUP_BUCKET, {
+          public: false,
+          fileSizeLimit: 10_000_000,
+          allowedMimeTypes: ["application/json", "image/jpeg", "image/png", "image/webp"],
+        });
+        if (bucket.error && !/already exists|duplicate/i.test(bucket.error.message))
+          return jsonError("Não foi possível preparar o backup privado.", 500);
+        const backupPrefix = `2026-09-02/${crypto.randomUUID()}`;
         const copied: string[] = [];
         for (const original of evidence) {
           const downloaded = await admin.storage.from("operation-evidence").download(original);
           if (downloaded.error) return jsonError("O backup de uma evidência falhou.", 500);
-          const backup = `${backupPrefix}/${original}`;
+          const backup = `${backupPrefix}/evidence/${original}`;
           const uploaded = await admin.storage
-            .from("operation-evidence")
+            .from(QA_BACKUP_BUCKET)
             .upload(backup, downloaded.data, { upsert: false });
           if (uploaded.error) {
             if (copied.length)
-              await admin.storage.from("operation-evidence").remove(copied);
+              await admin.storage.from(QA_BACKUP_BUCKET).remove(copied);
             return jsonError("O backup de uma evidência falhou.", 500);
           }
           copied.push(backup);
         }
+        const manifestPath = `${backupPrefix}/manifest.json`;
+        const manifest = await admin.storage.from(QA_BACKUP_BUCKET).upload(
+          manifestPath,
+          new Blob([
+            JSON.stringify({
+              exportedAt: new Date().toISOString(),
+              operations: operations.data,
+              events: events.data ?? [],
+              incidents: incidents.data ?? [],
+              evidence: evidence.map((original, index) => ({ original, backup: copied[index] })),
+            }),
+          ], { type: "application/json" }),
+          { contentType: "application/json", upsert: false },
+        );
+        if (manifest.error) {
+          if (copied.length) await admin.storage.from(QA_BACKUP_BUCKET).remove(copied);
+          return jsonError("Não foi possível salvar o manifesto do backup.", 500);
+        }
         return NextResponse.json({
           backupPrefix,
-          exportedAt: new Date().toISOString(),
-          operations: operations.data,
-          events: events.data ?? [],
-          incidents: incidents.data ?? [],
-          evidence: evidence.map((original, index) => ({ original, backup: copied[index] })),
+          counts: {
+            operations: operations.data.length,
+            events: events.data?.length ?? 0,
+            incidents: incidents.data?.length ?? 0,
+            evidence: copied.length,
+          },
         });
       }
 
       if (
         body.mode !== "delete" ||
-        !/^qa-backup\/2026-09-02\/[0-9a-f-]{36}$/i.test(body.backupPrefix ?? "")
+        !/^2026-09-02\/[0-9a-f-]{36}$/i.test(body.backupPrefix ?? "")
       )
         return jsonError("Confirmação do backup inválida.");
       const backupPrefix = body.backupPrefix ?? "";
+      const manifest = await admin.storage
+        .from(QA_BACKUP_BUCKET)
+        .download(`${backupPrefix}/manifest.json`);
+      if (manifest.error)
+        return jsonError("O manifesto do backup não confere; nenhuma linha foi removida.", 409);
       for (const operationId of operationIds) {
         const listed = await admin.storage
-          .from("operation-evidence")
-          .list(`${backupPrefix}/${operationId}`, { limit: 1_000 });
+          .from(QA_BACKUP_BUCKET)
+          .list(`${backupPrefix}/evidence/${operationId}`, { limit: 1_000 });
         const expected = evidence
           .filter((path) => path.startsWith(`${operationId}/`))
           .map((path) => path.slice(operationId.length + 1))
