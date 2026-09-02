@@ -24,10 +24,14 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import {
   checklistForStage,
+  isOperationalToday,
+  matchesOperationFilters,
   operationDateInput,
   operationDateTimeInput,
+  operationSignals,
   operationStages,
   operationTimestamp,
+  prioritizeOperations,
   stageLabels,
   stageState,
 } from "./action";
@@ -54,6 +58,7 @@ type Props = {
   busy: boolean;
   run: Run;
   refresh: () => Promise<void>;
+  refreshState: { lastUpdatedAt: string | null; failed: boolean };
 };
 
 type View =
@@ -119,6 +124,12 @@ const incidentStatusLabel: Record<Incident["status"], string> = {
   resolved: "Resolvida",
 };
 
+const riskLabel = {
+  critical: "Crítica",
+  attention: "Atenção",
+  ready: "Sem alerta detectado",
+};
+
 const sourceLabel = (operation: Operation) =>
   operation.source === "manual"
     ? "Manual interna · não originada do EstoqueNOW"
@@ -142,6 +153,31 @@ function Pill({
       className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${colors[tone]}`}
     >
       {children}
+    </span>
+  );
+}
+
+function OperationIndicators({
+  operation,
+  incidents,
+  showReady = false,
+}: {
+  operation: Operation;
+  incidents: Incident[];
+  showReady?: boolean;
+}) {
+  const signals = operationSignals(operation, incidents);
+  if (signals.risk === "ready")
+    return showReady ? <Pill tone="green">Sem alerta detectado</Pill> : null;
+  return (
+    <span className="flex flex-wrap gap-1.5">
+      {signals.criticalIncident && <Pill tone="red">Ocorrência crítica</Pill>}
+      {signals.delayed && <Pill tone="amber">Atraso</Pill>}
+      {signals.incompleteScale && <Pill tone="amber">Escala incompleta</Pill>}
+      {!signals.criticalIncident &&
+        !signals.delayed &&
+        !signals.incompleteScale &&
+        signals.unresolved.length > 0 && <Pill tone="amber">Ocorrência aberta</Pill>}
     </span>
   );
 }
@@ -241,11 +277,13 @@ function Empty({ children }: { children: React.ReactNode }) {
 
 function OperationList({
   operations,
+  incidents,
   selectedId,
   setSelectedId,
   compact = false,
 }: {
   operations: Operation[];
+  incidents: Incident[];
   selectedId: string;
   setSelectedId: (id: string) => void;
   compact?: boolean;
@@ -276,6 +314,9 @@ function OperationList({
             <small className="line-clamp-1 text-[#68776f]">
               {operation.destination}
             </small>
+            <span className="mt-2 block">
+              <OperationIndicators operation={operation} incidents={incidents} />
+            </span>
           </span>
           <span className={`${compact ? "col-start-2" : "col-start-1 row-start-3 md:col-auto md:row-auto"} text-sm`}>
             <span className="block font-medium">{stageLabels[operation.stage]}</span>
@@ -368,10 +409,14 @@ function OperationDetail({
   snapshot,
   operation,
   timelineLimit,
+  onOpenEvidence,
+  onOpenIncidents,
 }: {
   snapshot: LogisticsSnapshot;
   operation?: Operation;
   timelineLimit?: number;
+  onOpenEvidence?: () => void;
+  onOpenIncidents?: () => void;
 }) {
   const [focusedStage, setFocusedStage] = useState<OperationStage>(
     operation?.stage ?? "preparation",
@@ -380,6 +425,7 @@ function OperationDetail({
   const operationIncidents = snapshot.incidents.filter(
     (incident) => incident.operation_id === operation.id && incident.status !== "resolved",
   );
+  const signals = operationSignals(operation, snapshot.incidents);
   const orderedEvents = [...operation.events].sort(
     (left, right) =>
       Date.parse(right.server_received_at) - Date.parse(left.server_received_at),
@@ -413,6 +459,13 @@ function OperationDetail({
           {statusLabel[operation.status]}
         </Pill>
       </div>
+      <div className="mt-3">
+        <OperationIndicators
+          operation={operation}
+          incidents={snapshot.incidents}
+          showReady
+        />
+      </div>
       {operationIncidents.length > 0 && (
         <div className="mt-5 border-l-4 border-[#d69f38] bg-[#fff7e3] p-4 text-sm text-[#755615]">
           <p className="font-mono text-xs uppercase tracking-[0.14em]">
@@ -422,6 +475,15 @@ function OperationDetail({
             {operationIncidents.length} ocorrência(s) exige(m) decisão.
           </strong>
           <span className="mt-1 block">Revise a exceção na torre antes da próxima etapa.</span>
+          {onOpenIncidents && (
+            <button
+              type="button"
+              onClick={onOpenIncidents}
+              className="mt-3 min-h-11 rounded-lg border border-[#d3ad61] bg-white px-3 py-2 font-semibold"
+            >
+              Revisar ocorrências
+            </button>
+          )}
         </div>
       )}
       <a
@@ -464,7 +526,13 @@ function OperationDetail({
           <dt className="text-[#5f7067]">Próxima ação</dt>
           <dd className="font-medium">
             {operation.status === "active"
-              ? `Concluir ${stageLabels[operation.stage].toLowerCase()}`
+              ? signals.unresolved.length > 0
+                ? "Tratar ocorrência antes de avançar"
+                : signals.incompleteScale
+                  ? "Completar a escala operacional"
+                  : signals.delayed
+                    ? "Decidir o tratamento do atraso"
+                    : `Concluir ${stageLabels[operation.stage].toLowerCase()}`
               : statusLabel[operation.status]}
           </dd>
         </div>
@@ -475,19 +543,34 @@ function OperationDetail({
           <p className="text-sm text-[#5f7067]">Nenhuma ação confirmada no servidor.</p>
         )}
         {visibleEvents.map((event) => (
-          <TimelineEvent key={event.id} event={event} />
+          <TimelineEvent key={event.id} event={event} configured={snapshot.configured} />
         ))}
         {hiddenEvents > 0 && (
-          <p className="border-t border-[#e2e8e4] pt-3 text-sm font-medium text-[#5f7067]">
-            +{hiddenEvents} registro(s) disponível(is) em Evidências.
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#e2e8e4] pt-3 text-sm font-medium text-[#5f7067]">
+            <p>+{hiddenEvents} registro(s) disponível(is) em Evidências.</p>
+            {onOpenEvidence && (
+              <button
+                type="button"
+                onClick={onOpenEvidence}
+                className="min-h-11 rounded-lg border border-[#cad4cd] bg-white px-3 py-2 font-semibold text-[#294f43]"
+              >
+                Abrir evidências
+              </button>
+            )}
+          </div>
         )}
       </div>
     </article>
   );
 }
 
-function TimelineEvent({ event }: { event: OperationEvent }) {
+function TimelineEvent({
+  event,
+  configured,
+}: {
+  event: OperationEvent;
+  configured: boolean;
+}) {
   return (
     <div className="rounded-lg bg-[#f3f6f4] p-3 text-sm">
       <div className="flex flex-wrap justify-between gap-3">
@@ -496,7 +579,9 @@ function TimelineEvent({ event }: { event: OperationEvent }) {
             ? "Acesso bloqueado na chegada"
             : `${stageLabels[event.stage]} confirmada`}
         </strong>
-        <span className="text-[#38705f]">Confirmado pelo servidor</span>
+        <span className="text-[#38705f]">
+          {configured ? "Confirmado pelo servidor" : "Dado demonstrativo"}
+        </span>
       </div>
       <p className="mt-1 text-[#617068]">
         Executado por {event.actor_name} · {formatDate(event.server_received_at)} · {formatDuration(event.duration_seconds)}
@@ -526,29 +611,38 @@ function TimelineEvent({ event }: { event: OperationEvent }) {
   );
 }
 
-function TodayView(props: Props) {
+function TodayView(
+  props: Props & {
+    onOpenEvidence: (id: string) => void;
+    onOpenIncidents: (id: string) => void;
+    onOpenOperations: () => void;
+  },
+) {
   const { snapshot, selectedId, setSelectedId } = props;
-  const active = snapshot.operations.filter((operation) => operation.status === "active");
+  const active = snapshot.operations.filter((operation) =>
+    isOperationalToday(operation),
+  );
+  const prioritized = prioritizeOperations(active, snapshot.incidents);
   const selected =
-    active.find((operation) => operation.id === selectedId) ?? active[0];
-  const openIncidents = snapshot.incidents.filter((incident) => incident.status !== "resolved");
+    active.find((operation) => operation.id === selectedId) ?? prioritized[0];
   const unassigned = active.filter(
     (operation) => !operation.team_id || !operation.vehicle_id || !operation.driver_id,
   );
-  const metrics: [string, number, LucideIcon][] = [
-    ["Operações ativas", active.length, CircleGauge],
-    ["Ocorrências abertas", openIncidents.length, AlertTriangle],
-    ["Escalas incompletas", unassigned.length, Users],
-    [
-      "Concluídas",
-      snapshot.operations.filter((item) => item.status === "completed").length,
-      CheckCircle2,
-    ],
-  ];
-  const selectedIncident = openIncidents.find(
-    (incident) => incident.operation_id === selected?.id,
+  const delayed = active.filter(
+    (operation) => operationSignals(operation, snapshot.incidents).delayed,
   );
-  const selectedUnassigned = selected && unassigned.includes(selected);
+  const critical = active.filter(
+    (operation) => operationSignals(operation, snapshot.incidents).criticalIncident,
+  );
+  const decisionQueue = prioritized.filter(
+    (operation) => operationSignals(operation, snapshot.incidents).risk !== "ready",
+  );
+  const metrics: [string, number, LucideIcon][] = [
+    ["Ativas hoje", active.length, CircleGauge],
+    ["Críticas", critical.length, AlertTriangle],
+    ["Atrasos", delayed.length, CalendarDays],
+    ["Escalas incompletas", unassigned.length, Users],
+  ];
   return (
     <div>
       <div className="grid grid-cols-[minmax(0,1fr)_44px] items-end gap-4">
@@ -559,6 +653,15 @@ function TodayView(props: Props) {
           <h2 className="mt-1 text-3xl font-semibold tracking-tight">
             Próxima ação, sem ruído.
           </h2>
+          <p className="mt-2 text-sm text-[#5f7067]">
+            {!snapshot.configured
+              ? "Modo demonstrativo: os dados desta tela não são atualizados pelo servidor."
+              : props.refreshState.failed
+                ? "A atualização automática falhou. Use o botão para tentar novamente."
+                : props.refreshState.lastUpdatedAt
+                  ? `Atualizado em ${formatDate(props.refreshState.lastUpdatedAt)}. Nova leitura em até 30 segundos.`
+                  : "Atualização automática ativa a cada 30 segundos enquanto esta aba estiver visível."}
+          </p>
         </div>
         <button
           onClick={() => void props.run(props.refresh, "Torre atualizada.")}
@@ -585,71 +688,154 @@ function TodayView(props: Props) {
       </div>
 
       <div className="mt-5 grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_280px] xl:grid-cols-[minmax(0,1fr)_340px]">
-        <OperationDetail key={`${selected?.id}-${selected?.stage}`} snapshot={snapshot} operation={selected} timelineLimit={2} />
+        <OperationDetail
+          key={`${selected?.id}-${selected?.stage}`}
+          snapshot={snapshot}
+          operation={selected}
+          timelineLimit={2}
+          onOpenEvidence={selected ? () => props.onOpenEvidence(selected.id) : undefined}
+          onOpenIncidents={selected ? () => props.onOpenIncidents(selected.id) : undefined}
+        />
         <aside className="order-first min-w-0 space-y-4 lg:order-last">
+          <section>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="font-mono text-xs uppercase tracking-[0.14em] text-[#5f7067]">
+                  Fila de decisão
+                </p>
+                <h3 className="font-semibold">Bloqueios prioritários</h3>
+              </div>
+              <Pill tone={decisionQueue.length ? "amber" : "green"}>
+                {decisionQueue.length}
+              </Pill>
+            </div>
+            {decisionQueue.length ? (
+              <div className="overflow-hidden rounded-xl border border-[#d7dfd9] bg-white">
+                {decisionQueue.slice(0, 5).map((operation) => {
+                  const signals = operationSignals(operation, snapshot.incidents);
+                  return (
+                    <button
+                      type="button"
+                      key={operation.id}
+                      onClick={() => setSelectedId(operation.id)}
+                      className={`block min-h-11 w-full border-b border-[#e1e7e3] p-4 text-left last:border-b-0 hover:bg-[#f8faf8] ${selected?.id === operation.id ? "bg-[#fff9e9]" : ""}`}
+                    >
+                      <span className="block font-semibold">{operation.event_name}</span>
+                      <span className="mt-1 block text-sm text-[#5f7067]">
+                        {signals.criticalIncident
+                          ? "Ocorrência crítica exige tratamento"
+                          : signals.delayed
+                            ? "Atraso exige decisão operacional"
+                            : signals.incompleteScale
+                              ? "Equipe, veículo ou motorista pendente"
+                              : `${signals.unresolved.length} ocorrência(s) aberta(s)`}
+                      </span>
+                      <span className="mt-2 block">
+                        <OperationIndicators operation={operation} incidents={snapshot.incidents} />
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="border-l-4 border-[#2d7461] bg-[#edf6f2] p-4 text-sm text-[#285f50]">
+                Nenhum bloqueio detectado nas operações de hoje.
+              </p>
+            )}
+            {decisionQueue.length > 5 && (
+              <button type="button" onClick={props.onOpenOperations} className="mt-2 min-h-11 w-full rounded-lg px-3 py-2 text-sm font-semibold text-[#3d675b] underline underline-offset-4">
+                Ver todas as operações
+              </button>
+            )}
+          </section>
+
           <section>
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
                 <p className="font-mono text-xs uppercase tracking-[0.14em] text-[#5f7067]">
                   Agenda operacional
                 </p>
-                <h3 className="font-semibold">Operações em andamento</h3>
+                <h3 className="font-semibold">Hoje e atrasadas</h3>
               </div>
-              <Pill tone="green">{active.length} ativa(s)</Pill>
+              <Pill tone="neutral">{active.length}</Pill>
             </div>
-          <OperationList
-            operations={active}
-            selectedId={selected?.id ?? ""}
-            setSelectedId={setSelectedId}
-            compact
-          />
+            <OperationList
+              operations={prioritized.slice(0, 4)}
+              incidents={snapshot.incidents}
+              selectedId={selected?.id ?? ""}
+              setSelectedId={setSelectedId}
+              compact
+            />
+            {active.length > 4 && (
+              <button type="button" onClick={props.onOpenOperations} className="mt-2 min-h-11 w-full rounded-lg px-3 py-2 text-sm font-semibold text-[#3d675b] underline underline-offset-4">
+                Ver todas as operações
+              </button>
+            )}
           </section>
-
-          {selected && <section
-            className={`border-l-4 p-4 ${
-              selectedIncident
-                ? "border-[#d69f38] bg-[#fff7e3] text-[#755615]"
-                : selectedUnassigned
-                  ? "border-[#bd6d56] bg-[#fff0eb] text-[#7f4034]"
-                  : "border-[#2d7461] bg-[#edf6f2] text-[#285f50]"
-            }`}
-          >
-            <p className="font-mono text-xs uppercase tracking-[0.14em]">
-              Próxima decisão
-            </p>
-            <strong className="mt-2 block">
-              {selectedIncident
-                ? incidentTypeLabel[selectedIncident.type]
-                : selectedUnassigned
-                  ? "Completar a escala"
-                  : "Operação pronta para avançar"}
-            </strong>
-            <p className="mt-1 text-sm">
-              {selectedIncident
-                ? selectedIncident.description
-                : selectedUnassigned
-                  ? "Associe equipe, veículo e motorista antes da saída."
-                  : "Sem bloqueios abertos para a etapa atual."}
-            </p>
-          </section>}
         </aside>
       </div>
     </div>
   );
 }
 
-function OperationsView(props: Props & { openSelected?: boolean }) {
+function OperationsView(
+  props: Props & {
+    openSelected?: boolean;
+    onOpenEvidence: (id: string) => void;
+    onOpenIncidents: (id: string) => void;
+  },
+) {
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [stageFilter, setStageFilter] = useState("all");
   const [sourceFilter, setSourceFilter] = useState("all");
+  const [teamFilter, setTeamFilter] = useState("all");
+  const [vehicleFilter, setVehicleFilter] = useState("all");
+  const [riskFilter, setRiskFilter] = useState("all");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [detailOpen, setDetailOpen] = useState(Boolean(props.openSelected));
   const detailRef = useRef<HTMLDivElement>(null);
-  const filtered = props.snapshot.operations.filter(
-    (operation) =>
-      (stageFilter === "all" || operation.stage === stageFilter) &&
-      (sourceFilter === "all" || operation.source === sourceFilter),
+  const filters = {
+    query,
+    status: statusFilter,
+    stage: stageFilter,
+    source: sourceFilter,
+    teamId: teamFilter,
+    vehicleId: vehicleFilter,
+    risk: riskFilter,
+    startDate,
+    endDate,
+  };
+  const filtered = props.snapshot.operations.filter((operation) =>
+    matchesOperationFilters(operation, props.snapshot.incidents, filters),
   );
+  const hasFilters = Object.values(filters).some(
+    (value) => value !== "" && value !== "all",
+  );
+  const advancedFilterCount = [
+    teamFilter,
+    vehicleFilter,
+    stageFilter,
+    sourceFilter,
+    startDate,
+    endDate,
+  ].filter((value) => value !== "" && value !== "all").length;
   const selected =
-    filtered.find((operation) => operation.id === props.selectedId) ?? filtered[0];
+    filtered.find((operation) => operation.id === props.selectedId) ??
+    (detailOpen ? undefined : filtered[0]);
+
+  const resetFilters = () => {
+    setQuery("");
+    setStatusFilter("all");
+    setStageFilter("all");
+    setSourceFilter("all");
+    setTeamFilter("all");
+    setVehicleFilter("all");
+    setRiskFilter("all");
+    setStartDate("");
+    setEndDate("");
+  };
 
   useEffect(() => {
     if (!detailOpen || !detailRef.current || window.matchMedia("(min-width: 1280px)").matches)
@@ -700,34 +886,112 @@ function OperationsView(props: Props & { openSelected?: boolean }) {
           <p className="font-mono text-xs uppercase tracking-[0.16em] text-[#5f7067]">Operações</p>
           <h2 className="mt-1 text-3xl font-semibold tracking-tight">Planejamento e escala</h2>
         </div>
-        <div className="grid w-full gap-2 sm:w-auto sm:grid-cols-2">
+        <p className="text-sm text-[#5f7067]">{filtered.length} de {props.snapshot.operations.length} operação(ões)</p>
+      </div>
+      <section aria-label="Filtros de operações" className="mt-5 rounded-xl border border-[#d7dfd9] bg-white p-4">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <label className="sm:col-span-2 xl:col-span-4">
+            <span className="text-xs font-semibold text-[#5f7067]">Buscar operação</span>
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Evento, destino ou ID do EstoqueNOW"
+              className="mt-1 min-h-11 w-full rounded-lg border border-[#cbd4ce] bg-white px-3 py-2 text-sm"
+            />
+          </label>
+          <label>
+            <span className="text-xs font-semibold text-[#5f7067]">Status</span>
+            <select
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value)}
+              className="mt-1 min-h-11 w-full rounded-lg border border-[#cbd4ce] bg-white px-3 py-2 text-sm"
+            >
+              <option value="all">Todos os status</option>
+              <option value="active">Em operação</option>
+              <option value="completed">Concluídas</option>
+              <option value="cancelled">Canceladas</option>
+            </select>
+          </label>
+          <label>
+            <span className="text-xs font-semibold text-[#5f7067]">Risco operacional</span>
+            <select
+              value={riskFilter}
+              onChange={(event) => setRiskFilter(event.target.value)}
+              className="mt-1 min-h-11 w-full rounded-lg border border-[#cbd4ce] bg-white px-3 py-2 text-sm"
+            >
+              <option value="all">Todos os riscos</option>
+              {Object.entries(riskLabel).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <details className="group mt-3 rounded-lg border border-[#e1e7e3] bg-[#f8faf8] p-3">
+          <summary className="flex min-h-11 cursor-pointer items-center font-semibold text-[#3d675b]">
+            Filtros avançados{advancedFilterCount ? ` · ${advancedFilterCount} aplicado(s)` : ""}
+          </summary>
+          <div className="mt-3 hidden gap-3 border-t border-[#e1e7e3] pt-3 group-open:grid sm:grid-cols-2 xl:grid-cols-4">
+          <label>
+            <span className="text-xs font-semibold text-[#5f7067]">Equipe</span>
+            <select value={teamFilter} onChange={(event) => setTeamFilter(event.target.value)} className="mt-1 min-h-11 w-full rounded-lg border border-[#cbd4ce] bg-white px-3 py-2 text-sm">
+              <option value="all">Todas as equipes</option>
+              {props.snapshot.teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
+            </select>
+          </label>
+          <label>
+            <span className="text-xs font-semibold text-[#5f7067]">Veículo</span>
+            <select value={vehicleFilter} onChange={(event) => setVehicleFilter(event.target.value)} className="mt-1 min-h-11 w-full rounded-lg border border-[#cbd4ce] bg-white px-3 py-2 text-sm">
+              <option value="all">Todos os veículos</option>
+              {props.snapshot.vehicles.map((vehicle) => <option key={vehicle.id} value={vehicle.id}>{vehicle.name} · {vehicle.plate}</option>)}
+            </select>
+          </label>
+          <label>
+            <span className="text-xs font-semibold text-[#5f7067]">Etapa</span>
           <select
-            aria-label="Filtrar por etapa"
             value={stageFilter}
             onChange={(event) => setStageFilter(event.target.value)}
-            className="min-h-11 w-full rounded-lg border border-[#cbd4ce] bg-white px-3 py-2 text-sm"
+            className="mt-1 min-h-11 w-full rounded-lg border border-[#cbd4ce] bg-white px-3 py-2 text-sm"
           >
             <option value="all">Todas as etapas</option>
             {operationStages.map((stage) => (
               <option value={stage} key={stage}>{stageLabels[stage]}</option>
             ))}
           </select>
+          </label>
+          <label>
+            <span className="text-xs font-semibold text-[#5f7067]">Origem</span>
           <select
-            aria-label="Filtrar por origem"
             value={sourceFilter}
             onChange={(event) => setSourceFilter(event.target.value)}
-            className="min-h-11 w-full rounded-lg border border-[#cbd4ce] bg-white px-3 py-2 text-sm"
+            className="mt-1 min-h-11 w-full rounded-lg border border-[#cbd4ce] bg-white px-3 py-2 text-sm"
           >
             <option value="all">Todas as origens</option>
             <option value="manual">Manual interna</option>
             <option value="estoquenow">EstoqueNOW</option>
           </select>
+          </label>
+          <label>
+            <span className="text-xs font-semibold text-[#5f7067]">De</span>
+            <input type="date" value={startDate} max={endDate || undefined} onChange={(event) => setStartDate(event.target.value)} className="mt-1 min-h-11 w-full rounded-lg border border-[#cbd4ce] bg-white px-3 py-2 text-sm" />
+          </label>
+          <label>
+            <span className="text-xs font-semibold text-[#5f7067]">Até</span>
+            <input type="date" value={endDate} min={startDate || undefined} onChange={(event) => setEndDate(event.target.value)} className="mt-1 min-h-11 w-full rounded-lg border border-[#cbd4ce] bg-white px-3 py-2 text-sm" />
+          </label>
         </div>
-      </div>
+        </details>
+        {hasFilters && (
+          <button type="button" onClick={resetFilters} className="mt-3 min-h-11 rounded-lg px-3 py-2 text-sm font-semibold text-[#3d675b] underline underline-offset-4">
+            Limpar filtros
+          </button>
+        )}
+      </section>
       <div className={`mt-5 grid items-start gap-5 ${detailOpen ? "xl:grid-cols-[minmax(0,1fr)_430px]" : ""}`}>
         <div className="min-w-0 space-y-5">
           <OperationList
             operations={filtered}
+            incidents={props.snapshot.incidents}
             selectedId={selected?.id ?? ""}
             setSelectedId={(id) => {
               props.setSelectedId(id);
@@ -754,7 +1018,20 @@ function OperationsView(props: Props & { openSelected?: boolean }) {
         {detailOpen && (
         <div ref={detailRef} className="min-w-0 scroll-mt-20 space-y-3 xl:sticky xl:top-4">
           <button onClick={() => setDetailOpen(false)} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-[#cad4cd] bg-white px-3 text-sm font-semibold hover:bg-[#f4f7f5]"><X size={16} /> Fechar detalhe</button>
-          <OperationDetail key={`${selected?.id}-${selected?.stage}`} snapshot={props.snapshot} operation={selected} />
+          {selected ? (
+            <OperationDetail
+              key={`${selected.id}-${selected.stage}`}
+              snapshot={props.snapshot}
+              operation={selected}
+              onOpenEvidence={() => props.onOpenEvidence(selected.id)}
+              onOpenIncidents={() => props.onOpenIncidents(selected.id)}
+            />
+          ) : (
+            <Empty>
+              A operação selecionada está fora dos filtros. Limpe os filtros ou
+              escolha outra operação.
+            </Empty>
+          )}
           {selected && selected.status === "active" && (
             <form key={selected.id} onSubmit={update} className="rounded-xl border border-[#d7dfd9] bg-white p-5">
               <h3 className="text-lg font-semibold">Editar escala</h3>
@@ -796,9 +1073,8 @@ function OperationsView(props: Props & { openSelected?: boolean }) {
 
 function CalendarView({
   snapshot,
-  setSelectedId,
   onOpenOperation,
-}: Props & { onOpenOperation: () => void }) {
+}: Props & { onOpenOperation: (id: string) => void }) {
   const [reference, setReference] = useState(
     operationDateInput(
       new Date(
@@ -875,7 +1151,7 @@ function CalendarView({
                   <section key={`${key}-${slot}`} aria-label={`${key}, ${slot}:00`} className={`min-h-28 border-b border-r border-[#e1e7e3] p-2 last:border-r-0 ${weekend ? "bg-[#fffdf8]" : ""}`}>
                     <div className="space-y-2">
                       {operations.map((operation) => (
-                        <button key={operation.id} onClick={() => { setSelectedId(operation.id); onOpenOperation(); }} className="min-h-11 w-full rounded-lg bg-[#eef4f0] p-2 text-left text-xs hover:bg-[#e2eee7]">
+                        <button key={operation.id} onClick={() => onOpenOperation(operation.id)} className="min-h-11 w-full rounded-lg bg-[#eef4f0] p-2 text-left text-xs hover:bg-[#e2eee7]">
                           <strong className="block font-mono tabular-nums">{new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" }).format(new Date(operation.scheduled_at))}</strong>
                           <span className="mt-1 block font-semibold">{operation.event_name}</span>
                           <span className="text-[#5f7067]">{stageLabels[operation.stage]}</span>
@@ -1025,42 +1301,77 @@ function FleetView(props: Props) {
   );
 }
 
-function EvidenceView({ snapshot }: Props) {
-  const evidence = snapshot.operations.flatMap((operation) =>
+function EvidenceView({
+  snapshot,
+  onOpenOperation,
+  focusedOperationId,
+  onClearFocus,
+}: Props & {
+  onOpenOperation: (id: string) => void;
+  focusedOperationId: string | null;
+  onClearFocus: () => void;
+}) {
+  const allEvidence = snapshot.operations.flatMap((operation) =>
     operation.events.map((event) => ({ operation, event })),
+  );
+  const evidence = focusedOperationId
+    ? allEvidence.filter(({ operation }) => operation.id === focusedOperationId)
+    : allEvidence;
+  const focusedOperation = snapshot.operations.find(
+    (operation) => operation.id === focusedOperationId,
   );
   return (
     <div>
-      <div><p className="font-mono text-xs uppercase tracking-[0.16em] text-[#5f7067]">Evidências</p><h2 className="mt-1 text-3xl font-semibold tracking-tight">Registro confirmado por etapa</h2></div>
+      <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="font-mono text-xs uppercase tracking-[0.16em] text-[#5f7067]">Evidências</p><h2 className="mt-1 text-3xl font-semibold tracking-tight">Registro confirmado por etapa</h2>{focusedOperation && <p className="mt-2 text-sm text-[#5f7067]">Mostrando somente {focusedOperation.event_name}.</p>}</div>{focusedOperation && <button type="button" onClick={onClearFocus} className="min-h-11 rounded-lg border border-[#cad4cd] bg-white px-3 py-2 text-sm font-semibold">Ver todas as evidências</button>}</div>
       <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {evidence.map(({ operation, event }) => (
           <article key={event.id} className="overflow-hidden rounded-xl border border-[#d7dfd9] bg-white">
             {event.photo_url ? <a href={event.photo_url} target="_blank" rel="noreferrer" className="grid h-40 place-items-end bg-cover bg-center p-4 text-sm font-semibold text-white" style={{ backgroundImage: `linear-gradient(180deg, transparent 35%, rgba(17, 35, 29, .82)), url(${JSON.stringify(event.photo_url)})` }}><span className="flex items-center gap-2"><Camera size={18} />Abrir evidência</span></a> : <div className="grid h-28 place-items-center bg-[#edf1ee] text-xs text-[#5f7067]">Sem foto nesta etapa</div>}
-            <div className="p-4"><Pill tone="green">Servidor confirmado</Pill><h3 className="mt-3 font-semibold">{operation.event_name}</h3><p className="text-sm text-[#65746c]">{stageLabels[event.stage]} · executado por {event.actor_name}</p><p className="text-sm text-[#65746c]">Responsável: {event.responsible_name}</p><p className="mt-2 text-xs text-[#5f7067]">{formatDate(event.server_received_at)} · GPS {event.latitude.toFixed(5)}, {event.longitude.toFixed(5)}</p></div>
+            <div className="p-4"><Pill tone="green">{snapshot.configured ? "Servidor confirmado" : "Dado demonstrativo"}</Pill><h3 className="mt-3 font-semibold">{operation.event_name}</h3><p className="text-sm text-[#65746c]">{stageLabels[event.stage]} · executado por {event.actor_name}</p><p className="text-sm text-[#65746c]">Responsável: {event.responsible_name}</p><p className="mt-2 text-xs text-[#5f7067]">{formatDate(event.server_received_at)} · GPS {event.latitude.toFixed(5)}, {event.longitude.toFixed(5)}</p><button type="button" onClick={() => onOpenOperation(operation.id)} className="mt-3 min-h-11 rounded-lg border border-[#cad4cd] px-3 py-2 text-sm font-semibold">Abrir operação</button></div>
           </article>
         ))}
       </div>
-      {!evidence.length && <div className="mt-5"><Empty>Conclua uma etapa no app de campo para gerar a primeira evidência.</Empty></div>}
+      {!evidence.length && <div className="mt-5"><Empty>{focusedOperation ? "Esta operação ainda não possui evidências." : "Conclua uma etapa no app de campo para gerar a primeira evidência."}</Empty></div>}
     </div>
   );
 }
 
-function IncidentsView(props: Props) {
+function IncidentsView(
+  props: Props & {
+    onOpenOperation: (id: string) => void;
+    focusedOperationId: string | null;
+    onClearFocus: () => void;
+  },
+) {
+  const incidents = props.focusedOperationId
+    ? props.snapshot.incidents.filter(
+        (incident) => incident.operation_id === props.focusedOperationId,
+      )
+    : props.snapshot.incidents;
+  const unresolved = incidents.filter((incident) => incident.status !== "resolved");
+  const resolved = incidents.filter((incident) => incident.status === "resolved");
+  const focusedOperation = props.snapshot.operations.find(
+    (operation) => operation.id === props.focusedOperationId,
+  );
+  const renderIncident = (incident: Incident) => {
+    const operation = props.snapshot.operations.find(
+      (item) => item.id === incident.operation_id,
+    );
+    return (
+      <article key={incident.id} className="grid gap-4 rounded-xl border border-[#d7dfd9] bg-white p-4 lg:grid-cols-[1fr_180px]">
+        <div><div className="flex flex-wrap gap-2"><Pill tone={incident.severity === "high" ? "red" : incident.severity === "medium" ? "amber" : "neutral"}>{incident.severity === "high" ? "Alta" : incident.severity === "medium" ? "Média" : "Baixa"}</Pill><Pill>{incidentTypeLabel[incident.type]}</Pill></div><h3 className="mt-3 font-semibold">{operation?.event_name ?? "Operação"} · {stageLabels[incident.stage]}</h3><p className="mt-1 text-sm text-[#56675e]">{incident.description}</p>{incident.impact && <p className="mt-1 text-sm text-[#7a5911]">Impacto: {incident.impact}</p>}<p className="mt-2 text-xs text-[#5f7067]">{incident.actor_name} · {formatDate(incident.created_at)}</p>{incident.photo_url && <a href={incident.photo_url} target="_blank" rel="noreferrer" className="mt-2 inline-block text-sm font-semibold underline">Abrir foto</a>}</div>
+        <div><label className="text-xs font-semibold">Tratamento<select value={incident.status} disabled={!props.snapshot.configured || props.busy} onChange={(event) => void props.run(async () => { await postJson("update-incident-status", { id: incident.id, status: event.target.value }); await props.refresh(); }, "Ocorrência atualizada.")} className="mt-2 min-h-11 w-full rounded-lg border border-[#cbd4ce] bg-white px-3 py-2 text-sm"><option value="open">{incidentStatusLabel.open}</option><option value="handling">{incidentStatusLabel.handling}</option><option value="resolved">{incidentStatusLabel.resolved}</option></select></label>{operation && <button type="button" onClick={() => props.onOpenOperation(operation.id)} className="mt-3 min-h-11 w-full rounded-lg border border-[#cad4cd] px-3 py-2 text-sm font-semibold">Abrir operação</button>}</div>
+      </article>
+    );
+  };
   return (
     <div>
-      <div><p className="font-mono text-xs uppercase tracking-[0.16em] text-[#5f7067]">Ocorrências</p><h2 className="mt-1 text-3xl font-semibold tracking-tight">Exceções que exigem decisão</h2></div>
+      <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="font-mono text-xs uppercase tracking-[0.16em] text-[#5f7067]">Ocorrências</p><h2 className="mt-1 text-3xl font-semibold tracking-tight">Exceções que exigem decisão</h2>{focusedOperation && <p className="mt-2 text-sm text-[#5f7067]">Mostrando somente {focusedOperation.event_name}.</p>}</div>{focusedOperation && <button type="button" onClick={props.onClearFocus} className="min-h-11 rounded-lg border border-[#cad4cd] bg-white px-3 py-2 text-sm font-semibold">Ver todas as ocorrências</button>}</div>
       <div className="mt-5 space-y-3">
-        {props.snapshot.incidents.map((incident) => {
-          const operation = props.snapshot.operations.find((item) => item.id === incident.operation_id);
-          return (
-            <article key={incident.id} className="grid gap-4 rounded-xl border border-[#d7dfd9] bg-white p-4 lg:grid-cols-[1fr_180px]">
-              <div><div className="flex flex-wrap gap-2"><Pill tone={incident.severity === "high" ? "red" : incident.severity === "medium" ? "amber" : "neutral"}>{incident.severity === "high" ? "Alta" : incident.severity === "medium" ? "Média" : "Baixa"}</Pill><Pill>{incidentTypeLabel[incident.type]}</Pill></div><h3 className="mt-3 font-semibold">{operation?.event_name ?? "Operação"} · {stageLabels[incident.stage]}</h3><p className="mt-1 text-sm text-[#56675e]">{incident.description}</p>{incident.impact && <p className="mt-1 text-sm text-[#7a5911]">Impacto: {incident.impact}</p>}<p className="mt-2 text-xs text-[#5f7067]">{incident.actor_name} · {formatDate(incident.created_at)}</p>{incident.photo_url && <a href={incident.photo_url} target="_blank" rel="noreferrer" className="mt-2 inline-block text-sm font-semibold underline">Abrir foto</a>}</div>
-              <label className="text-xs font-semibold">Tratamento<select value={incident.status} disabled={!props.snapshot.configured || props.busy} onChange={(event) => void props.run(async () => { await postJson("update-incident-status", { id: incident.id, status: event.target.value }); await props.refresh(); }, "Ocorrência atualizada.")} className="mt-2 min-h-11 w-full rounded-lg border border-[#cbd4ce] bg-white px-3 py-2 text-sm"><option value="open">{incidentStatusLabel.open}</option><option value="handling">{incidentStatusLabel.handling}</option><option value="resolved">{incidentStatusLabel.resolved}</option></select></label>
-            </article>
-          );
-        })}
-        {!props.snapshot.incidents.length && <Empty>Nenhuma ocorrência registrada.</Empty>}
+        {unresolved.map(renderIncident)}
+        {!unresolved.length && <Empty>Nenhuma ocorrência aberta nesta visão.</Empty>}
       </div>
+      {resolved.length > 0 && <details className="mt-5 rounded-xl border border-[#d7dfd9] bg-white p-4"><summary className="flex min-h-11 cursor-pointer items-center font-semibold">Histórico resolvido · {resolved.length}</summary><div className="mt-3 space-y-3 border-t border-[#e1e7e3] pt-3">{resolved.map(renderIncident)}</div></details>}
     </div>
   );
 }
@@ -1124,8 +1435,8 @@ function IntegrationsView(props: Props) {
           ? "Leitura externa · aguardando primeiro canário"
           : "Somente leitura · aguardando credenciais",
     ],
-    ["Pessoas, equipes e frota", "Império", "Cadastro persistente ativo"],
-    ["Etapas, GPS, fotos e ocorrências", "Império", "Registro persistente ativo"],
+    ["Pessoas, equipes e frota", "Império", props.snapshot.configured ? "Cadastro persistente ativo" : "Dado demonstrativo"],
+    ["Etapas, GPS, fotos e ocorrências", "Império", props.snapshot.configured ? "Registro persistente ativo" : "Dado demonstrativo"],
     ["Entrega, devolução e inventário", "EstoqueNOW", "Escrita desabilitada"],
   ];
   return (
@@ -1226,6 +1537,17 @@ function IntegrationsView(props: Props) {
 export function WebDashboard(props: Props) {
   const [view, setView] = useState<View>("today");
   const [openSelectedOperation, setOpenSelectedOperation] = useState(false);
+  const [contextOperationId, setContextOperationId] = useState<string | null>(null);
+  const openOperation = (id: string) => {
+    props.setSelectedId(id);
+    setContextOperationId(null);
+    setOpenSelectedOperation(true);
+    setView("operations");
+  };
+  const openContext = (next: "evidence" | "incidents", id: string) => {
+    setContextOperationId(id);
+    setView(next);
+  };
   const navigation: [View, string, typeof CircleGauge][] = [
     ["today", "Hoje", CircleGauge],
     ["operations", "Operações", ListChecks],
@@ -1237,13 +1559,13 @@ export function WebDashboard(props: Props) {
     ["integrations", "Integrações", Link2],
   ];
   const content = {
-    today: <TodayView {...props} />,
-    operations: <OperationsView {...props} openSelected={openSelectedOperation} />,
-    calendar: <CalendarView {...props} onOpenOperation={() => { setOpenSelectedOperation(true); setView("operations"); }} />,
+    today: <TodayView {...props} onOpenEvidence={(id) => openContext("evidence", id)} onOpenIncidents={(id) => openContext("incidents", id)} onOpenOperations={() => { setOpenSelectedOperation(false); setView("operations"); }} />,
+    operations: <OperationsView {...props} openSelected={openSelectedOperation} onOpenEvidence={(id) => openContext("evidence", id)} onOpenIncidents={(id) => openContext("incidents", id)} />,
+    calendar: <CalendarView {...props} onOpenOperation={openOperation} />,
     people: <PeopleView {...props} />,
     fleet: <FleetView {...props} />,
-    evidence: <EvidenceView {...props} />,
-    incidents: <IncidentsView {...props} />,
+    evidence: <EvidenceView {...props} onOpenOperation={openOperation} focusedOperationId={contextOperationId} onClearFocus={() => setContextOperationId(null)} />,
+    incidents: <IncidentsView {...props} onOpenOperation={openOperation} focusedOperationId={contextOperationId} onClearFocus={() => setContextOperationId(null)} />,
     integrations: <IntegrationsView {...props} />,
   };
   return (
@@ -1251,7 +1573,7 @@ export function WebDashboard(props: Props) {
       <aside className="sticky top-0 z-30 overflow-x-auto border-b border-[#d7dfd9] bg-white p-2 lg:min-h-[calc(100vh-96px)] lg:border-b-0 lg:border-r lg:p-4">
         <nav className="flex gap-1 lg:flex-col" aria-label="Torre web">
           {navigation.map(([id, label, Icon]) => (
-            <button key={id} onClick={() => { if (id === "operations") setOpenSelectedOperation(false); setView(id); }} aria-pressed={view === id} className={`flex min-h-11 min-w-max items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium ${view === id ? "bg-[#eaf2ed] text-[#1e5948]" : "text-[#5f7067] hover:bg-[#f5f7f5]"}`}><Icon size={17} />{label}</button>
+            <button key={id} onClick={() => { setContextOperationId(null); if (id === "operations") setOpenSelectedOperation(false); setView(id); }} aria-pressed={view === id} className={`flex min-h-11 min-w-max items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium ${view === id ? "bg-[#eaf2ed] text-[#1e5948]" : "text-[#5f7067] hover:bg-[#f5f7f5]"}`}><Icon size={17} />{label}</button>
           ))}
         </nav>
       </aside>

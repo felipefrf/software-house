@@ -3,6 +3,7 @@
 import { LogOut, Monitor, Smartphone, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { prioritizeOperations } from "./action";
 import { FieldApp } from "./field-app";
 import type { LogisticsSnapshot } from "./types";
 import { WebDashboard } from "./web-dashboard";
@@ -136,11 +137,16 @@ export function LogisticsWorkspace({
   const [surface, setSurface] = useState<"web" | "field">(
     initialSnapshot.user?.role === "worker" ? "field" : initialSurface,
   );
-  const [selectedId, setSelectedId] = useState(
-    initialSnapshot.operations[0]?.id ?? "",
+  const [selectedId, setSelectedId] = useState(() =>
+    prioritizeOperations(
+      initialSnapshot.operations.filter((operation) => operation.status === "active"),
+      initialSnapshot.incidents,
+    )[0]?.id ?? initialSnapshot.operations[0]?.id ?? "",
   );
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
+  const [refreshFailed, setRefreshFailed] = useState(false);
   const refreshInFlightRef = useRef<Promise<void> | null>(null);
   const refreshRequestedRef = useRef(false);
 
@@ -157,12 +163,20 @@ export function LogisticsWorkspace({
             throw new Error("Não foi possível atualizar o sistema.");
           const fresh = (await response.json()) as LogisticsSnapshot;
           setSnapshot(fresh);
+          setLastUpdatedAt(new Date().toISOString());
+          setRefreshFailed(false);
           setSelectedId((current) =>
             fresh.operations.some((operation) => operation.id === current)
               ? current
-              : (fresh.operations[0]?.id ?? ""),
+              : (prioritizeOperations(
+                  fresh.operations.filter((operation) => operation.status === "active"),
+                  fresh.incidents,
+                )[0]?.id ?? fresh.operations[0]?.id ?? ""),
           );
         }
+      } catch (error) {
+        setRefreshFailed(true);
+        throw error;
       } finally {
         refreshInFlightRef.current = null;
       }
@@ -355,6 +369,7 @@ export function LogisticsWorkspace({
           busy={busy}
           run={run}
           refresh={refresh}
+          refreshState={{ lastUpdatedAt, failed: refreshFailed }}
         />
       ) : (
         <FieldApp

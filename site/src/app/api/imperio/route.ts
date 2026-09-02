@@ -687,27 +687,42 @@ export async function POST(request: Request) {
         const uploaded = await supabase.storage
           .from("operation-evidence")
           .upload(photoPath, photo, { contentType: photo.type, upsert: false });
-        if (uploaded.error) return jsonError("Não foi possível armazenar a foto.", 500);
+        if (
+          uploaded.error &&
+          uploaded.error.statusCode !== "409" &&
+          !/already exists|duplicate/i.test(uploaded.error.message)
+        )
+          return jsonError("Não foi possível armazenar a foto.", 500);
       }
-      const inserted = await supabase.from("incidents").insert({
-        id: incidentId,
-        operation_id: operationId,
-        stage: stageValue,
-        type: incidentType,
-        severity,
-        impact: text(form.get("impact")) || null,
-        description,
-        actor_id: auth.user.id,
-        responsible_id: responsibleId || null,
-        latitude: location?.latitude ?? null,
-        longitude: location?.longitude ?? null,
-        accuracy: location?.accuracy ?? null,
-        photo_path: photoPath,
+      const inserted = await supabase.rpc("create_operation_incident", {
+        p_incident_id: incidentId,
+        p_operation_id: operationId,
+        p_stage: stageValue,
+        p_type: incidentType,
+        p_severity: severity,
+        p_impact: text(form.get("impact")) || null,
+        p_description: description,
+        p_responsible_id: responsibleId || null,
+        p_latitude: location?.latitude ?? null,
+        p_longitude: location?.longitude ?? null,
+        p_accuracy: location?.accuracy ?? null,
+        p_photo_path: photoPath,
       });
       if (inserted.error) {
         if (photoPath) await supabase.storage.from("operation-evidence").remove([photoPath]);
         throw inserted.error;
       }
+      const incident = inserted.data as {
+        id?: string;
+        operation_id?: string;
+        actor_id?: string;
+      } | null;
+      if (
+        incident?.id !== incidentId ||
+        incident.operation_id !== operationId ||
+        incident.actor_id !== auth.user.id
+      )
+        throw new Error("Confirmação de ocorrência inválida.");
       return NextResponse.json({ ok: true }, { status: 201 });
     }
 

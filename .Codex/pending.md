@@ -1,3 +1,4 @@
 - [ ] Credenciais e contrato real do EstoqueNOW ainda não recebidos — bloqueiam smoke test somente leitura, importação canário e substituição dos dados sintéticos. Obter URL, `client_id`, `client_secret` e amostra da resposta de logística quando Maiara enviar.
-- [ ] Infraestrutura de produção da Império pendente — bloqueia go-live com dados reais. Criar projetos Supabase e Vercel, aplicar migrations/pgTAP e validar o fluxo em celular real.
+- [x] Infraestrutura gratuita da Império criada no Supabase e na Vercel, com Auth, Storage e migrations de produção aplicados e portal público validado.
+- [ ] App Expo implementado para iOS/Android, mas o piloto nativo ainda exige smoke em celular físico com login, câmera, GPS, fila offline e conflito no Supabase real; depois configurar EAS e credenciais Apple/Google para publicar nas lojas.
 - [x] Revisão visual Impeccable concluída no protótipo estático — fluxos desktop/mobile revisados, achados corrigidos e `DESIGN.md` gerado; execução automatizada via `file://` permaneceu indisponível.

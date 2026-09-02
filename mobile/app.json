@@ -1,0 +1,42 @@
+{
+  "expo": {
+    "name": "Império Logística",
+    "slug": "imperio-logistica",
+    "version": "1.0.0",
+    "scheme": "imperiologistica",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.imperioeventos.logistica"
+    },
+    "android": {
+      "package": "com.imperioeventos.logistica",
+      "adaptiveIcon": {
+        "backgroundColor": "#173d34",
+        "foregroundImage": "./assets/android-icon-foreground.png"
+      },
+      "predictiveBackGestureEnabled": true
+    },
+    "web": { "favicon": "./assets/favicon.png" },
+    "plugins": [
+      "expo-router",
+      "expo-sqlite",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Permita que a Império registre a evidência fotográfica da operação.",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Permita que a Império registre o local e a precisão desta ação operacional."
+        }
+      ]
+    ],
+    "experiments": { "typedRoutes": true }
+  }
+}

@@ -42,3 +42,38 @@ test("a torre distingue quem executou de quem ficou responsável", async () => {
   assert.match(dashboard, /Executado por \{event\.actor_name\}/);
   assert.match(dashboard, /Responsável: \{event\.responsible_name\}/);
 });
+
+test("a torre 1B expõe busca, filtros, decisões e navegação cruzada", async () => {
+  const dashboard = await readFile(
+    new URL("./web-dashboard.tsx", import.meta.url),
+    "utf8",
+  );
+  const workspace = await readFile(
+    new URL("./workspace.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(dashboard, /Buscar operação/);
+  assert.match(dashboard, /Risco operacional/);
+  assert.match(dashboard, /Bloqueios prioritários/);
+  assert.match(dashboard, /Abrir operação/);
+  assert.match(dashboard, /Atualização automática ativa a cada 30 segundos/);
+  assert.match(dashboard, /Modo demonstrativo: os dados desta tela não são atualizados/);
+  assert.match(dashboard, /Filtros avançados/);
+  assert.match(dashboard, /group-open:grid/);
+  assert.match(dashboard, /Mostrando somente/);
+  assert.match(dashboard, /Histórico resolvido/);
+  assert.match(dashboard, /A operação selecionada está fora dos filtros/);
+  assert.match(workspace, /window\.setInterval\(refreshWhenVisible, 30_000\)/);
+  assert.match(workspace, /prioritizeOperations/);
+});
+
+test("ocorrências passam pela RPC idempotente", async () => {
+  const route = await readFile(
+    new URL("../../api/imperio/route.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(route, /rpc\("create_operation_incident"/);
+  assert.doesNotMatch(route, /from\("incidents"\)\.insert/);
+});

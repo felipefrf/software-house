@@ -1,4 +1,9 @@
-import type { OperationStage, OperationStatus } from "./types";
+import type {
+  Incident,
+  Operation,
+  OperationStage,
+  OperationStatus,
+} from "./types";
 
 export const operationStages: OperationStage[] = [
   "preparation",
@@ -122,6 +127,106 @@ export const operationDateTimeInput = (value: string) => {
 
 export const operationTimestamp = (value: string) =>
   new Date(`${value}:00-03:00`).toISOString();
+
+export const isOperationalToday = (operation: Operation, now = new Date()) =>
+  operation.status === "active" &&
+  operationDateInput(new Date(operation.scheduled_at)) <= operationDateInput(now);
+
+export type OperationRisk = "critical" | "attention" | "ready";
+
+export const operationSignals = (
+  operation: Operation,
+  incidents: Incident[],
+  now = Date.now(),
+) => {
+  const unresolved = incidents.filter(
+    (incident) =>
+      incident.operation_id === operation.id && incident.status !== "resolved",
+  );
+  const incompleteScale =
+    operation.status === "active" &&
+    (!operation.team_id || !operation.vehicle_id || !operation.driver_id);
+  const delayed =
+    operation.status === "active" &&
+    (Boolean(operation.waiting_since) ||
+      unresolved.some((incident) => incident.type === "delay") ||
+      (operation.stage === "preparation" &&
+        Date.parse(operation.scheduled_at) < now));
+  const criticalIncident = unresolved.some(
+    (incident) => incident.severity === "high",
+  );
+  const risk: OperationRisk = criticalIncident
+    ? "critical"
+    : delayed || incompleteScale || unresolved.length > 0
+      ? "attention"
+      : "ready";
+
+  return { criticalIncident, delayed, incompleteScale, risk, unresolved };
+};
+
+export type OperationFilters = {
+  query: string;
+  status: string;
+  stage: string;
+  source: string;
+  teamId: string;
+  vehicleId: string;
+  risk: string;
+  startDate: string;
+  endDate: string;
+};
+
+const searchable = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLocaleLowerCase("pt-BR");
+
+export const matchesOperationFilters = (
+  operation: Operation,
+  incidents: Incident[],
+  filters: OperationFilters,
+  now = Date.now(),
+) => {
+  const query = searchable(filters.query.trim());
+  const scheduledDate = operationDateInput(new Date(operation.scheduled_at));
+  return (
+    (!query ||
+      searchable(
+        `${operation.event_name} ${operation.destination} ${operation.external_id ?? ""}`,
+      ).includes(query)) &&
+    (filters.status === "all" || operation.status === filters.status) &&
+    (filters.stage === "all" || operation.stage === filters.stage) &&
+    (filters.source === "all" || operation.source === filters.source) &&
+    (filters.teamId === "all" || operation.team_id === filters.teamId) &&
+    (filters.vehicleId === "all" || operation.vehicle_id === filters.vehicleId) &&
+    (filters.risk === "all" ||
+      operationSignals(operation, incidents, now).risk === filters.risk) &&
+    (!filters.startDate || scheduledDate >= filters.startDate) &&
+    (!filters.endDate || scheduledDate <= filters.endDate)
+  );
+};
+
+export const prioritizeOperations = (
+  operations: Operation[],
+  incidents: Incident[],
+  now = Date.now(),
+) =>
+  [...operations].sort((left, right) => {
+    const priority = (operation: Operation) => {
+      const signals = operationSignals(operation, incidents, now);
+      return (
+        Number(signals.criticalIncident) * 8 +
+        Number(signals.delayed) * 4 +
+        Number(signals.incompleteScale) * 2 +
+        Number(signals.unresolved.length > 0)
+      );
+    };
+    return (
+      priority(right) - priority(left) ||
+      Date.parse(left.scheduled_at) - Date.parse(right.scheduled_at)
+    );
+  });
 
 export const localOutboxKey = (userId: string) =>
   `imperio-logistics-outbox-v2:${userId}`;

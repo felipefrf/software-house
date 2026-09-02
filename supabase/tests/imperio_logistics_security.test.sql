@@ -3,7 +3,7 @@ begin;
 create extension if not exists pgtap with schema extensions;
 set local search_path = extensions, public;
 
-select plan(29);
+select plan(38);
 
 insert into auth.users (id, email, raw_user_meta_data)
 values
@@ -80,6 +80,20 @@ values
     '40000000-0000-4000-8000-000000000001/60000000-0000-4000-8000-000000000004.jpg',
     '10000000-0000-4000-8000-000000000002',
     '10000000-0000-4000-8000-000000000002',
+    '{}'
+  ),
+  (
+    'operation-evidence',
+    '40000000-0000-4000-8000-000000000001/incident-50000000-0000-4000-8000-000000000002.jpg',
+    '10000000-0000-4000-8000-000000000002',
+    '10000000-0000-4000-8000-000000000002',
+    '{}'
+  ),
+  (
+    'operation-evidence',
+    '40000000-0000-4000-8000-000000000001/incident-50000000-0000-4000-8000-000000000004.jpg',
+    '10000000-0000-4000-8000-000000000001',
+    '10000000-0000-4000-8000-000000000001',
     '{}'
   );
 
@@ -181,6 +195,131 @@ select is(
   ),
   1::bigint,
   'reenvio idempotente não duplica evento'
+);
+set local "request.jwt.claim.sub" = '10000000-0000-4000-8000-000000000004';
+select throws_ok(
+  $$
+    select public.confirm_operation_action(
+      '40000000-0000-4000-8000-000000000001',
+      '60000000-0000-4000-8000-000000000001',
+      'preparation', now(), '{}'::jsonb, 0, 0, 0,
+      '10000000-0000-4000-8000-000000000004', null, 'ignorado-no-reenvio'
+    )
+  $$,
+  'P0001',
+  'device action unavailable',
+  'outro participante não assume o reenvio confirmado'
+);
+set local "request.jwt.claim.sub" = '10000000-0000-4000-8000-000000000002';
+select throws_ok(
+  $$
+    select public.confirm_operation_action(
+      '40000000-0000-4000-8000-000000000001',
+      '60000000-0000-4000-8000-000000000002',
+      'departure', now(),
+      '{
+        "Motorista e veículo confirmados":true,
+        "Toda a equipe presente":true,
+        "Carga fotografada e conferida":true
+      }'::jsonb,
+      -23.5, -46.6, 10,
+      '10000000-0000-4000-8000-000000000002', null,
+      '40000000-0000-4000-8000-000000000001/60000000-0000-4000-8000-000000000002.jpg'
+    )
+  $$,
+  'P0001',
+  'photo owner mismatch',
+  'ação não usa foto enviada por outro participante'
+);
+select throws_ok(
+  $$
+    insert into public.incidents (
+      operation_id, stage, type, severity, description, actor_id
+    ) values (
+      '40000000-0000-4000-8000-000000000001', 'departure', 'delay', 'low',
+      'Inserção direta indevida', '10000000-0000-4000-8000-000000000002'
+    )
+  $$,
+  '42501',
+  'permission denied for table incidents',
+  'funcionário não contorna a RPC inserindo ocorrência diretamente'
+);
+select lives_ok(
+  $$
+    select public.create_operation_incident(
+      '50000000-0000-4000-8000-000000000002',
+      '40000000-0000-4000-8000-000000000001',
+      'departure', 'damage', 'high', 'Atraso estimado de 10 minutos',
+      'Avaria identificada durante a saída',
+      '10000000-0000-4000-8000-000000000002',
+      -23.5, -46.6, 8,
+      '40000000-0000-4000-8000-000000000001/incident-50000000-0000-4000-8000-000000000002.jpg'
+    )
+  $$,
+  'RPC registra ocorrência válida com evidência própria'
+);
+select lives_ok(
+  $$
+    select public.create_operation_incident(
+      '50000000-0000-4000-8000-000000000002',
+      '40000000-0000-4000-8000-000000000001',
+      'departure', 'damage', 'high', 'Atraso estimado de 10 minutos',
+      'Avaria identificada durante a saída',
+      '10000000-0000-4000-8000-000000000002',
+      -23.5, -46.6, 8,
+      '40000000-0000-4000-8000-000000000001/incident-50000000-0000-4000-8000-000000000002.jpg'
+    )
+  $$,
+  'reenvio idempotente retorna ocorrência existente'
+);
+select is(
+  (
+    select count(*) from public.incidents
+    where id = '50000000-0000-4000-8000-000000000002'
+  ),
+  1::bigint,
+  'reenvio idempotente não duplica ocorrência'
+);
+select throws_ok(
+  $$
+    select public.create_operation_incident(
+      '50000000-0000-4000-8000-000000000002',
+      '40000000-0000-4000-8000-000000000001',
+      'departure', 'damage', 'low', 'Impacto divergente',
+      'Relato divergente com o mesmo identificador', null,
+      null, null, null, null
+    )
+  $$,
+  'P0001',
+  'incident divergence',
+  'reenvio idempotente rejeita conteúdo divergente'
+);
+select throws_ok(
+  $$
+    select public.create_operation_incident(
+      '50000000-0000-4000-8000-000000000003',
+      '40000000-0000-4000-8000-000000000001',
+      'departure', 'missing_item', 'medium', null,
+      'Item faltante sem evidência', null, null, null, null, null
+    )
+  $$,
+  'P0001',
+  'photo required',
+  'RPC exige foto para falta ou avaria'
+);
+select throws_ok(
+  $$
+    select public.create_operation_incident(
+      '50000000-0000-4000-8000-000000000004',
+      '40000000-0000-4000-8000-000000000001',
+      'departure', 'damage', 'medium', null,
+      'Tentativa com foto de outro autor', null, null, null, null,
+      '40000000-0000-4000-8000-000000000001/incident-50000000-0000-4000-8000-000000000004.jpg'
+    )
+  $$,
+  'P0001',
+  'photo owner mismatch',
+  'ocorrência não usa foto enviada por outro participante'
 );
 select throws_ok(
   $$
