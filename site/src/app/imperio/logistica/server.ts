@@ -7,6 +7,7 @@ import type {
   LogisticsSnapshot,
   Operation,
   OperationEvent,
+  OperationItemCheck,
   Person,
   Team,
   Vehicle,
@@ -168,6 +169,7 @@ const demoSnapshot = (): LogisticsSnapshot => ({
       notes: "Dado demonstrativo. Acesso lateral liberado pela produção.",
       imported_at: null,
       waiting_since: ago(12),
+      item_checks: [],
       events: [
         demoEvent(1, "preparation", 126, "Diego Alves", "/imperio/hero-operation.png"),
         demoEvent(2, "departure", 88, "Diego Alves", "/imperio/real-corporativo.jpeg"),
@@ -193,6 +195,7 @@ const demoSnapshot = (): LogisticsSnapshot => ({
       notes: "Dado demonstrativo com escala propositalmente incompleta.",
       imported_at: null,
       waiting_since: null,
+      item_checks: [],
       events: [],
     },
     {
@@ -214,6 +217,7 @@ const demoSnapshot = (): LogisticsSnapshot => ({
       notes: "Dado demonstrativo. Conferir poltrona sinalizada antes da entrega.",
       imported_at: null,
       waiting_since: null,
+      item_checks: [],
       events: [
         demoEvent(4, "preparation", 260, "Rafael Souza", "/imperio/real-debutante.jpeg"),
         demoEvent(5, "departure", 220, "Rafael Souza"),
@@ -240,6 +244,7 @@ const demoSnapshot = (): LogisticsSnapshot => ({
       notes: "Dado demonstrativo. Retorno conferido sem divergências.",
       imported_at: null,
       waiting_since: null,
+      item_checks: [],
       events: [
         demoEvent(8, "inspection", 1_280, "Lucas Martins", "/imperio/event-white.jpg", "Devolução conferida."),
       ],
@@ -263,6 +268,7 @@ const demoSnapshot = (): LogisticsSnapshot => ({
       notes: "Dado demonstrativo. Carga conferida e pronta para saída.",
       imported_at: null,
       waiting_since: null,
+      item_checks: [],
       events: [demoEvent(9, "preparation", 54, "Rafael Souza")],
     },
     {
@@ -284,6 +290,7 @@ const demoSnapshot = (): LogisticsSnapshot => ({
       notes: "Dado demonstrativo. Equipe em deslocamento pela Via Dutra.",
       imported_at: null,
       waiting_since: null,
+      item_checks: [],
       events: [
         demoEvent(10, "preparation", 102, "Diego Alves"),
         demoEvent(11, "departure", 66, "Diego Alves"),
@@ -308,6 +315,7 @@ const demoSnapshot = (): LogisticsSnapshot => ({
       notes: "Dado demonstrativo. Aguardando aceite do produtor no salão.",
       imported_at: null,
       waiting_since: null,
+      item_checks: [],
       events: [
         demoEvent(12, "arrival", 82, "Rafael Souza"),
         demoEvent(13, "assembly", 36, "Camila Rocha", "/imperio/event-garden.jpg"),
@@ -332,6 +340,7 @@ const demoSnapshot = (): LogisticsSnapshot => ({
       notes: "Dado demonstrativo. Retorno parcial com itens já conferidos.",
       imported_at: null,
       waiting_since: null,
+      item_checks: [],
       events: [demoEvent(14, "disassembly", 74, "Lucas Martins")],
     },
     {
@@ -353,6 +362,7 @@ const demoSnapshot = (): LogisticsSnapshot => ({
       notes: "Dado demonstrativo para visualizar o estado cancelado.",
       imported_at: null,
       waiting_since: null,
+      item_checks: [],
       events: [],
     },
   ],
@@ -458,7 +468,7 @@ export async function getAppSnapshot(): Promise<LogisticsSnapshot> {
       estoquenow: getEstoqueNowStatus(),
     };
 
-  const [profilesResult, teamsResult, membersResult, vehiclesResult, operationsResult, eventsResult, incidentsResult] =
+  const [profilesResult, teamsResult, membersResult, vehiclesResult, operationsResult, itemChecksResult, eventsResult, incidentsResult] =
     await Promise.all([
       supabase
         .from("profiles")
@@ -476,6 +486,9 @@ export async function getAppSnapshot(): Promise<LogisticsSnapshot> {
           "id,source,external_id,event_name,destination,scheduled_at,stage,status,stage_started_at,completed_at,cancel_reason,manager_id,team_id,vehicle_id,driver_id,notes,imported_at,waiting_since,estoquenow_context:estoquenow_operation_contexts(order_id,protocol,source_version,return_at,venue,address_zipcode,address_street,address_number,address_complement,address_neighborhood,address_city,address_state,delivery_status_id,delivery_status_type,delivery_concluded,return_status_id,return_status_type,return_concluded,item_count,order_type,logistic_type_id,items)",
         )
         .order("scheduled_at"),
+      supabase
+        .from("operation_item_checks")
+        .select("operation_id,source_item_id,checked_by,checked_at"),
       supabase
         .from("operation_events")
         .select(
@@ -496,6 +509,7 @@ export async function getAppSnapshot(): Promise<LogisticsSnapshot> {
     membersResult.error ??
     vehiclesResult.error ??
     operationsResult.error ??
+    itemChecksResult.error ??
     eventsResult.error ??
     incidentsResult.error;
   if (error) throw new Error("Não foi possível carregar a operação persistida.");
@@ -557,9 +571,11 @@ export async function getAppSnapshot(): Promise<LogisticsSnapshot> {
     }),
   );
 
-  const operations = ((operationsResult.data ?? []) as unknown as Omit<Operation, "events">[]).map(
+  const itemChecks = (itemChecksResult.data ?? []) as OperationItemCheck[];
+  const operations = ((operationsResult.data ?? []) as unknown as Omit<Operation, "events" | "item_checks">[]).map(
     (operation) => ({
       ...operation,
+      item_checks: itemChecks.filter((item) => item.operation_id === operation.id),
       events: events
         .filter((entry) => entry.operationId === operation.id)
         .map((entry) => entry.event),

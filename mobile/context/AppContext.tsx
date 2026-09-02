@@ -36,7 +36,7 @@ import {
   syncOne,
   syncPending,
 } from "@/lib/sync";
-import type { IncidentDraft, OutboxAction, WorkData } from "@/lib/types";
+import type { EstoqueNowOperationContext, IncidentDraft, OutboxAction, WorkData } from "@/lib/types";
 
 type AppContextValue = {
   configured: boolean;
@@ -56,6 +56,11 @@ type AppContextValue = {
   retry: (deviceActionId?: string) => Promise<void>;
   discard: (deviceActionId: string) => Promise<void>;
   createIncident: (draft: IncidentDraft) => Promise<void>;
+  setItemChecked: (
+    operationId: string,
+    item: EstoqueNowOperationContext["items"][number],
+    checked: boolean,
+  ) => Promise<void>;
   setMessage: (message: string) => void;
 };
 
@@ -377,6 +382,21 @@ export function AppProvider({ children }: PropsWithChildren) {
       await withBusy(async () => {
         await insertIncident(session.user.id, draft);
         setMessage("Ocorrência registrada e enviada à torre.");
+      });
+    },
+    setItemChecked: async (operationId, item, checked) => {
+      const client = supabase;
+      if (!client || !session || !online)
+        throw new Error("Conecte o aparelho para atualizar a conferência.");
+      await withBusy(async () => {
+        const result = await client.rpc("set_operation_item_checked", {
+          p_operation_id: operationId,
+          p_item_snapshot: item,
+          p_checked: checked,
+        });
+        if (result.error) throw new Error("Não foi possível atualizar este item.");
+        await refreshRemote();
+        setMessage(checked ? "Item conferido." : "Conferência removida.");
       });
     },
   };

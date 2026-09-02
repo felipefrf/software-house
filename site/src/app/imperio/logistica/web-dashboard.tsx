@@ -35,6 +35,7 @@ import {
   stageLabels,
   stageState,
 } from "./action";
+import { ItemManifest } from "./item-manifest";
 import { StageRail } from "./stage-rail";
 import type {
   Incident,
@@ -131,9 +132,11 @@ type EstoqueNowDetailPreview = {
   itemsToken: string;
   itemsChanged: boolean;
   itemsBlocked: boolean;
+  checksReset: number;
   items: Array<{ id: string; itemId: string; orderId: string; name: string }>;
   contract: {
     fields: Array<{ path: string; signatures: string[]; occurrences: number }>;
+    mediaFields: Array<{ path: string; signatures: string[]; occurrences: number }>;
   };
 };
 
@@ -444,12 +447,18 @@ function StageFocus({
 function OperationDetail({
   snapshot,
   operation,
+  busy,
+  run,
+  refresh,
   timelineLimit,
   onOpenEvidence,
   onOpenIncidents,
 }: {
   snapshot: LogisticsSnapshot;
   operation?: Operation;
+  busy: boolean;
+  run: Run;
+  refresh: () => Promise<void>;
   timelineLimit?: number;
   onOpenEvidence?: () => void;
   onOpenIncidents?: () => void;
@@ -530,16 +539,15 @@ function OperationDetail({
               </dd>
             </div>
           </dl>
-          {operation.estoquenow_context.items.length > 0 && (
-            <details className="bg-[#f8faf8] p-3 text-sm">
-              <summary className="min-h-11 cursor-pointer py-2 font-semibold">Equipamentos importados · {operation.estoquenow_context.items.length}</summary>
-              <ul className="mt-2 grid gap-2 sm:grid-cols-2">
-                {operation.estoquenow_context.items.map((item) => <li key={item.id} className="rounded-md bg-white p-2">{item.name}</li>)}
-              </ul>
-            </details>
-          )}
         </div>
       )}
+      <ItemManifest
+        operation={operation}
+        configured={snapshot.configured}
+        busy={busy}
+        run={run}
+        refresh={refresh}
+      />
       {operationIncidents.length > 0 && (
         <div className="mt-5 border-l-4 border-[#d69f38] bg-[#fff7e3] p-4 text-sm text-[#755615]">
           <p className="font-mono text-xs uppercase tracking-[0.14em]">
@@ -766,6 +774,9 @@ function TodayView(
           key={`${selected?.id}-${selected?.stage}`}
           snapshot={snapshot}
           operation={selected}
+          busy={props.busy}
+          run={props.run}
+          refresh={props.refresh}
           timelineLimit={2}
           onOpenEvidence={selected ? () => props.onOpenEvidence(selected.id) : undefined}
           onOpenIncidents={selected ? () => props.onOpenIncidents(selected.id) : undefined}
@@ -1097,6 +1108,9 @@ function OperationsView(
               key={`${selected.id}-${selected.stage}`}
               snapshot={props.snapshot}
               operation={selected}
+              busy={props.busy}
+              run={props.run}
+              refresh={props.refresh}
               onOpenEvidence={() => props.onOpenEvidence(selected.id)}
               onOpenIncidents={() => props.onOpenIncidents(selected.id)}
             />
@@ -1611,11 +1625,18 @@ function IntegrationsView(props: Props) {
                 <div className="mt-2 max-h-64 divide-y divide-[#e1e7e3] overflow-auto text-xs">
                   {detailPreview.contract.fields.map((field) => <p key={field.path} className="grid gap-1 py-2 sm:grid-cols-[minmax(0,1fr)_auto]"><code className="break-all">{field.path}</code><span className="text-[#5f7067]">{field.signatures.join(" | ")} · {field.occurrences}x</span></p>)}
                 </div>
+                <p className="mt-4 text-sm font-semibold">Campos de mídia candidatos · {detailPreview.contract.mediaFields.length}</p>
+                {detailPreview.contract.mediaFields.length > 0 ? (
+                  <div className="mt-2 divide-y divide-[#e1e7e3] text-xs">
+                    {detailPreview.contract.mediaFields.map((field) => <p key={field.path} className="grid gap-1 py-2 sm:grid-cols-[minmax(0,1fr)_auto]"><code className="break-all">{field.path}</code><span className="text-[#5f7067]">{field.signatures.join(" | ")} · {field.occurrences}x</span></p>)}
+                  </div>
+                ) : <p className="mt-2 text-xs text-[#5f7067]">Nenhum campo estável de foto foi confirmado neste detalhe.</p>}
                 <p className="mt-4 text-sm font-semibold">Linhas de item · {detailPreview.items.length}</p>
                 <ul className="mt-2 max-h-64 divide-y divide-[#e1e7e3] overflow-auto text-sm">
                   {detailPreview.items.map((item) => <li key={item.id} className="py-2"><strong>{item.name}</strong><span className="ml-2 font-mono text-xs text-[#5f7067]">item {item.itemId}</span></li>)}
                 </ul>
                 {detailPreview.itemsBlocked && <p className="mt-3 rounded-lg bg-[#fff1ee] p-3 text-xs font-semibold text-[#8a3c2d]">A lista histórica difere e está protegida contra reescrita.</p>}
+                {detailPreview.checksReset > 0 && <p className="mt-3 rounded-lg bg-[#fff3d1] p-3 text-xs font-semibold text-[#705817]">{detailPreview.checksReset} conferência(ões) será(ão) redefinida(s), porque o equipamento mudou na origem.</p>}
               </details>
             )}
             <details className="mt-5 rounded-lg border border-[#dce3de] bg-[#f8faf8] p-4">

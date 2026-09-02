@@ -87,3 +87,19 @@ test("reenvio de ação exige o mesmo ator", async () => {
   assert.match(route, /select\("id,operation_id,stage,actor_id"\)/);
   assert.match(route, /existing\.data\.actor_id !== auth\.user\.id/);
 });
+
+test("manifesto de carga expõe progresso e checkbox acessível", async () => {
+  const manifest = await readFile(
+    new URL("./item-manifest.tsx", import.meta.url),
+    "utf8",
+  );
+  const route = await readFile(
+    new URL("../../api/imperio/route.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(manifest, /role="progressbar"/);
+  assert.match(manifest, /type="checkbox"/);
+  assert.match(manifest, /Foto não disponível/);
+  assert.match(route, /rpc\("set_operation_item_checked"/);
+});

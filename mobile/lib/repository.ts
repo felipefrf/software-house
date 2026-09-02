@@ -2,6 +2,7 @@ import { supabase } from "./supabase";
 import type {
   Operation,
   OperationEvent,
+  OperationItemCheck,
   Profile,
   Team,
   Vehicle,
@@ -11,7 +12,7 @@ import type {
 export async function loadRemoteWork(userId: string): Promise<WorkData> {
   if (!supabase) throw new Error("Configure o Supabase antes de entrar.");
 
-  const [profile, people, teams, members, vehicles, operations, events] =
+  const [profile, people, teams, members, vehicles, operations, itemChecks, events] =
     await Promise.all([
       supabase
         .from("profiles")
@@ -35,6 +36,9 @@ export async function loadRemoteWork(userId: string): Promise<WorkData> {
         )
         .order("scheduled_at"),
       supabase
+        .from("operation_item_checks")
+        .select("operation_id,source_item_id,checked_by,checked_at"),
+      supabase
         .from("operation_events")
         .select(
           "id,operation_id,device_action_id,stage,event_type,state,device_captured_at,server_received_at,latitude,longitude,accuracy,note,photo_path,actor_id,responsible_id",
@@ -49,6 +53,7 @@ export async function loadRemoteWork(userId: string): Promise<WorkData> {
     members.error ??
     vehicles.error ??
     operations.error ??
+    itemChecks.error ??
     events.error;
   if (error) throw new Error(error.message);
   if (!profile.data) throw new Error("Perfil autenticado não encontrado.");
@@ -69,7 +74,14 @@ export async function loadRemoteWork(userId: string): Promise<WorkData> {
       }),
     ),
     vehicles: (vehicles.data ?? []) as Vehicle[],
-    operations: (operations.data ?? []) as unknown as Operation[],
+    operations: ((operations.data ?? []) as unknown as Omit<Operation, "item_checks">[]).map(
+      (operation) => ({
+        ...operation,
+        item_checks: ((itemChecks.data ?? []) as OperationItemCheck[]).filter(
+          (item) => item.operation_id === operation.id,
+        ),
+      }),
+    ),
     events: (events.data ?? []) as OperationEvent[],
     fetchedAt: new Date().toISOString(),
   };

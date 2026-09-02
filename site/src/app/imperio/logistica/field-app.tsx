@@ -22,6 +22,7 @@ import {
   localOutboxKey,
   stageLabels,
 } from "./action";
+import { ItemManifest } from "./item-manifest";
 import { StageRail } from "./stage-rail";
 import type { LogisticsSnapshot, PendingAction } from "./types";
 import {
@@ -517,9 +518,16 @@ export function FieldApp(props: Props) {
                   ? ` · ${selected.estoquenow_context.item_count} item(ns)`
                   : ""}
               </p>
-              {selected.estoquenow_context.items.length > 0 && <details className="mt-2"><summary className="min-h-11 cursor-pointer py-2 font-semibold">Linhas de item · {selected.estoquenow_context.items.length}</summary><ul className="list-disc space-y-1 pl-5">{selected.estoquenow_context.items.map((item) => <li key={item.id}>{item.name}</li>)}</ul></details>}
               </div>
             )}
+            <ItemManifest
+              operation={selected}
+              configured={props.snapshot.configured}
+              busy={props.busy}
+              online={online}
+              refresh={props.refresh}
+              run={props.run}
+            />
             <StageRail operation={selected} />
             <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
               <div className="rounded-lg bg-[#f2f5f3] p-3">

@@ -248,8 +248,8 @@ test("inspeciona detalhe por GET e normaliza somente os itens permitidos", async
     return Response.json({
       id: "123",
       order_items: [
-        { id: "row-2", item_id: "item-2", order_id: "order-1", item_name: "Cadeira" },
-        { id: "row-1", item_id: "item-1", order_id: "order-1", item_name: "Mesa" },
+        { id: "row-2", item_id: "item-2", order_id: "order-1", item_name: "Cadeira", product_image: "https://media.example/cadeira.jpg?secret=redacted", alice_photo: "privado" },
+        { id: "row-1", item_id: "item-1", order_id: "order-1", item_name: "Mesa", product_image: null, alice_photo: "privado" },
       ],
       private_dynamic_map: { Alice: "valor privado" },
     });
@@ -259,13 +259,16 @@ test("inspeciona detalhe por GET e normaliza somente os itens permitidos", async
   assert.deepEqual(paths, ["/v1/logistic/123"]);
   assert.deepEqual(
     inspection.contract.fields.map((field) => field.path),
-    ["[redacted].[redacted]", "id", "order_items.[].id", "order_items.[].item_id", "order_items.[].item_name", "order_items.[].order_id"],
+    ["[redacted].[redacted]", "id", "order_items.[].[redacted]", "order_items.[].id", "order_items.[].item_id", "order_items.[].item_name", "order_items.[].order_id"],
   );
   assert.deepEqual(inspection.items, [
     { id: "row-1", itemId: "item-1", orderId: "order-1", name: "Mesa" },
     { id: "row-2", itemId: "item-2", orderId: "order-1", name: "Cadeira" },
   ]);
-  assert.equal(/Alice|valor privado/.test(JSON.stringify(inspection)), false);
+  assert.deepEqual(inspection.contract.mediaFields, [
+    { path: "order_items.[].product_image", signatures: ["https-url", "null"], occurrences: 2 },
+  ]);
+  assert.equal(/Alice|alice|valor privado|media\.example|secret/.test(JSON.stringify(inspection)), false);
   await assert.rejects(() => client.inspectLogisticDetail(""), /INVALID_LOGISTIC_ID/);
 });
 

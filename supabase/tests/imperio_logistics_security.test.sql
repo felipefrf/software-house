@@ -4,7 +4,7 @@ set local role postgres;
 create extension if not exists pgtap with schema extensions;
 set local search_path = extensions, public;
 
-select plan(64);
+select plan(78);
 
 select has_table(
   'public',
@@ -1014,6 +1014,183 @@ select throws_ok(
   'P0001',
   'source fields immutable',
   'escala interna não altera campos canônicos do EstoqueNOW'
+);
+
+set local role postgres;
+select has_table(
+  'public',
+  'operation_item_checks',
+  'estado interno de conferência dos itens existe'
+);
+select is(
+  (select relrowsecurity from pg_catalog.pg_class where oid = 'public.operation_item_checks'::regclass),
+  true,
+  'conferência dos itens usa RLS'
+);
+select ok(
+  has_table_privilege('authenticated', 'public.operation_item_checks', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.operation_item_checks', 'INSERT')
+    and not has_table_privilege('authenticated', 'public.operation_item_checks', 'UPDATE')
+    and not has_table_privilege('authenticated', 'public.operation_item_checks', 'DELETE'),
+  'authenticated lê conferência, mas não grava diretamente'
+);
+select ok(
+  has_function_privilege('authenticated', 'public.set_operation_item_checked(uuid,jsonb,boolean)', 'EXECUTE')
+    and not has_function_privilege('authenticated', 'public.set_operation_item_checked(uuid,text,boolean)', 'EXECUTE')
+    and not has_function_privilege('anon', 'public.set_operation_item_checked(uuid,jsonb,boolean)', 'EXECUTE')
+    and not has_function_privilege('service_role', 'public.set_operation_item_checked(uuid,jsonb,boolean)', 'EXECUTE'),
+  'somente usuário autenticado executa o RPC de conferência'
+);
+
+insert into public.operations (
+  id, source, external_id, event_name, destination, scheduled_at,
+  manager_id, team_id, status, imported_at
+) values (
+  '40000000-0000-4000-8000-000000000012', 'estoquenow', 'external-checks-1',
+  'Conferência de equipamentos', 'Destino de teste', now(),
+  '10000000-0000-4000-8000-000000000001',
+  '20000000-0000-4000-8000-000000000001', 'active', now()
+);
+insert into public.estoquenow_operation_contexts (operation_id, items)
+values (
+  '40000000-0000-4000-8000-000000000012',
+  '[{"id":"line-a","itemId":"item-a","orderId":"order-a","name":"Mesa"},{"id":"line-b","itemId":"item-b","orderId":"order-a","name":"Cadeira"}]'::jsonb
+);
+
+set local role authenticated;
+set local "request.jwt.claim.sub" = '10000000-0000-4000-8000-000000000001';
+select throws_ok(
+  $$
+    insert into public.operation_item_checks (
+      operation_id, source_item_id, checked_by
+    ) values (
+      '40000000-0000-4000-8000-000000000012', 'line-a',
+      '10000000-0000-4000-8000-000000000001'
+    )
+  $$,
+  '42501',
+  'permission denied for table operation_item_checks',
+  'cliente não grava conferência diretamente'
+);
+select is(
+  public.set_operation_item_checked(
+    '40000000-0000-4000-8000-000000000012',
+    '{"id":"line-a","itemId":"item-a","orderId":"order-a","name":"Mesa"}'::jsonb,
+    true
+  ),
+  'checked',
+  'gestor marca item da operação acessível'
+);
+
+set local role postgres;
+select ok(
+  (select checked_by = '10000000-0000-4000-8000-000000000001'
+      and checked_at not in ('infinity'::timestamptz, '-infinity'::timestamptz)
+    from public.operation_item_checks
+    where operation_id = '40000000-0000-4000-8000-000000000012'
+      and source_item_id = 'line-a'),
+  'ator e horário vêm do banco, não do cliente'
+);
+
+set local role authenticated;
+set local "request.jwt.claim.sub" = '10000000-0000-4000-8000-000000000001';
+select is(
+  public.set_operation_item_checked(
+    '40000000-0000-4000-8000-000000000012',
+    '{"id":"line-a","itemId":"item-a","orderId":"order-a","name":"Mesa"}'::jsonb,
+    true
+  ),
+  'unchanged',
+  'repetir a mesma marcação é idempotente'
+);
+select throws_ok(
+  $$
+    select public.set_operation_item_checked(
+      '40000000-0000-4000-8000-000000000012',
+      '{"id":"line-a","itemId":"item-a","orderId":"order-a","name":"Mesa antiga"}'::jsonb,
+      false
+    )
+  $$,
+  'P0001',
+  'source item unavailable',
+  'tela obsoleta não altera item que mudou mantendo o mesmo ID'
+);
+
+set local role postgres;
+update public.profiles set must_change_password = false
+where id = '10000000-0000-4000-8000-000000000002';
+set local role authenticated;
+set local "request.jwt.claim.sub" = '10000000-0000-4000-8000-000000000002';
+select is(
+  public.set_operation_item_checked(
+    '40000000-0000-4000-8000-000000000012',
+    '{"id":"line-b","itemId":"item-b","orderId":"order-a","name":"Cadeira"}'::jsonb,
+    true
+  ),
+  'checked',
+  'funcionário escalado confere item da própria operação'
+);
+
+set local role authenticated;
+set local "request.jwt.claim.sub" = '10000000-0000-4000-8000-000000000003';
+select throws_ok(
+  $$
+    select public.set_operation_item_checked(
+      '40000000-0000-4000-8000-000000000012',
+      '{"id":"line-a","itemId":"item-a","orderId":"order-a","name":"Mesa"}'::jsonb,
+      false
+    )
+  $$,
+  'P0001',
+  'forbidden',
+  'usuário fora da escala não altera a conferência'
+);
+
+set local role authenticated;
+set local "request.jwt.claim.sub" = '10000000-0000-4000-8000-000000000001';
+select throws_ok(
+  $$
+    select public.set_operation_item_checked(
+      '40000000-0000-4000-8000-000000000001',
+      '{"id":"line-a","itemId":"item-a","orderId":"order-a","name":"Mesa"}'::jsonb,
+      true
+    )
+  $$,
+  'P0001',
+  'forbidden',
+  'operação manual não aceita item externo'
+);
+
+set local role postgres;
+update public.operations set status = 'completed'
+where id = '40000000-0000-4000-8000-000000000012';
+set local role authenticated;
+set local "request.jwt.claim.sub" = '10000000-0000-4000-8000-000000000001';
+select throws_ok(
+  $$
+    select public.set_operation_item_checked(
+      '40000000-0000-4000-8000-000000000012',
+      '{"id":"line-a","itemId":"item-a","orderId":"order-a","name":"Mesa"}'::jsonb,
+      false
+    )
+  $$,
+  'P0001',
+  'forbidden',
+  'operação encerrada mantém checklist somente para leitura'
+);
+
+set local role postgres;
+update public.operations set status = 'active'
+where id = '40000000-0000-4000-8000-000000000012';
+update public.estoquenow_operation_contexts
+set items = '[{"id":"line-a","itemId":"item-a","orderId":"order-a","name":"Mesa alterada"}]'::jsonb
+where operation_id = '40000000-0000-4000-8000-000000000012';
+select ok(
+  not exists (
+    select 1 from public.operation_item_checks
+    where operation_id = '40000000-0000-4000-8000-000000000012'
+  ),
+  'refresh da origem remove item ausente e redefine check de equipamento alterado'
 );
 
 select * from finish();

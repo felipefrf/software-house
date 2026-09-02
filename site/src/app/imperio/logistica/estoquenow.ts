@@ -51,6 +51,7 @@ export type EstoqueNowContract = {
 
 export type EstoqueNowDetailContract = {
   fields: Array<{ path: string; signatures: string[]; occurrences: number }>;
+  mediaFields: Array<{ path: string; signatures: string[]; occurrences: number }>;
 };
 
 export type EstoqueNowItem = {
@@ -97,6 +98,15 @@ const SAFE_DETAIL_KEYS = new Set([
   "unit", "sku", "category", "type", "type_name", "status_id", "status_name",
   "status_type", "is_concluded", "movement_date", "movement_time",
 ]);
+const MEDIA_KEY_PARTS = new Set([
+  "product", "item", "photo", "foto", "image", "img", "imagem", "thumb",
+  "thumbnail", "media", "file", "arquivo", "url", "uri", "path", "src",
+  "attachment", "anexo", "id", "name",
+]);
+const isMediaKey = (key: string) =>
+  /^[a-z][a-z0-9_]{0,63}$/.test(key) &&
+  /photo|foto|image|img|imagem|thumb|media|file|arquivo|anexo/.test(key) &&
+  key.split("_").every((part) => MEDIA_KEY_PARTS.has(part));
 
 const asObject = (value: unknown): JsonObject | null =>
   value !== null && typeof value === "object" && !Array.isArray(value)
@@ -128,6 +138,47 @@ const signature = (value: unknown) => {
   if (/^\d{4}-\d{2}-\d{2}[T ]/.test(value)) return "datetime";
   if (/^(manha|tarde|noite)$/i.test(value)) return "turno";
   return "string";
+};
+
+const mediaSignature = (value: unknown) => {
+  if (value === null) return "null";
+  if (Array.isArray(value)) return "array";
+  if (value !== null && typeof value === "object") return "object";
+  if (typeof value !== "string") return typeof value;
+  if (!value.length) return "empty-string";
+  if (/^data:image\//i.test(value)) return "data-url";
+  if (/^https:\/\//i.test(value)) return "https-url";
+  if (/^http:\/\//i.test(value)) return "http-url";
+  if (/\.(jpe?g|png|webp)(?:[?#].*)?$/i.test(value)) return "image-path";
+  if (/^[./]/.test(value)) return "relative-path";
+  return "string";
+};
+
+const mediaContractFromDetail = (payload: unknown) => {
+  const root = asObject(payload);
+  const detail = asObject(root?.data) ?? root;
+  const rawItems = Array.isArray(detail?.order_items) ? detail.order_items : [];
+  const candidates = new Map<string, { signatures: Set<string>; occurrences: number }>();
+  for (const value of rawItems) {
+    const item = asObject(value);
+    if (!item) continue;
+    for (const [key, field] of Object.entries(item)) {
+      if (!isMediaKey(key)) continue;
+      const current = candidates.get(key) ?? { signatures: new Set<string>(), occurrences: 0 };
+      current.signatures.add(mediaSignature(field));
+      current.occurrences += 1;
+      candidates.set(key, current);
+    }
+  }
+  const minimumOccurrences = Math.ceil(rawItems.length * 0.8);
+  return [...candidates.entries()]
+    .filter(([, field]) => field.occurrences >= minimumOccurrences)
+    .map(([key, field]) => ({
+      path: `order_items.[].${key}`,
+      signatures: [...field.signatures].sort(),
+      occurrences: field.occurrences,
+    }))
+    .sort((left, right) => left.path.localeCompare(right.path));
 };
 
 const contractFrom = (payload: unknown, allowedKeys?: ReadonlySet<string>) => {
@@ -580,6 +631,7 @@ export class EstoqueNowClient {
             occurrences: field.occurrences,
           }))
           .sort((left, right) => left.path.localeCompare(right.path)),
+        mediaFields: mediaContractFromDetail(payload),
       } satisfies EstoqueNowDetailContract,
       items: itemsFromDetail(payload),
     };

@@ -333,6 +333,35 @@ export async function POST(request: Request) {
     if (profile?.must_change_password)
       return jsonError("Troque a senha temporária antes de operar.", 403);
 
+    if (action === "set-operation-item-checked") {
+      const body = (await request.json()) as {
+        operationId?: string;
+        item?: EstoqueNowItem;
+        checked?: boolean;
+      };
+      if (
+        !body.operationId ||
+        !isUuid(body.operationId) ||
+        !body.item ||
+        ![body.item.id, body.item.itemId, body.item.orderId, body.item.name].every(
+          (value) => typeof value === "string" && value.trim().length > 0,
+        ) ||
+        typeof body.checked !== "boolean"
+      )
+        return jsonError("Item de conferência inválido.");
+      const result = await supabase.rpc("set_operation_item_checked", {
+        p_operation_id: body.operationId,
+        p_item_snapshot: body.item,
+        p_checked: body.checked,
+      });
+      if (result.error?.message.includes("source item unavailable"))
+        return jsonError("O item mudou na origem. Atualize a operação.", 409);
+      if (result.error?.message.includes("forbidden"))
+        return jsonError("Esta operação não aceita mais alterações neste checklist.", 403);
+      if (result.error) throw result.error;
+      return NextResponse.json({ ok: true, state: result.data });
+    }
+
     if (action === "create-person") {
       if (!manager) return jsonError("Apenas gestores cadastram pessoas.", 403);
       const admin = createSupabaseAdminClient();
@@ -811,13 +840,14 @@ export async function POST(request: Request) {
           inspectEstoqueNowDetail(externalId),
           supabase
             .from("operations")
-            .select("status,events:operation_events(id),source_context:estoquenow_operation_contexts(items)")
+            .select("id,status,events:operation_events(id),source_context:estoquenow_operation_contexts(items)")
             .eq("source", "estoquenow")
             .eq("external_id", externalId)
             .maybeSingle(),
         ]);
         if (currentResult.error) throw currentResult.error;
         const current = currentResult.data as null | {
+          id: string;
           status: "active" | "completed" | "cancelled";
           events: Array<{ id: string }>;
           source_context: { items: typeof detail.items } | null;
@@ -825,11 +855,27 @@ export async function POST(request: Request) {
         const itemsChanged =
           Boolean(current?.source_context) &&
           itemsTokenFor(current?.source_context?.items ?? []) !== itemsTokenFor(detail.items);
+        let checksReset = 0;
+        if (current?.source_context && itemsChanged) {
+          const checks = await supabase
+            .from("operation_item_checks")
+            .select("source_item_id")
+            .eq("operation_id", current.id);
+          if (checks.error) throw checks.error;
+          const incoming = new Map(detail.items.map((item) => [item.id, item]));
+          const persisted = new Map(current.source_context.items.map((item) => [item.id, item]));
+          checksReset = (checks.data ?? []).filter(({ source_item_id }) => {
+            const before = persisted.get(source_item_id);
+            const after = incoming.get(source_item_id);
+            return !before || !after || itemsTokenFor([before]) !== itemsTokenFor([after]);
+          }).length;
+        }
         return NextResponse.json({
           ok: true,
           externalId,
           ...detail,
           itemsChanged: Boolean(itemsChanged),
+          checksReset,
           itemsBlocked:
             Boolean(itemsChanged) &&
             Boolean(current && (current.status !== "active" || current.events.length > 0)),

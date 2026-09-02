@@ -17,7 +17,7 @@ const formatDate = (value: string) =>
 export default function OperationScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ id: string }>();
-  const { work, outbox, online } = useApp();
+  const { work, outbox, online, busy, setItemChecked, setMessage } = useApp();
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const operation = work?.operations.find((item) => item.id === id);
   const pending = outbox.filter((item) => item.state !== "confirmed").length;
@@ -60,6 +60,14 @@ export default function OperationScreen() {
   );
   const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(operation.destination)}`;
   const missingAssignments = missingRequiredAssignments(operation);
+  const sourceItems = operation.estoquenow_context?.items ?? [];
+  const checkedItems = new Map(
+    operation.item_checks.map((item) => [item.source_item_id, item]),
+  );
+  const checkedCount = sourceItems.filter((item) => checkedItems.has(item.id)).length;
+  const checkedPercent = sourceItems.length
+    ? Math.round((checkedCount / sourceItems.length) * 100)
+    : 0;
 
   return (
     <Screen>
@@ -93,9 +101,72 @@ export default function OperationScreen() {
               : ""}
           </Text>
         ) : null}
-        {operation.estoquenow_context?.items.map((item) => (
-          <Text key={item.id} style={styles.cacheAge}>Item · {item.name}</Text>
-        ))}
+        {sourceItems.length ? (
+          <View style={styles.manifest}>
+            <View style={styles.manifestHead}>
+              <View>
+                <Text style={styles.manifestEyebrow}>MANIFESTO DE CARGA</Text>
+                <Text style={styles.manifestTitle}>{checkedCount} de {sourceItems.length} conferidos</Text>
+              </View>
+              <Text style={styles.manifestPercent}>{checkedPercent}%</Text>
+            </View>
+            <View
+              accessible
+              accessibilityRole="progressbar"
+              accessibilityLabel={`${checkedCount} de ${sourceItems.length} equipamentos conferidos`}
+              accessibilityValue={{ min: 0, max: sourceItems.length, now: checkedCount }}
+              style={styles.progressTrack}
+            >
+              <View style={[styles.progressValue, { width: `${checkedPercent}%` }]} />
+            </View>
+            {!online ? <Text style={styles.offlineNote}>Conecte o aparelho para atualizar a conferência.</Text> : null}
+            {sourceItems.map((item) => {
+              const check = checkedItems.get(item.id);
+              const marked = Boolean(check);
+              const disabled = busy || !online || operation.status !== "active";
+              return (
+                <Pressable
+                  key={item.id}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: marked, disabled }}
+                  accessibilityLabel={`${item.name}, ${marked ? "conferido" : "pendente"}`}
+                  disabled={disabled}
+                  onPress={() => {
+                    void setItemChecked(operation.id, item, !marked).catch((error) =>
+                      setMessage(error instanceof Error ? error.message : "Não foi possível atualizar este item."),
+                    );
+                  }}
+                  style={({ pressed }) => [
+                    styles.itemCard,
+                    marked && styles.itemCardChecked,
+                    disabled && styles.itemCardDisabled,
+                    pressed && !disabled && styles.itemCardPressed,
+                  ]}
+                >
+                  <View style={styles.photoPlaceholder}>
+                    <Text style={styles.photoIcon}>▧</Text>
+                    <Text style={styles.photoLabel}>Foto não disponível</Text>
+                  </View>
+                  <View style={styles.itemBody}>
+                    <Text numberOfLines={2} style={styles.itemName}>{item.name}</Text>
+                    <Text numberOfLines={1} style={styles.itemCode}>Item {item.itemId}</Text>
+                    <View style={styles.checkRow}>
+                      <View style={[styles.checkbox, marked && styles.checkboxChecked]}>
+                        <Text style={styles.checkboxMark}>{marked ? "✓" : ""}</Text>
+                      </View>
+                      <View style={styles.checkCopy}>
+                        <Text style={[styles.checkLabel, marked && styles.checkLabelDone]}>
+                          {marked ? "Conferido" : "Marcar como conferido"}
+                        </Text>
+                        {check ? <Text style={styles.checkTime}>{formatDate(check.checked_at)}</Text> : null}
+                      </View>
+                    </View>
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : null}
         {work ? (
           <Text style={styles.cacheAge}>
             Escala carregada em {formatDate(work.fetchedAt)}
@@ -241,6 +312,32 @@ const styles = StyleSheet.create({
   destination: { color: colors.muted, fontSize: 14, lineHeight: 20, marginTop: 7 },
   schedule: { color: colors.green, fontSize: 12, fontWeight: "800", marginTop: 9 },
   cacheAge: { color: colors.muted, fontSize: 11, marginTop: 5 },
+  manifest: { marginTop: 18, paddingTop: 16, borderTopWidth: 1, borderTopColor: colors.line, gap: 10 },
+  manifestHead: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", gap: 12 },
+  manifestEyebrow: { color: colors.muted, fontSize: 10, letterSpacing: 1.3, fontWeight: "800" },
+  manifestTitle: { color: colors.ink, fontSize: 20, fontWeight: "900", marginTop: 4 },
+  manifestPercent: { color: colors.green, fontSize: 13, fontWeight: "900" },
+  progressTrack: { height: 8, borderRadius: 4, overflow: "hidden", backgroundColor: colors.line },
+  progressValue: { height: 8, borderRadius: 4, backgroundColor: colors.green },
+  offlineNote: { color: colors.amber, fontSize: 12, lineHeight: 17, padding: 10, borderRadius: 8, backgroundColor: colors.amberSoft },
+  itemCard: { minHeight: 112, flexDirection: "row", overflow: "hidden", borderWidth: 1, borderColor: colors.line, borderRadius: 10, backgroundColor: colors.surface },
+  itemCardChecked: { borderColor: "#9fc8b9", backgroundColor: colors.sage },
+  itemCardDisabled: { opacity: 0.65 },
+  itemCardPressed: { transform: [{ scale: 0.99 }] },
+  photoPlaceholder: { width: 96, minHeight: 112, alignItems: "center", justifyContent: "center", gap: 6, padding: 8, borderRightWidth: 1, borderRightColor: colors.line, backgroundColor: "#edf1ee" },
+  photoIcon: { color: colors.muted, fontSize: 25 },
+  photoLabel: { color: colors.muted, fontSize: 10, lineHeight: 13, textAlign: "center" },
+  itemBody: { flex: 1, minWidth: 0, justifyContent: "space-between", gap: 8, padding: 12 },
+  itemName: { color: colors.ink, fontSize: 15, lineHeight: 20, fontWeight: "800" },
+  itemCode: { color: colors.muted, fontSize: 10, marginTop: 3 },
+  checkRow: { minHeight: 44, flexDirection: "row", alignItems: "center", gap: 10, paddingTop: 7, borderTopWidth: 1, borderTopColor: colors.line },
+  checkbox: { width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: "#87988f", alignItems: "center", justifyContent: "center", backgroundColor: colors.surface },
+  checkboxChecked: { borderColor: colors.green, backgroundColor: colors.green },
+  checkboxMark: { color: colors.surface, fontSize: 16, lineHeight: 18, fontWeight: "900" },
+  checkCopy: { flex: 1 },
+  checkLabel: { color: colors.ink, fontSize: 12, fontWeight: "800" },
+  checkLabelDone: { color: colors.green },
+  checkTime: { color: colors.muted, fontSize: 10, marginTop: 2 },
   rail: { paddingVertical: 23, paddingHorizontal: 3, gap: 7 },
   stage: { width: 82, alignItems: "center" },
   node: { width: 44, height: 44, borderRadius: 22, borderColor: colors.line, borderWidth: 2, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface },

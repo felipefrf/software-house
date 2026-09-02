@@ -37,6 +37,13 @@ export type EstoqueNowOperationContext = {
   items: Array<{ id: string; itemId: string; orderId: string; name: string }>;
 };
 
+export type OperationItemCheck = {
+  operation_id: string;
+  source_item_id: string;
+  checked_by: string;
+  checked_at: string;
+};
+
 export type Person = {
   id: string;
   full_name: string;
@@ -105,6 +112,7 @@ export type Operation = {
   imported_at: string | null;
   waiting_since: string | null;
   estoquenow_context?: EstoqueNowOperationContext | null;
+  item_checks: OperationItemCheck[];
   events: OperationEvent[];
 };
 
