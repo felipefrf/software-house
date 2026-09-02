@@ -87,3 +87,14 @@ test("reenvio de ação exige o mesmo ator", async () => {
   assert.match(route, /select\("id,operation_id,stage,actor_id"\)/);
   assert.match(route, /existing\.data\.actor_id !== auth\.user\.id/);
 });
+
+test("limpeza sintética exige inventário exato e backup remoto", async () => {
+  const route = await readFile(
+    new URL("../../api/imperio/route.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(route, /manualCount\.count !== 2/);
+  assert.match(route, /O backup remoto não confere; nenhuma linha foi removida/);
+  assert.match(route, /remaining\.count !== 0/);
+});

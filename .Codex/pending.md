@@ -1,4 +1,7 @@
-- [ ] Credenciais e contrato real do EstoqueNOW ainda não recebidos — bloqueiam smoke test somente leitura, importação canário e substituição dos dados sintéticos. Obter URL, `client_id`, `client_secret` e amostra da resposta de logística quando Maiara enviar.
+- [x] Credenciais e contrato real de listagem do EstoqueNOW validados por OAuth e prévia somente leitura em produção; segredos permanecem server-only.
+- [ ] Escritas de entrega/retorno no EstoqueNOW estão conectadas apenas em código e mock — manter flags falsas e homologar somente após autorização específica do cliente.
+- [ ] Proteção contra senhas vazadas está desabilitada no Supabase — habilitar no painel após validar o impacto no fluxo de login dos usuários reais.
+- [ ] Sessão, cache, outbox e fotos do app de campo ficam em armazenamento local sem criptografia — adotar SecureStore/SQLCipher antes de guardar dados reais sensíveis no aparelho.
 - [x] Infraestrutura gratuita da Império criada no Supabase e na Vercel, com Auth, Storage e migrations de produção aplicados e portal público validado.
 - [ ] App Expo implementado para iOS/Android, mas o piloto nativo ainda exige smoke em celular físico com login, câmera, GPS, fila offline e conflito no Supabase real; depois configurar EAS e credenciais Apple/Google para publicar nas lojas.
 - [x] Revisão visual Impeccable concluída no protótipo estático — fluxos desktop/mobile revisados, achados corrigidos e `DESIGN.md` gerado; execução automatizada via `file://` permaneceu indisponível.

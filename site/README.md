@@ -44,16 +44,31 @@ continuar falsa.
 ```bash
 npm run estoquenow:readonly -- self-test
 
-# Preferido: injeta os segredos diretamente do projeto Vercel vinculado.
-npx vercel env run -e production -- npm run estoquenow:readonly -- token
-npx vercel env run -e production -- npm run estoquenow:readonly -- get '/v1/logistic?page=1&per_page=25'
-
-# Alternativa local: exporte ESTOQUENOW_CLIENT_ID e ESTOQUENOW_CLIENT_SECRET
-# a partir de um arquivo .env* ignorado e mantenha:
-export ESTOQUENOW_IMPORT_ENABLED=false
+# Crie site/.env.estoquenow.local (ignorado pelo Git) e nunca use o token do chat.
+set -a
+source .env.estoquenow.local
+set +a
 npm run estoquenow:readonly -- get '/v1/logistic/123'
 ```
 
 O token temporário fica com permissão `0600` no diretório temporário do sistema.
 Respostas JSON exibem somente envelope, nomes de campos, nulabilidade e formatos
-de data/hora; PDFs exibem apenas status, tipo e tamanho.
+de data/hora; PDFs exibem apenas status, tipo e tamanho. O arquivo local deve manter
+`ESTOQUENOW_IMPORT_ENABLED=false` e não deve definir a escrita como habilitada.
+
+### Matriz de integração
+
+| Capacidade | Produto | Evidência atual | Escrita externa |
+| --- | --- | --- | --- |
+| Listar logística por período | Torre web | GET real em produção; paginação e contrato sanitizados | Nenhuma |
+| Pré-visualizar candidatos | Torre web | Fluxo real, manager-only, sem persistência | Nenhuma |
+| Detalhe, PDF e checklist logístico | Harness local | Rotas GET em allowlist; ainda sem homologação runtime | Nenhuma |
+| Confirmar entrega ou retorno | Cliente server-only | Schema e contrato cobertos por mock | Bloqueada por padrão; não homologada no EstoqueNOW |
+| Importar canário no Postgres da Império | Torre web | Implementado, mas desabilitado por ambiente | Não escreve no EstoqueNOW |
+| Importação em lote | Nenhum | Bloqueada até prévia válida e autorização específica | Nenhuma |
+| Locação, inventário e financeiro | Nenhum | Não implementado sem evidência do contrato real | Nenhuma |
+
+O runtime da listagem observado em 02/09/2026 usa `client_name`, `local_name`,
+`movement_date` e `movement_time`; datas vieram em `YYYY-MM-DD` e horas em
+`HH:MM[:SS]`. Os 94 movimentos do período correspondiam a 47 IDs logísticos e
+permanecem em reconciliação por categoria antes de qualquer canário.

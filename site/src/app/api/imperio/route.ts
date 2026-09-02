@@ -33,6 +33,7 @@ const isStage = (value: string): value is OperationStage =>
 const isOptionalUuid = (value?: string) => !value || isUuid(value);
 
 const validDateInput = (value: string) => isValidIsoDate(value);
+const SYNTHETIC_QA_NAMES = ["Canário logística", "Operação E2E domingo"];
 
 type EstoqueNowImportRow = {
   source: "estoquenow";
@@ -359,6 +360,115 @@ export async function POST(request: Request) {
       if (!result.data)
         return jsonError("A operação não está mais ativa. Atualize a torre.", 409);
       return NextResponse.json({ ok: true });
+    }
+
+    if (action === "cleanup-synthetic-qa") {
+      if (!manager) return jsonError("Apenas gestores removem dados sintéticos.", 403);
+      const body = (await request.json()) as {
+        mode?: "backup" | "delete";
+        backupPrefix?: string;
+      };
+      const admin = createSupabaseAdminClient();
+      if (!admin) return jsonError("Chave secreta do Supabase não configurada.", 503);
+      const manualCount = await admin
+        .from("operations")
+        .select("id", { count: "exact", head: true })
+        .eq("source", "manual");
+      const operations = await admin
+        .from("operations")
+        .select("*")
+        .eq("source", "manual")
+        .in("event_name", SYNTHETIC_QA_NAMES);
+      if (
+        manualCount.error ||
+        operations.error ||
+        manualCount.count !== 2 ||
+        operations.data?.length !== 2 ||
+        !SYNTHETIC_QA_NAMES.every((name) =>
+          operations.data?.some((operation) => operation.event_name === name),
+        )
+      )
+        return jsonError("O inventário mudou; nenhuma limpeza foi executada.", 409);
+
+      const operationIds = operations.data.map((operation) => operation.id);
+      const events = await admin.from("operation_events").select("*").in("operation_id", operationIds);
+      const incidents = await admin.from("incidents").select("*").in("operation_id", operationIds);
+      if (events.error || incidents.error)
+        return jsonError("Não foi possível exportar as dependências.", 500);
+      const evidence: string[] = [];
+      for (const operationId of operationIds) {
+        const listed = await admin.storage
+          .from("operation-evidence")
+          .list(operationId, { limit: 1_000 });
+        if (listed.error) return jsonError("Não foi possível inventariar as evidências.", 500);
+        evidence.push(...(listed.data ?? []).map((file) => `${operationId}/${file.name}`));
+      }
+
+      if (body.mode === "backup") {
+        const backupPrefix = `qa-backup/2026-09-02/${crypto.randomUUID()}`;
+        const copied: string[] = [];
+        for (const original of evidence) {
+          const downloaded = await admin.storage.from("operation-evidence").download(original);
+          if (downloaded.error) return jsonError("O backup de uma evidência falhou.", 500);
+          const backup = `${backupPrefix}/${original}`;
+          const uploaded = await admin.storage
+            .from("operation-evidence")
+            .upload(backup, downloaded.data, { upsert: false });
+          if (uploaded.error) {
+            if (copied.length)
+              await admin.storage.from("operation-evidence").remove(copied);
+            return jsonError("O backup de uma evidência falhou.", 500);
+          }
+          copied.push(backup);
+        }
+        return NextResponse.json({
+          backupPrefix,
+          exportedAt: new Date().toISOString(),
+          operations: operations.data,
+          events: events.data ?? [],
+          incidents: incidents.data ?? [],
+          evidence: evidence.map((original, index) => ({ original, backup: copied[index] })),
+        });
+      }
+
+      if (
+        body.mode !== "delete" ||
+        !/^qa-backup\/2026-09-02\/[0-9a-f-]{36}$/i.test(body.backupPrefix ?? "")
+      )
+        return jsonError("Confirmação do backup inválida.");
+      const backupPrefix = body.backupPrefix ?? "";
+      for (const operationId of operationIds) {
+        const listed = await admin.storage
+          .from("operation-evidence")
+          .list(`${backupPrefix}/${operationId}`, { limit: 1_000 });
+        const expected = evidence
+          .filter((path) => path.startsWith(`${operationId}/`))
+          .map((path) => path.slice(operationId.length + 1))
+          .sort();
+        const actual = (listed.data ?? []).map((file) => file.name).sort();
+        if (listed.error || JSON.stringify(actual) !== JSON.stringify(expected))
+          return jsonError("O backup remoto não confere; nenhuma linha foi removida.", 409);
+      }
+      const removed = await admin.from("operations").delete().in("id", operationIds).select("id");
+      if (removed.error || removed.data?.length !== 2)
+        return jsonError("A exclusão não conciliou duas operações.", 500);
+      if (evidence.length) {
+        const removedEvidence = await admin.storage.from("operation-evidence").remove(evidence);
+        if (removedEvidence.error)
+          return jsonError("As linhas foram removidas, mas restaram evidências originais.", 500);
+      }
+      const remaining = await admin
+        .from("operations")
+        .select("id", { count: "exact", head: true })
+        .eq("source", "manual");
+      if (remaining.error || remaining.count !== 0)
+        return jsonError("A reconciliação final da limpeza falhou.", 500);
+      return NextResponse.json({
+        ok: true,
+        backupPrefix,
+        before: { operations: 2, events: events.data?.length ?? 0, incidents: incidents.data?.length ?? 0, evidence: evidence.length },
+        after: { operations: 0, events: 0, incidents: 0, evidence: 0 },
+      });
     }
 
     if (action === "sync-estoquenow") {
