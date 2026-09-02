@@ -191,7 +191,7 @@ export class EstoqueNowClient {
     );
     if (!response.ok) throw new Error("ESTOQUENOW_AUTH_FAILED");
     const payload = asObject(await response.json());
-    const accessToken = text(payload?.access_token);
+    const accessToken = text(payload?.access_token ?? payload?.token);
     const expiresIn = Number(payload?.expires_in ?? 1800);
     if (!accessToken) throw new Error("ESTOQUENOW_INVALID_TOKEN_RESPONSE");
     this.token = {

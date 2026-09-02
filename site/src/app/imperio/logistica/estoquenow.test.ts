@@ -84,14 +84,17 @@ test("aceita IDs opacos, mas rejeita vazio, controle e tamanho excessivo", () =>
   assert.equal(isValidExternalId("x".repeat(201)), false);
 });
 
-test("reutiliza token e renova uma vez após 401", async () => {
+test("aceita o token real, reutiliza e renova uma vez após 401", async () => {
   let tokens = 0;
   let reads = 0;
   const fetchImpl: typeof fetch = async (input) => {
     const url = String(input);
     if (url.endsWith("/oauth2/token")) {
       tokens += 1;
-      return Response.json({ access_token: `token-${tokens}`, expires_in: 1800 });
+      return Response.json({
+        token: `token-${tokens}`,
+        expires: "2026-09-02 12:27:59",
+      });
     }
     reads += 1;
     if (reads === 2) return new Response(null, { status: 401 });
