@@ -1,10 +1,15 @@
 import { NextResponse } from "next/server";
+import { createHash } from "node:crypto";
 
 import { checklistForStage, operationStages } from "@/app/imperio/logistica/action";
-import { inspectEstoqueNowOperations } from "@/app/imperio/logistica/data";
+import {
+  inspectEstoqueNowDetail,
+  inspectEstoqueNowOperations,
+} from "@/app/imperio/logistica/data";
 import {
   isValidExternalId,
   isValidIsoDate,
+  operationDestination,
   sourceFieldsDiverged,
   toScheduledAt,
   type EstoqueNowOperation,
@@ -42,6 +47,34 @@ type EstoqueNowImportRow = {
   scheduled_at: string;
   notes: string;
   imported_at: string;
+  legacy_event_name: string;
+  legacy_destination: string;
+  legacy_notes: string;
+  source_context: EstoqueNowSourceContext;
+};
+
+type EstoqueNowSourceContext = {
+  order_id: string | null;
+  protocol: string | null;
+  source_version: string | null;
+  return_at: string | null;
+  venue: string | null;
+  address_zipcode: string | null;
+  address_street: string | null;
+  address_number: string | null;
+  address_complement: string | null;
+  address_neighborhood: string | null;
+  address_city: string | null;
+  address_state: string | null;
+  delivery_status_id: string | null;
+  delivery_status_type: string | null;
+  delivery_concluded: boolean | null;
+  return_status_id: string | null;
+  return_status_type: string | null;
+  return_concluded: boolean | null;
+  item_count: string | null;
+  order_type: string | null;
+  logistic_type_id: string | null;
 };
 
 type EstoqueNowSkipReason =
@@ -52,6 +85,58 @@ type EstoqueNowSkipReason =
   | "missing_destination"
   | "invalid_destination"
   | "invalid_scheduled_date_or_time";
+
+const reviewTokenFor = (row: EstoqueNowImportRow) =>
+  createHash("sha256")
+    .update(JSON.stringify({
+      external_id: row.external_id,
+      event_name: row.event_name,
+      destination: row.destination,
+      scheduled_at: row.scheduled_at,
+      source_context: row.source_context,
+    }))
+    .digest("hex");
+
+const sourceContextDiverged = (
+  current: EstoqueNowSourceContext | null,
+  incoming: EstoqueNowSourceContext,
+) =>
+  !current ||
+  Object.entries(incoming).some(
+    ([key, value]) =>
+      [
+        "source_version",
+        "delivery_status_id",
+        "delivery_status_type",
+        "delivery_concluded",
+        "return_status_id",
+        "return_status_type",
+        "return_concluded",
+        "item_count",
+      ].includes(key)
+        ? false
+        : key === "return_at" && value && current.return_at
+        ? Date.parse(current.return_at) !== Date.parse(value as string)
+        : current[key as keyof EstoqueNowSourceContext] !== value,
+  );
+
+const mutableSourceContextDiverged = (
+  current: EstoqueNowSourceContext | null,
+  incoming: EstoqueNowSourceContext,
+) =>
+  !current ||
+  [
+    "source_version",
+    "delivery_status_id",
+    "delivery_status_type",
+    "delivery_concluded",
+    "return_status_id",
+    "return_status_type",
+    "return_concluded",
+    "item_count",
+  ].some(
+    (key) => current[key as keyof EstoqueNowSourceContext] !== incoming[key as keyof EstoqueNowSourceContext],
+  );
 
 const estoqueNowImportRow = (
   operation: EstoqueNowOperation,
@@ -66,22 +151,30 @@ const estoqueNowImportRow = (
   const destinationParts = [operation.venue.trim(), operation.city.trim()].filter(
     (value, index, values) => value && values.indexOf(value) === index,
   );
-  if (!destinationParts.length) return { row: null, reason: "missing_destination" };
-  const destination = destinationParts.join(" · ");
+  const legacyDestination = destinationParts.join(" · ");
+  const destination = operationDestination(operation) || legacyDestination;
+  if (!destination) return { row: null, reason: "missing_destination" };
   if (destination.length < 5) return { row: null, reason: "invalid_destination" };
   const scheduledAt = toScheduledAt(operation.scheduledDate, operation.scheduledTime);
   if (!scheduledAt)
     return { row: null, reason: "invalid_scheduled_date_or_time" };
 
-  const notes = [
+  const legacyContextNotes = [
     operation.orderId.trim() ? `Pedido ${operation.orderId.trim()}.` : "",
     operation.returnDate.trim() ? `Retorno previsto: ${operation.returnDate.trim()}.` : "",
-    operation.nextMilestone.trim()
-      ? `Marco externo: ${operation.nextMilestone.trim()}.`
-      : "",
   ]
     .filter(Boolean)
     .join(" ");
+  const legacyNotes = ["Importado por leitura do EstoqueNOW.", legacyContextNotes]
+    .filter(Boolean)
+    .join(" ");
+  const returnAt = operation.returnDate.trim()
+    ? toScheduledAt(operation.returnDate, operation.returnTime)
+    : null;
+  if ((operation.returnDate.trim() || operation.returnTime.trim()) && !returnAt)
+    return { row: null, reason: "invalid_scheduled_date_or_time" };
+  if (returnAt && Date.parse(returnAt) <= Date.parse(scheduledAt))
+    return { row: null, reason: "invalid_scheduled_date_or_time" };
 
   return {
     row: {
@@ -90,8 +183,34 @@ const estoqueNowImportRow = (
       event_name: eventName,
       destination,
       scheduled_at: scheduledAt,
-      notes: ["Importado por leitura do EstoqueNOW.", notes].filter(Boolean).join(" "),
+      notes: "",
       imported_at: importedAt,
+      legacy_event_name: operation.legacyEventName.trim(),
+      legacy_destination: legacyDestination,
+      legacy_notes: legacyNotes,
+      source_context: {
+        order_id: operation.orderId.trim() || null,
+        protocol: operation.protocol.trim() || null,
+        source_version: operation.sourceVersion.trim() || null,
+        return_at: returnAt,
+        venue: operation.venue.trim() || null,
+        address_zipcode: operation.address.zipcode.trim() || null,
+        address_street: operation.address.street.trim() || null,
+        address_number: operation.address.number.trim() || null,
+        address_complement: operation.address.complement.trim() || null,
+        address_neighborhood: operation.address.neighborhood.trim() || null,
+        address_city: operation.address.city.trim() || null,
+        address_state: operation.address.state.trim() || null,
+        delivery_status_id: operation.deliveryStatus.id.trim() || null,
+        delivery_status_type: operation.deliveryStatus.type.trim() || null,
+        delivery_concluded: operation.deliveryStatus.concluded,
+        return_status_id: operation.returnStatus.id.trim() || null,
+        return_status_type: operation.returnStatus.type.trim() || null,
+        return_concluded: operation.returnStatus.concluded,
+        item_count: operation.itemCount.trim() || null,
+        order_type: operation.orderType.trim() || null,
+        logistic_type_id: operation.logisticTypeId.trim() || null,
+      },
     },
     reason: null,
   };
@@ -371,6 +490,8 @@ export async function POST(request: Request) {
         reviewedEventName?: string;
         reviewedDestination?: string;
         reviewedScheduledAt?: string;
+        reviewedToken?: string;
+        reviewedDatabaseImportedAt?: string | null;
       };
       const startDate = body.startDate?.trim() ?? "";
       const endDate = body.endDate?.trim() ?? "";
@@ -424,33 +545,70 @@ export async function POST(request: Request) {
 
       const existingById = new Map<
         string,
-        { external_id: string | null; event_name: string; destination: string; scheduled_at: string }
+        {
+          external_id: string | null;
+          event_name: string;
+          destination: string;
+          scheduled_at: string;
+          notes: string | null;
+          imported_at: string | null;
+          source_context: EstoqueNowSourceContext | null;
+        }
       >();
       for (let index = 0; index < rows.length; index += 100) {
         const externalIds = rows.slice(index, index + 100).map((row) => row.external_id);
         const existing = await supabase
           .from("operations")
-          .select("external_id,event_name,destination,scheduled_at")
+          .select(
+            "external_id,event_name,destination,scheduled_at,notes,imported_at,source_context:estoquenow_operation_contexts(order_id,protocol,source_version,return_at,venue,address_zipcode,address_street,address_number,address_complement,address_neighborhood,address_city,address_state,delivery_status_id,delivery_status_type,delivery_concluded,return_status_id,return_status_type,return_concluded,item_count,order_type,logistic_type_id)",
+          )
           .eq("source", "estoquenow")
           .in("external_id", externalIds);
         if (existing.error) throw existing.error;
-        for (const operation of existing.data ?? []) {
+        for (const operation of (existing.data ?? []) as unknown as Array<{
+          external_id: string | null;
+          event_name: string;
+          destination: string;
+          scheduled_at: string;
+          notes: string | null;
+          imported_at: string | null;
+          source_context: EstoqueNowSourceContext | null;
+        }>) {
           if (operation.external_id) existingById.set(operation.external_id, operation);
         }
       }
 
       const candidates = rows.map((row) => {
         const existing = existingById.get(row.external_id);
+        const legacyBackfill =
+          existing &&
+          existing.source_context === null &&
+          existing.event_name === row.legacy_event_name &&
+          existing.destination === row.legacy_destination &&
+          new Date(existing.scheduled_at).getTime() === new Date(row.scheduled_at).getTime() &&
+          existing.notes === row.legacy_notes;
         const state = !existing
           ? ("new" as const)
-          : sourceFieldsDiverged(existing, row)
-            ? ("diverged" as const)
-            : ("unchanged" as const);
+          : legacyBackfill
+            ? ("update" as const)
+            : sourceFieldsDiverged(existing, row) ||
+                sourceContextDiverged(existing.source_context, row.source_context)
+              ? ("diverged" as const)
+              : mutableSourceContextDiverged(existing.source_context, row.source_context)
+                ? ("update" as const)
+                : ("unchanged" as const);
         return {
           externalId: row.external_id,
           eventName: row.event_name,
           destination: row.destination,
           scheduledAt: row.scheduled_at,
+          reviewToken: reviewTokenFor(row),
+          databaseImportedAt: existing?.imported_at ?? null,
+          orderId: row.source_context.order_id,
+          returnAt: row.source_context.return_at,
+          externalStatus: row.source_context.delivery_status_type,
+          externalConcluded: row.source_context.delivery_concluded,
+          itemCount: row.source_context.item_count,
           state,
           row,
         };
@@ -470,11 +628,19 @@ export async function POST(request: Request) {
             eventName: candidate.eventName,
             destination: candidate.destination,
             scheduledAt: candidate.scheduledAt,
+            reviewToken: candidate.reviewToken,
+            databaseImportedAt: candidate.databaseImportedAt,
+            orderId: candidate.orderId,
+            returnAt: candidate.returnAt,
+            externalStatus: candidate.externalStatus,
+            externalConcluded: candidate.externalConcluded,
+            itemCount: candidate.itemCount,
             state: candidate.state,
           })),
           counts: {
             new: candidates.filter((candidate) => candidate.state === "new").length,
             unchanged: candidates.filter((candidate) => candidate.state === "unchanged").length,
+            update: candidates.filter((candidate) => candidate.state === "update").length,
             diverged: candidates.filter((candidate) => candidate.state === "diverged").length,
             skipped: external.length - rows.length,
           },
@@ -487,15 +653,12 @@ export async function POST(request: Request) {
       if (matching.length !== 1)
         return jsonError("O ID externo informado não corresponde a um único candidato válido.", 409);
       const candidate = matching[0];
-      if (candidate.state === "diverged")
-        return jsonError(
-          "Divergência detectada. Nenhum dado foi gravado; revise a prévia antes de continuar.",
-          409,
-        );
       if (
         body.reviewedEventName !== candidate.eventName ||
         body.reviewedDestination !== candidate.destination ||
-        body.reviewedScheduledAt !== candidate.scheduledAt
+        body.reviewedScheduledAt !== candidate.scheduledAt ||
+        body.reviewedToken !== candidate.reviewToken
+        || body.reviewedDatabaseImportedAt !== candidate.databaseImportedAt
       )
         return jsonError(
           "O registro mudou desde a prévia. Revise os dados novamente antes de confirmar.",
@@ -512,6 +675,11 @@ export async function POST(request: Request) {
         p_notes: candidate.row.notes,
         p_imported_at: candidate.row.imported_at,
         p_manager_id: auth.user.id,
+        p_context: candidate.row.source_context,
+        p_legacy_event_name: candidate.row.legacy_event_name,
+        p_legacy_destination: candidate.row.legacy_destination,
+        p_legacy_notes: candidate.row.legacy_notes,
+        p_expected_imported_at: candidate.databaseImportedAt,
       });
       if (
         confirmed.error?.code === "23505" ||
@@ -525,10 +693,28 @@ export async function POST(request: Request) {
         mode,
         externalId: candidate.externalId,
         imported: imported ? 1 : 0,
-        preserved: imported ? 0 : 1,
+        preserved: confirmed.data === "unchanged" ? 1 : 0,
+        backfilled: confirmed.data === "backfilled" ? 1 : 0,
+        updated: confirmed.data === "updated" ? 1 : 0,
         diverged: 0,
         skipped: external.length - rows.length,
       });
+    }
+
+    if (action === "inspect-estoquenow-detail") {
+      if (!manager) return jsonError("Apenas gestores consultam a integração.", 403);
+      const body = (await request.json()) as { externalId?: string };
+      const externalId = body.externalId?.trim() ?? "";
+      if (!isValidExternalId(externalId)) return jsonError("Informe um ID logístico válido.");
+      try {
+        return NextResponse.json({
+          ok: true,
+          externalId,
+          contract: await inspectEstoqueNowDetail(externalId),
+        });
+      } catch {
+        return jsonError("Não foi possível ler o detalhe sanitizado no EstoqueNOW.", 502);
+      }
     }
 
     if (action === "confirm-action") {

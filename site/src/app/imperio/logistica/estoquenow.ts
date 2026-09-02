@@ -1,17 +1,40 @@
 export type EstoqueNowOperation = {
   id: string;
   orderId: string;
+  protocol: string;
+  sourceVersion: string;
   eventName: string;
+  legacyEventName: string;
   venue: string;
+  address: {
+    zipcode: string;
+    street: string;
+    number: string;
+    complement: string;
+    neighborhood: string;
+    city: string;
+    state: string;
+  };
   city: string;
   scheduledDate: string;
   scheduledTime: string;
   returnDate: string;
+  returnTime: string;
+  deliveryStatus: EstoqueNowMovementStatus;
+  returnStatus: EstoqueNowMovementStatus;
+  itemCount: string;
+  orderType: string;
+  logisticTypeId: string;
   status: "preparation" | "route" | "delivery" | "return" | "completed";
   coordinator: string;
   crew: string;
   vehicle: string;
-  nextMilestone: string;
+};
+
+export type EstoqueNowMovementStatus = {
+  id: string;
+  type: string;
+  concluded: boolean | null;
 };
 
 export type EstoqueNowContract = {
@@ -24,6 +47,10 @@ export type EstoqueNowContract = {
   }>;
   fields: Array<{ path: string; signatures: string[]; occurrences: number }>;
   facets: Array<{ field: string; values: Array<{ value: string; occurrences: number }> }>;
+};
+
+export type EstoqueNowDetailContract = {
+  fields: Array<{ path: string; signatures: string[]; occurrences: number }>;
 };
 
 type JsonObject = Record<string, unknown>;
@@ -47,6 +74,13 @@ const REQUEST_TIMEOUT_MS = 8_000;
 const PAGE_SIZE = 50;
 const MAX_PAGES = 100;
 const SAFE_FACET_FIELDS = ["type", "type_name", "status_type", "is_concluded"] as const;
+const SAFE_DETAIL_KEYS = new Set([
+  "data", "id", "order_id", "protocol", "nu_version", "order_items",
+  "related_logistics", "drivers", "vehicles", "product", "product_id",
+  "product_name", "item_id", "item_name", "name", "description", "quantity",
+  "unit", "sku", "category", "type", "type_name", "status_id", "status_name",
+  "status_type", "is_concluded", "movement_date", "movement_time",
+]);
 
 const asObject = (value: unknown): JsonObject | null =>
   value !== null && typeof value === "object" && !Array.isArray(value)
@@ -59,6 +93,12 @@ const text = (value: unknown): string =>
 const numberOrNull = (value: unknown) => {
   const parsed = Number(value);
   return value !== null && value !== "" && Number.isFinite(parsed) ? parsed : null;
+};
+
+const booleanOrNull = (value: unknown) => {
+  if (value === true || value === 1 || value === "1") return true;
+  if (value === false || value === 0 || value === "0") return false;
+  return null;
 };
 
 const signature = (value: unknown) => {
@@ -74,7 +114,7 @@ const signature = (value: unknown) => {
   return "string";
 };
 
-const contractFrom = (payload: unknown) => {
+const contractFrom = (payload: unknown, allowedKeys?: ReadonlySet<string>) => {
   const fields = new Map<string, { signatures: Set<string>; occurrences: number }>();
   const visit = (value: unknown, path: string) => {
     if (Array.isArray(value)) {
@@ -83,7 +123,10 @@ const contractFrom = (payload: unknown) => {
     }
     const record = asObject(value);
     if (record) {
-      for (const [key, item] of Object.entries(record)) visit(item, path ? `${path}.${key}` : key);
+      for (const [key, item] of Object.entries(record)) {
+        const safeKey = !allowedKeys || allowedKeys.has(key) ? key : "[redacted]";
+        visit(item, path ? `${path}.${safeKey}` : safeKey);
+      }
       return;
     }
     const current = fields.get(path) ?? { signatures: new Set<string>(), occurrences: 0 };
@@ -141,6 +184,22 @@ export const toScheduledAt = (date: string, time: string) => {
     `${isoDate}T${timeMatch[1]}:${timeMatch[2]}:${timeMatch[3] ?? "00"}-03:00`,
   ).toISOString();
 };
+
+export const operationDestination = (operation: EstoqueNowOperation) =>
+  [
+    operation.venue.trim(),
+    [operation.address.street.trim(), operation.address.number.trim()]
+      .filter(Boolean)
+      .join(", "),
+    operation.address.complement.trim(),
+    operation.address.neighborhood.trim(),
+    [operation.address.city.trim(), operation.address.state.trim()]
+      .filter(Boolean)
+      .join(" - "),
+    operation.address.zipcode.trim() ? `CEP ${operation.address.zipcode.trim()}` : "",
+  ]
+    .filter((value, index, values) => value && values.indexOf(value) === index)
+    .join(" · ");
 
 const nestedText = (record: JsonObject, ...paths: string[][]): string => {
   for (const keys of paths) {
@@ -213,22 +272,52 @@ export const normalizeLogistics = (payload: unknown): EstoqueNowOperation[] => {
     const returnMovement = movements.get("return");
     const record = delivery ?? returnMovement ?? [...movements.values()][0];
     const id = nestedText(record, ["id"], ["logistic_id"]);
+    const orderId = nestedText(record, ["order_id"], ["order", "id"]);
+    const venue = nestedText(record, ["local_name"], ["venue"], ["address_street"]);
+    const legacyEventName = nestedText(
+      record,
+      ["client_name"],
+      ["event_name"],
+      ["local_name"],
+      ["order", "event_name"],
+      ["order", "client", "name"],
+    );
+    const address = {
+      zipcode: nestedText(record, ["address_zipcode"]),
+      street: nestedText(record, ["address_street"]),
+      number: nestedText(record, ["address_number"]),
+      complement: nestedText(record, ["address_complement"]),
+      neighborhood: nestedText(record, ["address_neighborhood"]),
+      city: nestedText(record, ["address_city"], ["city"]),
+      state: nestedText(record, ["address_state"]),
+    };
+    const movementStatus = (movement?: JsonObject): EstoqueNowMovementStatus => ({
+      id: nestedText(movement ?? {}, ["status_id"]),
+      type: nestedText(movement ?? {}, ["status_type"]),
+      concluded: booleanOrNull(movement?.is_concluded),
+    });
     return {
       id,
-      orderId: nestedText(record, ["order_id"], ["order", "id"]),
-      eventName: nestedText(
-        record,
-        ["client_name"],
-        ["event_name"],
-        ["local_name"],
-        ["order", "event_name"],
-        ["order", "client", "name"],
-      ),
-      venue: nestedText(record, ["local_name"], ["venue"], ["address_street"]),
-      city: nestedText(record, ["address_city"], ["city"]),
+      orderId,
+      protocol: nestedText(record, ["protocol"]),
+      sourceVersion: nestedText(record, ["nu_version"]),
+      eventName:
+        [orderId ? `Pedido ${orderId}` : id ? `Logística ${id}` : "", venue]
+          .filter(Boolean)
+          .join(" · ") || legacyEventName,
+      legacyEventName,
+      venue,
+      address,
+      city: address.city,
       scheduledDate: nestedText(delivery ?? record, ["movement_date"], ["delivery_date"]),
       scheduledTime: nestedText(delivery ?? record, ["movement_time"], ["delivery_time"]),
       returnDate: nestedText(returnMovement ?? record, ["movement_date"], ["return_date"]),
+      returnTime: nestedText(returnMovement ?? record, ["movement_time"], ["return_time"]),
+      deliveryStatus: movementStatus(delivery),
+      returnStatus: movementStatus(returnMovement),
+      itemCount: text(record.count_items),
+      orderType: nestedText(record, ["order_type"]),
+      logisticTypeId: nestedText(record, ["logistic_type_id"]),
       status:
         statusFrom(returnMovement ?? {}) === "completed"
           ? "completed"
@@ -236,7 +325,6 @@ export const normalizeLogistics = (payload: unknown): EstoqueNowOperation[] => {
       coordinator: nestedText(record, ["coordinator", "name"], ["responsible", "name"]),
       crew: nestedText(record, ["crew_name"], ["team", "name"]),
       vehicle: nestedText(record, ["vehicle", "name"], ["vehicle_plate"]),
-      nextMilestone: nestedText(record, ["next_milestone"]),
     };
   });
 };
@@ -429,5 +517,22 @@ export class EstoqueNowClient {
 
   async listLogistics(startDate: string, endDate: string) {
     return (await this.listLogisticsWithContract(startDate, endDate)).operations;
+  }
+
+  async inspectLogisticDetail(id: string): Promise<EstoqueNowDetailContract> {
+    if (!isValidExternalId(id)) throw new Error("ESTOQUENOW_INVALID_LOGISTIC_ID");
+    const fields = contractFrom(
+      await this.request(`/v1/logistic/${encodeURIComponent(id.trim())}`),
+      SAFE_DETAIL_KEYS,
+    );
+    return {
+      fields: [...fields.entries()]
+        .map(([path, field]) => ({
+          path,
+          signatures: [...field.signatures].sort(),
+          occurrences: field.occurrences,
+        }))
+        .sort((left, right) => left.path.localeCompare(right.path)),
+    };
   }
 }

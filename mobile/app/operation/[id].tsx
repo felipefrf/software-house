@@ -82,6 +82,17 @@ export default function OperationScreen() {
         <Text style={styles.eventName}>{operation.event_name}</Text>
         <Text style={styles.destination}>{operation.destination}</Text>
         <Text style={styles.schedule}>{formatDate(operation.scheduled_at)}</Text>
+        {operation.estoquenow_context ? (
+          <Text style={styles.cacheAge}>
+            Pedido {operation.estoquenow_context.order_id ?? "não informado"}
+            {operation.estoquenow_context.return_at
+              ? ` · devolução ${formatDate(operation.estoquenow_context.return_at)}`
+              : ""}
+            {operation.estoquenow_context.item_count !== null
+              ? ` · ${operation.estoquenow_context.item_count} item(ns)`
+              : ""}
+          </Text>
+        ) : null}
         {work ? (
           <Text style={styles.cacheAge}>
             Escala carregada em {formatDate(work.fetchedAt)}

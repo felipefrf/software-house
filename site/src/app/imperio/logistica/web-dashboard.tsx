@@ -83,11 +83,19 @@ type EstoqueNowPreview = {
     eventName: string;
     destination: string;
     scheduledAt: string;
-    state: "new" | "unchanged" | "diverged";
+    reviewToken: string;
+    databaseImportedAt: string | null;
+    orderId: string | null;
+    returnAt: string | null;
+    externalStatus: string | null;
+    externalConcluded: boolean | null;
+    itemCount: string | null;
+    state: "new" | "unchanged" | "update" | "diverged";
   }>;
   counts: {
     new: number;
     unchanged: number;
+    update: number;
     diverged: number;
     skipped: number;
   };
@@ -110,6 +118,13 @@ type EstoqueNowPreview = {
     }>;
     fields: Array<{ path: string; signatures: string[]; occurrences: number }>;
     facets: Array<{ field: string; values: Array<{ value: string; occurrences: number }> }>;
+  };
+};
+
+type EstoqueNowDetailPreview = {
+  externalId: string;
+  contract: {
+    fields: Array<{ path: string; signatures: string[]; occurrences: number }>;
   };
 };
 
@@ -478,6 +493,34 @@ function OperationDetail({
           showReady
         />
       </div>
+      {operation.estoquenow_context && (
+        <dl className="mt-4 grid gap-px overflow-hidden rounded-lg border border-[#dce3de] bg-[#dce3de] text-sm sm:grid-cols-2 lg:grid-cols-4">
+          <div className="bg-[#f8faf8] p-3">
+            <dt className="text-[#5f7067]">Pedido EstoqueNOW</dt>
+            <dd className="font-medium">{operation.estoquenow_context.order_id ?? "Não informado"}</dd>
+          </div>
+          <div className="bg-[#f8faf8] p-3">
+            <dt className="text-[#5f7067]">Devolução prevista</dt>
+            <dd className="font-medium">
+              {operation.estoquenow_context.return_at
+                ? formatDate(operation.estoquenow_context.return_at)
+                : "Não informada"}
+            </dd>
+          </div>
+          <div className="bg-[#f8faf8] p-3">
+            <dt className="text-[#5f7067]">Status externo</dt>
+            <dd className="font-medium">
+              {operation.estoquenow_context.delivery_status_type ?? "Não informado"}
+            </dd>
+          </div>
+          <div className="bg-[#f8faf8] p-3">
+            <dt className="text-[#5f7067]">Itens previstos</dt>
+            <dd className="font-medium">
+              {operation.estoquenow_context.item_count ?? "Não informado"}
+            </dd>
+          </div>
+        </dl>
+      )}
       {operationIncidents.length > 0 && (
         <div className="mt-5 border-l-4 border-[#d69f38] bg-[#fff7e3] p-4 text-sm text-[#755615]">
           <p className="font-mono text-xs uppercase tracking-[0.14em]">
@@ -1393,6 +1436,7 @@ function IntegrationsView(props: Props) {
   const future = new Date(today);
   future.setDate(today.getDate() + 90);
   const [preview, setPreview] = useState<EstoqueNowPreview | null>(null);
+  const [detailPreview, setDetailPreview] = useState<EstoqueNowDetailPreview | null>(null);
   const [canaryId, setCanaryId] = useState("");
   const selectedCanary = preview?.candidates.find(
     (candidate) => candidate.externalId === canaryId,
@@ -1408,9 +1452,19 @@ function IntegrationsView(props: Props) {
         endDate: formValue(form, "endDate"),
       });
       setPreview(nextPreview);
+      setDetailPreview(null);
       setCanaryId("");
-      result = `${nextPreview.total} logística(s), ${nextPreview.movementsTotal} movimento(s) · ${nextPreview.counts.new} nova(s) · ${nextPreview.counts.unchanged} já conciliada(s) · ${nextPreview.counts.diverged} divergente(s) · ${nextPreview.counts.skipped} inválida(s). Nenhuma gravação realizada.`;
+      result = `${nextPreview.total} logística(s), ${nextPreview.movementsTotal} movimento(s) · ${nextPreview.counts.new} nova(s) · ${nextPreview.counts.update} atualização(ões) · ${nextPreview.counts.unchanged} conciliada(s) · ${nextPreview.counts.diverged} divergente(s) · ${nextPreview.counts.skipped} inválida(s). Nenhuma gravação realizada.`;
     }, () => result);
+  };
+  const inspectDetail = () => {
+    if (!selectedCanary) return;
+    void props.run(async () => {
+      const detail = await postJson<EstoqueNowDetailPreview>("inspect-estoquenow-detail", {
+        externalId: selectedCanary.externalId,
+      });
+      setDetailPreview(detail);
+    }, "Detalhe lido sem gravar; somente o contrato sanitizado foi retornado.");
   };
   const confirmCanary = () => {
     if (!preview || !selectedCanary) return;
@@ -1420,6 +1474,8 @@ function IntegrationsView(props: Props) {
         externalId: string;
         imported: number;
         preserved: number;
+        backfilled: number;
+        updated: number;
       }>("sync-estoquenow", {
         mode: "canary",
         startDate: preview.startDate,
@@ -1428,9 +1484,15 @@ function IntegrationsView(props: Props) {
         reviewedEventName: selectedCanary.eventName,
         reviewedDestination: selectedCanary.destination,
         reviewedScheduledAt: selectedCanary.scheduledAt,
+        reviewedToken: selectedCanary.reviewToken,
+        reviewedDatabaseImportedAt: selectedCanary.databaseImportedAt,
       });
       result = confirmed.imported
         ? `Operação ${confirmed.externalId} importada para o banco da Império.`
+        : confirmed.backfilled
+          ? `Operação ${confirmed.externalId} enriquecida com o contexto do EstoqueNOW.`
+          : confirmed.updated
+            ? `Operação ${confirmed.externalId} atualizada após revisão da divergência.`
         : `Operação ${confirmed.externalId} já estava conciliada; dados operacionais foram preservados.`;
       setPreview(null);
       setCanaryId("");
@@ -1484,15 +1546,16 @@ function IntegrationsView(props: Props) {
               <div><p className="font-mono text-xs uppercase tracking-[0.14em] text-[#5f7067]">Passo 2 · prévia sem escrita</p><h3 className="mt-2 text-xl font-semibold">Escolha exatamente uma operação</h3><p className="mt-1 text-sm text-[#65746c]">Período {preview.startDate.split("-").reverse().join("/")} a {preview.endDate.split("-").reverse().join("/")}</p></div>
               <Pill tone="green">Nenhuma gravação realizada</Pill>
             </div>
-            <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-5">
               {[
                 ["Novas", preview.counts.new],
+                ["Atualizações", preview.counts.update],
                 ["Conciliadas", preview.counts.unchanged],
                 ["Divergentes", preview.counts.diverged],
                 ["Inválidas", preview.counts.skipped],
               ].map(([label, value]) => <div key={label} className="rounded-lg bg-[#f2f5f3] p-3"><p className="text-xs text-[#5f7067]">{label}</p><p className="mt-1 text-2xl font-semibold">{value}</p></div>)}
             </div>
-            {preview.counts.diverged > 0 && <p className="mt-4 flex items-start gap-2 rounded-lg bg-[#fff3d1] p-3 text-sm text-[#705817]"><AlertTriangle className="mt-0.5 shrink-0" size={17} />{preview.counts.diverged} registro(s) divergem do banco da Império e estão bloqueados para gravação.</p>}
+            {preview.counts.diverged > 0 && <p className="mt-4 flex items-start gap-2 rounded-lg bg-[#fff3d1] p-3 text-sm text-[#705817]"><AlertTriangle className="mt-0.5 shrink-0" size={17} />{preview.counts.diverged} registro(s) mudaram no EstoqueNOW. Selecione um por vez e revise antes de atualizar.</p>}
             {preview.counts.skipped > 0 && <div className="mt-3 rounded-lg border border-[#eadcae] bg-[#fffaf0] p-3 text-xs text-[#705817]"><strong>Registros inválidos, sem gravação:</strong><p className="mt-1">{[
               ["sem ID", preview.skippedReasons.missing_external_id],
               ["ID inválido", preview.skippedReasons.invalid_external_id],
@@ -1505,14 +1568,28 @@ function IntegrationsView(props: Props) {
             {preview.candidates.length > 0 ? (
               <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,.8fr)]">
                 <label className="text-sm font-medium">ID externo da operação
-                  <select value={canaryId} onChange={(event) => setCanaryId(event.target.value)} className="mt-2 min-h-11 w-full rounded-lg border border-[#cbd4ce] bg-white px-3 py-2.5">
+                  <select value={canaryId} onChange={(event) => { setCanaryId(event.target.value); setDetailPreview(null); }} className="mt-2 min-h-11 w-full rounded-lg border border-[#cbd4ce] bg-white px-3 py-2.5">
                     <option value="">Selecione uma operação válida</option>
-                    {preview.candidates.map((candidate) => <option key={candidate.externalId} value={candidate.externalId} disabled={candidate.state === "diverged"}>{candidate.externalId} · {candidate.eventName}{candidate.state === "diverged" ? " · divergente" : candidate.state === "unchanged" ? " · já conciliada" : " · nova"}</option>)}
+                    {preview.candidates.map((candidate) => <option key={candidate.externalId} value={candidate.externalId}>{candidate.externalId} · {candidate.eventName}{candidate.state === "diverged" ? " · divergência canônica" : candidate.state === "update" ? " · atualização disponível" : candidate.state === "unchanged" ? " · já conciliada" : " · nova"}</option>)}
                   </select>
                 </label>
-                {selectedCanary ? <div className="rounded-lg border border-[#dce3de] bg-[#f8faf8] p-4"><div className="flex items-center justify-between gap-3"><strong className="text-sm">{selectedCanary.eventName}</strong><Pill tone={selectedCanary.state === "new" ? "green" : selectedCanary.state === "diverged" ? "red" : "neutral"}>{selectedCanary.state === "new" ? "Nova" : selectedCanary.state === "diverged" ? "Divergente" : "Conciliada"}</Pill></div><p className="mt-2 text-xs text-[#5f7067]">{selectedCanary.destination}</p><p className="mt-1 text-xs text-[#5f7067]">{formatDate(selectedCanary.scheduledAt)}</p></div> : <div className="rounded-lg bg-[#f2f5f3] p-4 text-sm text-[#5f7067]">Selecione um ID para revisar o registro exato.</div>}
+                {selectedCanary ? <div className="rounded-lg border border-[#dce3de] bg-[#f8faf8] p-4"><div className="flex items-center justify-between gap-3"><strong className="text-sm">{selectedCanary.eventName}</strong><Pill tone={selectedCanary.state === "new" ? "green" : selectedCanary.state === "diverged" ? "red" : "neutral"}>{selectedCanary.state === "new" ? "Nova" : selectedCanary.state === "diverged" ? "Divergente" : selectedCanary.state === "update" ? "Atualização" : "Conciliada"}</Pill></div><p className="mt-2 text-xs text-[#5f7067]">{selectedCanary.destination}</p><p className="mt-1 text-xs text-[#5f7067]">Entrega {formatDate(selectedCanary.scheduledAt)}{selectedCanary.returnAt ? ` · devolução ${formatDate(selectedCanary.returnAt)}` : ""}</p><p className="mt-1 text-xs text-[#5f7067]">Pedido {selectedCanary.orderId ?? "não informado"} · status {selectedCanary.externalStatus ?? "não informado"}{selectedCanary.externalConcluded === true ? " · concluído" : ""} · itens {selectedCanary.itemCount ?? "não informado"}</p></div> : <div className="rounded-lg bg-[#f2f5f3] p-4 text-sm text-[#5f7067]">Selecione um ID para revisar o registro exato.</div>}
               </div>
             ) : <div className="mt-5"><Empty>Nenhum candidato válido neste período.</Empty></div>}
+            {selectedCanary && (
+              <button type="button" onClick={inspectDetail} disabled={props.busy} className="mt-4 min-h-11 rounded-lg border border-[#bfcfc6] px-3 py-2 text-sm font-semibold disabled:opacity-40">
+                Inspecionar itens e vínculos sem gravar
+              </button>
+            )}
+            {detailPreview && (
+              <details open className="mt-4 rounded-lg border border-[#dce3de] bg-[#f8faf8] p-4">
+                <summary className="min-h-11 cursor-pointer text-sm font-semibold">Contrato sanitizado do detalhe</summary>
+                <p className="mt-2 text-xs text-[#5f7067]">O corpo e os valores não são retornados; chaves fora da allowlist aparecem redigidas.</p>
+                <div className="mt-2 max-h-64 divide-y divide-[#e1e7e3] overflow-auto text-xs">
+                  {detailPreview.contract.fields.map((field) => <p key={field.path} className="grid gap-1 py-2 sm:grid-cols-[minmax(0,1fr)_auto]"><code className="break-all">{field.path}</code><span className="text-[#5f7067]">{field.signatures.join(" | ")} · {field.occurrences}x</span></p>)}
+                </div>
+              </details>
+            )}
             <details className="mt-5 rounded-lg border border-[#dce3de] bg-[#f8faf8] p-4">
               <summary className="min-h-11 cursor-pointer text-sm font-semibold">Contrato sanitizado observado</summary>
               <p className="mt-2 text-xs leading-relaxed text-[#5f7067]">Somente nomes de campos, tipos, formatos e contagens. Valores, tokens e dados pessoais não são retornados.</p>
@@ -1526,7 +1603,7 @@ function IntegrationsView(props: Props) {
                 </div>
               </div>
             </details>
-            <button type="button" onClick={confirmCanary} disabled={props.busy || !props.snapshot.estoquenow.import_enabled || !selectedCanary || selectedCanary.state === "diverged"} className="mt-5 min-h-11 w-full rounded-lg bg-[#173d34] px-4 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">Importar somente esta operação para a Império</button>
+            <button type="button" onClick={confirmCanary} disabled={props.busy || !props.snapshot.estoquenow.import_enabled || !selectedCanary} className="mt-5 min-h-11 w-full rounded-lg bg-[#173d34] px-4 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">{selectedCanary?.state === "diverged" || selectedCanary?.state === "update" ? "Atualizar somente esta operação após revisão" : "Importar somente esta operação para a Império"}</button>
             {!props.snapshot.estoquenow.import_enabled && <p className="mt-3 text-center text-xs text-[#705817]">Defina ESTOQUENOW_IMPORT_ENABLED=true no servidor somente após validar esta prévia e obter autorização operacional.</p>}
           </article>
         )}

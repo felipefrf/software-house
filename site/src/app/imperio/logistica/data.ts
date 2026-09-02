@@ -57,3 +57,15 @@ export async function inspectEstoqueNowOperations(startDate: Date, endDate: Date
   });
   return liveClient.listLogisticsWithContract(dateForApi(startDate), dateForApi(endDate));
 }
+
+export async function inspectEstoqueNowDetail(externalId: string) {
+  const { clientId, clientSecret } = credentials();
+  if (!clientId || !clientSecret) throw new Error("ESTOQUENOW_NOT_CONFIGURED");
+  liveClient ??= new EstoqueNowClient({
+    clientId,
+    clientSecret,
+    baseUrl: process.env.ESTOQUENOW_API_URL,
+    writeEnabled: process.env.ESTOQUENOW_WRITE_ENABLED === "true",
+  });
+  return liveClient.inspectLogisticDetail(externalId);
+}

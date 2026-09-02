@@ -506,6 +506,17 @@ export function FieldApp(props: Props) {
               {selected.event_name}
             </h1>
             <p className="mt-1 text-sm text-[#65746c]">{selected.destination}</p>
+            {selected.estoquenow_context && (
+              <p className="mt-2 text-sm text-[#3f554a]">
+                Pedido {selected.estoquenow_context.order_id ?? "não informado"}
+                {selected.estoquenow_context.return_at
+                  ? ` · devolução ${formatDate(selected.estoquenow_context.return_at)}`
+                  : ""}
+                {selected.estoquenow_context.item_count !== null
+                  ? ` · ${selected.estoquenow_context.item_count} item(ns)`
+                  : ""}
+              </p>
+            )}
             <StageRail operation={selected} />
             <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
               <div className="rounded-lg bg-[#f2f5f3] p-3">

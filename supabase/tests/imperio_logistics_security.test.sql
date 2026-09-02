@@ -4,7 +4,31 @@ set local role postgres;
 create extension if not exists pgtap with schema extensions;
 set local search_path = extensions, public;
 
-select plan(40);
+select plan(58);
+
+select has_table(
+  'public',
+  'estoquenow_operation_contexts',
+  'contexto estruturado do EstoqueNOW existe'
+);
+select is(
+  (select relrowsecurity from pg_catalog.pg_class where oid = 'public.estoquenow_operation_contexts'::regclass),
+  true,
+  'contexto do EstoqueNOW usa RLS'
+);
+select ok(
+  has_table_privilege('authenticated', 'public.estoquenow_operation_contexts', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.estoquenow_operation_contexts', 'INSERT')
+    and not has_table_privilege('authenticated', 'public.estoquenow_operation_contexts', 'UPDATE')
+    and not has_table_privilege('authenticated', 'public.estoquenow_operation_contexts', 'DELETE'),
+  'authenticated lê contexto, mas não grava diretamente'
+);
+select ok(
+  not has_table_privilege('service_role', 'public.estoquenow_operation_contexts', 'INSERT')
+    and not has_table_privilege('service_role', 'public.estoquenow_operation_contexts', 'UPDATE')
+    and not has_table_privilege('service_role', 'public.estoquenow_operation_contexts', 'DELETE'),
+  'service_role grava contexto somente pelo RPC estreito'
+);
 
 insert into auth.users (id, email, raw_user_meta_data)
 values
@@ -526,7 +550,12 @@ select throws_ok(
       now(),
       'Leitura externa validada',
       now(),
-      '10000000-0000-4000-8000-000000000001'
+      '10000000-0000-4000-8000-000000000001',
+      '{"order_id":"pedido-1"}'::jsonb,
+      'Canário EstoqueNOW',
+      'Destino externo válido',
+      'Leitura externa validada',
+      null
     )
   $$,
   '42501',
@@ -578,12 +607,51 @@ select is(
     'Destino externo válido',
     '2026-09-02 12:00:00-03'::timestamptz,
     'Leitura externa validada',
-    now(),
-    '10000000-0000-4000-8000-000000000001'
+    '2026-09-02 12:05:00-03'::timestamptz,
+    '10000000-0000-4000-8000-000000000001',
+    '{
+      "order_id":"pedido-1",
+      "return_at":"2026-09-03T18:00:00-03:00",
+      "address_city":"Salvador",
+      "delivery_status_type":"pending",
+      "delivery_concluded":false,
+      "item_count":"12"
+    }'::jsonb,
+    'Canário EstoqueNOW',
+    'Destino externo válido',
+    'Leitura externa validada',
+    null
   ),
   'new',
   'RPC estreito cria exatamente um canário via backend privilegiado'
 );
+set local role postgres;
+select is(
+  (select count(*) from public.estoquenow_operation_contexts c
+    join public.operations o on o.id = c.operation_id
+    where o.external_id = 'external-canary-1'),
+  1::bigint,
+  'importação cria exatamente um contexto 1:1'
+);
+select results_eq(
+  $$
+    select c.order_id, c.return_at, c.address_city, c.delivery_status_type,
+      c.delivery_concluded, c.item_count
+    from public.estoquenow_operation_contexts c
+    join public.operations o on o.id = c.operation_id
+    where o.external_id = 'external-canary-1'
+  $$,
+  $$values (
+    'pedido-1'::text,
+    '2026-09-03 18:00:00-03'::timestamptz,
+    'Salvador'::text,
+    'pending'::text,
+    false,
+    '12'::text
+  )$$,
+  'contexto preserva pedido, retorno, endereço, status e contagem'
+);
+set local role service_role;
 select is(
   public.confirm_estoquenow_canary(
     'external-canary-1',
@@ -591,8 +659,20 @@ select is(
     'Destino externo válido',
     '2026-09-02 12:00:00-03'::timestamptz,
     'Leitura externa validada',
-    now(),
-    '10000000-0000-4000-8000-000000000001'
+    '2026-09-02 12:06:00-03'::timestamptz,
+    '10000000-0000-4000-8000-000000000001',
+    '{
+      "order_id":"pedido-1",
+      "return_at":"2026-09-03T18:00:00-03:00",
+      "address_city":"Salvador",
+      "delivery_status_type":"pending",
+      "delivery_concluded":false,
+      "item_count":"12"
+    }'::jsonb,
+    'Canário EstoqueNOW',
+    'Destino externo válido',
+    'Leitura externa validada',
+    '2026-09-02 12:05:00-03'::timestamptz
   ),
   'unchanged',
   'reimportação do mesmo ID externo é idempotente'
@@ -602,6 +682,174 @@ select is(
   (select count(*) from public.operations where external_id = 'external-canary-1'),
   1::bigint,
   'reimportação não duplica operação'
+);
+select is(
+  (select count(*) from public.estoquenow_operation_contexts c
+    join public.operations o on o.id = c.operation_id
+    where o.external_id = 'external-canary-1'),
+  1::bigint,
+  'reimportação não duplica contexto'
+);
+set local role service_role;
+select is(
+  public.confirm_estoquenow_canary(
+    'external-canary-1', 'Canário EstoqueNOW', 'Destino externo válido',
+    '2026-09-02 12:00:00-03'::timestamptz, 'Leitura externa validada',
+    '2026-09-02 12:07:00-03'::timestamptz,
+    '10000000-0000-4000-8000-000000000001',
+    '{
+      "order_id":"pedido-alterado",
+      "return_at":"2026-09-03T18:00:00-03:00",
+      "address_city":"Salvador",
+      "delivery_status_type":"pending",
+      "delivery_concluded":false,
+      "item_count":"12"
+    }'::jsonb,
+    'Canário EstoqueNOW', 'Destino externo válido', 'Leitura externa validada',
+    '2026-09-02 12:06:00-03'::timestamptz
+  ),
+  'updated',
+  'mudança revisada atualiza o contexto sem duplicar a operação'
+);
+set local role postgres;
+select is(
+  (select order_id from public.estoquenow_operation_contexts c
+    join public.operations o on o.id = c.operation_id
+    where o.external_id = 'external-canary-1'),
+  'pedido-alterado',
+  'atualização revisada persiste o novo contexto'
+);
+set local role service_role;
+select throws_ok(
+  $$
+    select public.confirm_estoquenow_canary(
+      'external-canary-1', 'Canário EstoqueNOW', 'Destino externo válido',
+      '2026-09-02 12:00:00-03', '', '2026-09-02 12:08:00-03',
+      '10000000-0000-4000-8000-000000000001',
+      '{"order_id":"pedido-alterado"}'::jsonb,
+      'Canário EstoqueNOW', 'Destino externo válido', '',
+      '2026-09-02 12:06:00-03'
+    )
+  $$,
+  'P0001',
+  'stale source divergence',
+  'confirmação obsoleta não sobrescreve leitura mais nova'
+);
+set local role postgres;
+select is(
+  (select imported_at from public.operations where external_id = 'external-canary-1'),
+  '2026-09-02 12:07:00-03'::timestamptz,
+  'conflito obsoleto preserva a versão persistida'
+);
+update public.operations set status = 'completed'
+where external_id = 'external-canary-1';
+set local role service_role;
+select throws_ok(
+  $$
+    select public.confirm_estoquenow_canary(
+      'external-canary-1', 'Canário alterado', 'Destino externo válido',
+      '2026-09-02 12:00:00-03', '', '2026-09-02 12:09:00-03',
+      '10000000-0000-4000-8000-000000000001',
+      '{"order_id":"pedido-alterado"}'::jsonb,
+      'Canário EstoqueNOW', 'Destino externo válido', '',
+      '2026-09-02 12:07:00-03'
+    )
+  $$,
+  'P0001',
+  'historic source divergence',
+  'operação concluída não reescreve cabeçalho histórico'
+);
+select is(
+  public.confirm_estoquenow_canary(
+    'external-canary-1', 'Canário EstoqueNOW', 'Destino externo válido',
+    '2026-09-02 12:00:00-03', '', '2026-09-02 12:09:00-03',
+    '10000000-0000-4000-8000-000000000001',
+    '{
+      "order_id":"pedido-alterado",
+      "return_at":"2026-09-03T18:00:00-03:00",
+      "address_city":"Salvador",
+      "delivery_status_type":"completed",
+      "delivery_concluded":true,
+      "item_count":"12"
+    }'::jsonb,
+    'Canário EstoqueNOW', 'Destino externo válido', '',
+    '2026-09-02 12:07:00-03'
+  ),
+  'updated',
+  'operação concluída ainda atualiza somente status externo'
+);
+set local role postgres;
+update public.operations set status = 'active'
+where external_id = 'external-canary-1';
+
+insert into public.operations (
+  id, source, external_id, event_name, destination, scheduled_at, manager_id, notes, imported_at
+) values (
+  '40000000-0000-4000-8000-000000000010', 'estoquenow', 'external-legacy-1',
+  'Operação legada', 'Local · Salvador', '2026-09-05 08:00:00-03',
+  '10000000-0000-4000-8000-000000000001',
+  'Importado por leitura do EstoqueNOW. Pedido legado.',
+  '2026-09-02 11:00:00-03'::timestamptz
+);
+set local role service_role;
+select is(
+  public.confirm_estoquenow_canary(
+    'external-legacy-1', 'Operação legada', 'Local · Rua A, 10 · Salvador - BA',
+    '2026-09-05 08:00:00-03', '', now(),
+    '10000000-0000-4000-8000-000000000001',
+    '{"order_id":"legado","address_street":"Rua A"}'::jsonb,
+    'Operação legada',
+    'Local · Salvador', 'Importado por leitura do EstoqueNOW. Pedido legado.',
+    '2026-09-02 11:00:00-03'::timestamptz
+  ),
+  'backfilled',
+  'linha legada exata recebe contexto sem nova operação'
+);
+set local role postgres;
+select ok(
+  (select notes is null and destination = 'Local · Rua A, 10 · Salvador - BA'
+    from public.operations where external_id = 'external-legacy-1')
+    and (select count(*) = 1 from public.estoquenow_operation_contexts c
+      join public.operations o on o.id = c.operation_id
+      where o.external_id = 'external-legacy-1'),
+  'backfill limpa somente a nota legada e enriquece o destino'
+);
+
+insert into public.operations (
+  id, source, external_id, event_name, destination, scheduled_at, manager_id, notes, imported_at
+) values (
+  '40000000-0000-4000-8000-000000000011', 'estoquenow', 'external-legacy-diverged',
+  'Operação legada', 'Local · Salvador', '2026-09-05 08:00:00-03',
+  '10000000-0000-4000-8000-000000000001', 'Nota interna preservada',
+  '2026-09-02 11:00:00-03'::timestamptz
+);
+set local role service_role;
+select throws_ok(
+  $$
+    select public.confirm_estoquenow_canary(
+      'external-legacy-diverged', 'Operação legada', 'Local · Rua A, 10 · Salvador - BA',
+      '2026-09-05 08:00:00-03', '', now(),
+      '10000000-0000-4000-8000-000000000001',
+      '{"order_id":"legado"}'::jsonb,
+      'Operação legada',
+      'Local · Salvador', 'Importado por leitura do EstoqueNOW. Pedido legado.',
+      '2026-09-02 11:00:00-03'::timestamptz
+    )
+  $$,
+  'P0001',
+  'legacy source divergence',
+  'backfill divergente aborta sem sobrescrever nota interna'
+);
+set local role postgres;
+select ok(
+  (select notes = 'Nota interna preservada' from public.operations
+    where external_id = 'external-legacy-diverged')
+    and not exists (
+      select 1 from public.estoquenow_operation_contexts c
+      join public.operations o on o.id = c.operation_id
+      where o.external_id = 'external-legacy-diverged'
+    ),
+  'backfill divergente preserva parent e não cria contexto'
 );
 set local role service_role;
 select throws_ok(
@@ -613,12 +861,31 @@ select throws_ok(
       'infinity'::timestamptz,
       'Leitura externa inválida',
       now(),
-      '10000000-0000-4000-8000-000000000001'
+      '10000000-0000-4000-8000-000000000001',
+      '{}'::jsonb,
+      'Canário inválido',
+      'Destino externo válido',
+      'Leitura externa inválida',
+      null
     )
   $$,
   'P0001',
   'invalid source time',
   'RPC rejeita horário externo não finito'
+);
+select throws_ok(
+  $$
+    select public.confirm_estoquenow_canary(
+      'external-canary-retorno-invalido', 'Canário inválido', 'Destino externo válido',
+      '2026-09-05 12:00:00-03'::timestamptz, '', now(),
+      '10000000-0000-4000-8000-000000000001',
+      '{"return_at":"2026-09-05T11:00:00-03:00"}'::jsonb,
+      'Canário inválido', 'Destino externo válido', '', null
+    )
+  $$,
+  'P0001',
+  'invalid source time',
+  'RPC rejeita devolução anterior à entrega'
 );
 
 set local role postgres;

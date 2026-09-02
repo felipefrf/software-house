@@ -6,6 +6,7 @@ import {
   isValidExternalId,
   isValidIsoDate,
   normalizeLogistics,
+  operationDestination,
   sourceFieldsDiverged,
   toScheduledAt,
 } from "./estoquenow.ts";
@@ -87,9 +88,19 @@ test("agrupa entrega e devolução conforme o contrato real sanitizado", () => {
         type_name: "Devolução",
         client_name: "Cliente exemplo",
         local_name: "Pavilhão exemplo",
+        protocol: "PROTO-1",
+        nu_version: "3",
+        count_items: "12",
+        address_street: "Rua Exemplo",
+        address_number: "10",
+        address_complement: "Portão B",
+        address_neighborhood: "Centro",
         address_city: "Salvador",
+        address_state: "BA",
+        address_zipcode: "40000-000",
         movement_date: "2026-09-04",
         movement_time: "18:00:00",
+        status_id: "1",
         status_type: "pending",
         is_concluded: "0",
       },
@@ -100,19 +111,68 @@ test("agrupa entrega e devolução conforme o contrato real sanitizado", () => {
         type_name: "Entrega",
         client_name: "Cliente exemplo",
         local_name: "Pavilhão exemplo",
+        protocol: "PROTO-1",
+        nu_version: "3",
+        count_items: "12",
+        address_street: "Rua Exemplo",
+        address_number: "10",
+        address_complement: "Portão B",
+        address_neighborhood: "Centro",
         address_city: "Salvador",
+        address_state: "BA",
+        address_zipcode: "40000-000",
         movement_date: "2026-09-03",
         movement_time: "08:30:15",
+        status_id: "1",
         status_type: "pending",
         is_concluded: "0",
       },
     ],
   })[0];
-  assert.equal(operation?.eventName, "Cliente exemplo");
+  assert.equal(operation?.eventName, "Pedido pedido-1 · Pavilhão exemplo");
+  assert.equal(operation?.legacyEventName, "Cliente exemplo");
   assert.equal(operation?.scheduledDate, "2026-09-03");
   assert.equal(operation?.scheduledTime, "08:30:15");
   assert.equal(operation?.returnDate, "2026-09-04");
+  assert.equal(operation?.returnTime, "18:00:00");
+  assert.equal(operation?.protocol, "PROTO-1");
+  assert.equal(operation?.sourceVersion, "3");
+  assert.equal(operation?.itemCount, "12");
+  assert.deepEqual(operation?.address, {
+    zipcode: "40000-000",
+    street: "Rua Exemplo",
+    number: "10",
+    complement: "Portão B",
+    neighborhood: "Centro",
+    city: "Salvador",
+    state: "BA",
+  });
+  assert.deepEqual(operation?.deliveryStatus, {
+    id: "1",
+    type: "pending",
+    concluded: false,
+  });
+  assert.deepEqual(operation?.returnStatus, {
+    id: "1",
+    type: "pending",
+    concluded: false,
+  });
+  assert.equal(
+    operation ? operationDestination(operation) : "",
+    "Pavilhão exemplo · Rua Exemplo, 10 · Portão B · Centro · Salvador - BA · CEP 40000-000",
+  );
   assert.equal(operation?.status, "preparation");
+});
+
+test("usa entrega como contexto canônico sem descartar a janela de devolução", () => {
+  const operation = normalizeLogistics({
+    data: [
+      { id: "1", type: "delivery", order_id: "pedido-1", movement_date: "2026-09-03" },
+      { id: "1", type: "return", order_id: "pedido-2", movement_date: "2026-09-04" },
+    ],
+  })[0];
+  assert.equal(operation?.orderId, "pedido-1");
+  assert.equal(operation?.returnDate, "2026-09-04");
 });
 
 test("aceita IDs opacos, mas rejeita vazio, controle e tamanho excessivo", () => {
@@ -169,6 +229,29 @@ test("aguarda e repete após 429", async () => {
   assert.deepEqual(waits, [2_000]);
   assert.equal(tokens, 1);
   assert.equal(reads, 2);
+});
+
+test("inspeciona detalhe por GET e retorna somente contrato sanitizado", async () => {
+  const paths: string[] = [];
+  const fetchImpl: typeof fetch = async (input) => {
+    const url = String(input);
+    if (url.endsWith("/oauth2/token")) return Response.json({ token: "redacted" });
+    paths.push(new URL(url).pathname);
+    return Response.json({
+      id: "123",
+      order_items: [{ product_name: "Item privado", quantity: 2 }],
+      private_dynamic_map: { Alice: "valor privado" },
+    });
+  };
+  const client = new EstoqueNowClient({ clientId: "id", clientSecret: "secret", fetchImpl });
+  const contract = await client.inspectLogisticDetail("123");
+  assert.deepEqual(paths, ["/v1/logistic/123"]);
+  assert.deepEqual(
+    contract.fields.map((field) => field.path),
+    ["[redacted].[redacted]", "id", "order_items.[].product_name", "order_items.[].quantity"],
+  );
+  assert.equal(/Item privado|Alice|valor privado/.test(JSON.stringify(contract)), false);
+  await assert.rejects(() => client.inspectLogisticDetail(""), /INVALID_LOGISTIC_ID/);
 });
 
 test("pagina a listagem sem duplicar IDs", async () => {

@@ -45,6 +45,30 @@ export type Vehicle = {
   status: "available" | "in_use" | "maintenance";
 };
 
+export type EstoqueNowOperationContext = {
+  order_id: string | null;
+  protocol: string | null;
+  source_version: string | null;
+  return_at: string | null;
+  venue: string | null;
+  address_zipcode: string | null;
+  address_street: string | null;
+  address_number: string | null;
+  address_complement: string | null;
+  address_neighborhood: string | null;
+  address_city: string | null;
+  address_state: string | null;
+  delivery_status_id: string | null;
+  delivery_status_type: string | null;
+  delivery_concluded: boolean | null;
+  return_status_id: string | null;
+  return_status_type: string | null;
+  return_concluded: boolean | null;
+  item_count: string | null;
+  order_type: string | null;
+  logistic_type_id: string | null;
+};
+
 export type Operation = {
   id: string;
   source: "manual" | "estoquenow";
@@ -64,6 +88,7 @@ export type Operation = {
   notes: string | null;
   imported_at: string | null;
   waiting_since: string | null;
+  estoquenow_context?: EstoqueNowOperationContext | null;
 };
 
 export type OperationEvent = {
