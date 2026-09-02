@@ -383,10 +383,20 @@ export async function POST(request: Request) {
       if (
         body.mode === "delete" &&
         manualCount.count === 0 &&
-        operations.data?.length === 0 &&
-        /^2026-09-02\/[0-9a-f-]{36}$/i.test(body.backupPrefix ?? "")
+        operations.data?.length === 0
       ) {
-        const backupPrefix = body.backupPrefix ?? "";
+        let backupPrefix = body.backupPrefix ?? "";
+        if (!/^2026-09-02\/[0-9a-f-]{36}$/i.test(backupPrefix)) {
+          const listed = await admin.storage
+            .from(QA_BACKUP_BUCKET)
+            .list("2026-09-02", { limit: 10 });
+          const directories = (listed.data ?? []).filter((item) =>
+            /^[0-9a-f-]{36}$/i.test(item.name),
+          );
+          if (listed.error || directories.length !== 1)
+            return jsonError("Não foi possível resolver um único backup aprovado.", 409);
+          backupPrefix = `2026-09-02/${directories[0].name}`;
+        }
         const downloaded = await admin.storage
           .from(QA_BACKUP_BUCKET)
           .download(`${backupPrefix}/manifest.json`);
