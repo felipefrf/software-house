@@ -155,9 +155,16 @@ const mediaSignature = (value: unknown) => {
   if (/^https:\/\//i.test(value)) {
     const credentials = /https:\/\/[^/]*@/i.test(value);
     const query = /[?#]/.test(value);
-    return credentials
+    const kind = credentials
       ? query ? "https-url-with-credentials-and-query" : "https-url-with-credentials"
       : query ? "https-url-with-query" : "https-url";
+    if (credentials) return kind;
+    try {
+      const host = new URL(value).hostname.toLowerCase();
+      return /^[a-z0-9.-]{1,253}$/.test(host) ? `${kind}@${host}` : kind;
+    } catch {
+      return kind;
+    }
   }
   if (/^http:\/\//i.test(value)) {
     const credentials = /http:\/\/[^/]*@/i.test(value);

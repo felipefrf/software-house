@@ -250,7 +250,7 @@ test("inspeciona detalhe por GET e normaliza somente os itens permitidos", async
     return Response.json({
       id: "123",
       order_items: [
-        { id: "row-2", item_id: "item-2", order_id: "order-1", item_name: "Cadeira", product_image: "https://media.example/cadeira.jpg?secret=redacted", alice_photo: "privado" },
+        { id: "row-2", item_id: "item-2", order_id: "order-1", item_name: "Cadeira", product_image: "https://media.invalid/cadeira.jpg?secret=redacted", alice_photo: "privado" },
         { id: "row-1", item_id: "item-1", order_id: "order-1", item_name: "Mesa", product_image: null, alice_photo: "privado" },
       ],
       private_dynamic_map: { Alice: "valor privado" },
@@ -268,9 +268,9 @@ test("inspeciona detalhe por GET e normaliza somente os itens permitidos", async
     { id: "row-2", itemId: "item-2", orderId: "order-1", name: "Cadeira" },
   ]);
   assert.deepEqual(inspection.contract.mediaFields, [
-    { path: "order_items.[].product_image", signatures: ["https-url-with-query", "null"], occurrences: 2 },
+    { path: "order_items.[].product_image", signatures: ["https-url-with-query@media.invalid", "null"], occurrences: 2 },
   ]);
-  assert.equal(/Alice|alice|valor privado|media\.example|secret/.test(JSON.stringify(inspection)), false);
+  assert.equal(/Alice|alice|valor privado|cadeira\.jpg|secret/.test(JSON.stringify(inspection)), false);
   await assert.rejects(() => client.inspectLogisticDetail(""), /INVALID_LOGISTIC_ID/);
 });
 
