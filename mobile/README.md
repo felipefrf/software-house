@@ -42,7 +42,10 @@ Se a resposta da RPC for perdida ou ambígua, as evidências local e remota são
 - Logout usa escopo local, remove cache e confirmações locais, mas preserva por usuário ações e fotos não resolvidas para retomada no mesmo aparelho.
 - Descartar uma falha ou conflito exige conexão; o registro SQLite e a foto local só são removidos depois que o Storage confirma a remoção remota.
 - A primeira troca de senha continua no portal web porque o backend revogou `mark_password_changed` do cliente autenticado; o app bloqueia e abre o portal seguro.
-- EstoqueNOW não é chamado pelo app. Operações manuais continuam rotuladas como internas.
+- O app não chama o EstoqueNOW diretamente. Operações, contexto, itens e checks
+  chegam pela API da Império/Supabase; fotos passam pelo proxy autenticado da
+  Império, sem expor a URL assinada externa. Operações manuais continuam rotuladas
+  como internas.
 - Não há dado simulado no aplicativo.
 
 ## Validar

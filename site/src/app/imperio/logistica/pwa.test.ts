@@ -117,3 +117,25 @@ test("fotos de itens passam por proxy autenticado e limitado", async () => {
   assert.doesNotMatch(route, /pathname|searchParams\.toString/);
   assert.match(route, /x-content-type-options/);
 });
+
+test("integrações expõem saúde sanitizada do pull e fila de revisão", async () => {
+  const [dashboard, server, types, cron] = await Promise.all([
+    readFile(new URL("./web-dashboard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("./server.ts", import.meta.url), "utf8"),
+    readFile(new URL("./types.ts", import.meta.url), "utf8"),
+    readFile(new URL("../../api/imperio/estoquenow-pull/route.ts", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(server, /rpc\("get_estoquenow_sync_health"/);
+  assert.match(server, /if \(result\.error\) return null/);
+  assert.match(types, /sync_health\?: EstoqueNowSyncHealth \| null/);
+  assert.match(dashboard, /Leitura conectada/);
+  assert.match(dashboard, /Última leitura automática/);
+  assert.match(dashboard, /Buscar alterações sem importar/);
+  assert.match(dashboard, /Fila de revisão/);
+  assert.match(dashboard, /aria-busy=\{previewRequestState === "loading"\}/);
+  assert.match(dashboard, /role="alert"/);
+  assert.match(dashboard, /Desatualizado/);
+  assert.match(dashboard, /grid-cols-2 gap-3 md:grid-cols-4/);
+  assert.match(cron, /result\.status === "failed" \? 502 : 200/);
+});

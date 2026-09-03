@@ -4,6 +4,8 @@ import { checklistForStage } from "./action";
 import { getEstoqueNowStatus } from "./data";
 import type {
   Incident,
+  EstoqueNowSyncHealth,
+  EstoqueNowSyncRun,
   LogisticsSnapshot,
   Operation,
   OperationEvent,
@@ -430,6 +432,110 @@ type Relation = { full_name: string } | { full_name: string }[] | null;
 const relationName = (relation: Relation) =>
   (Array.isArray(relation) ? relation[0]?.full_name : relation?.full_name) ?? null;
 
+type SupabaseServerClient = NonNullable<
+  Awaited<ReturnType<typeof createSupabaseServerClient>>
+>;
+
+const record = (value: unknown): Record<string, unknown> | null =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+
+const timestamp = (value: unknown) =>
+  typeof value === "string" && Number.isFinite(Date.parse(value)) ? value : null;
+
+const count = (value: unknown) =>
+  typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : 0;
+
+const parseSyncRun = (value: unknown): EstoqueNowSyncRun | null => {
+  const run = record(value);
+  if (!run) return null;
+  const trigger =
+    run.trigger === "scheduled" || run.trigger === "manual" ? run.trigger : null;
+  const mode = run.mode === "observe" || run.mode === "apply" ? run.mode : null;
+  const status = [
+    "running",
+    "succeeded",
+    "partial",
+    "failed",
+    "abandoned",
+    "skipped",
+  ].includes(String(run.status))
+    ? (run.status as EstoqueNowSyncRun["status"])
+    : null;
+  const windowStart = timestamp(run.windowStart);
+  const windowEnd = timestamp(run.windowEnd);
+  const startedAt = timestamp(run.startedAt);
+  if (
+    typeof run.id !== "string" ||
+    !run.id ||
+    !trigger ||
+    !mode ||
+    !status ||
+    !windowStart ||
+    !windowEnd ||
+    !startedAt
+  )
+    return null;
+
+  return {
+    id: run.id,
+    trigger,
+    mode,
+    status,
+    windowStart,
+    windowEnd,
+    batchLimit:
+      typeof run.batchLimit === "number" &&
+      Number.isInteger(run.batchLimit) &&
+      run.batchLimit >= 0
+        ? run.batchLimit
+        : null,
+    startedAt,
+    finishedAt: timestamp(run.finishedAt),
+    fetched: count(run.fetched),
+    valid: count(run.valid),
+    eligible: count(run.eligible),
+    attempted: count(run.attempted),
+    applied: count(run.applied),
+    unchanged: count(run.unchanged),
+    blocked: count(run.blocked),
+    deferred: count(run.deferred),
+    failed: count(run.failed),
+    errorCode:
+      typeof run.errorCode === "string" &&
+      /^[a-z0-9_:-]{1,80}$/.test(run.errorCode)
+        ? run.errorCode
+        : null,
+  };
+};
+
+const readEstoqueNowSyncHealth = async (
+  supabase: SupabaseServerClient,
+): Promise<EstoqueNowSyncHealth | null> => {
+  try {
+    const result = await supabase.rpc("get_estoquenow_sync_health", {
+      p_limit: 10,
+    });
+    if (result.error) return null;
+    const health = record(result.data);
+    if (!health) return null;
+    return {
+      lastRun: parseSyncRun(health.lastRun),
+      lastSuccessfulScheduledRun: parseSyncRun(
+        health.lastSuccessfulScheduledRun,
+      ),
+      recentRuns: Array.isArray(health.recentRuns)
+        ? health.recentRuns
+            .map(parseSyncRun)
+            .filter((run): run is EstoqueNowSyncRun => Boolean(run))
+        : [],
+    };
+  } catch {
+    return null;
+  }
+};
+
 export async function getAppSnapshot(): Promise<LogisticsSnapshot> {
   if (!isSupabaseConfigured()) return demoSnapshot();
   const supabase = await createSupabaseServerClient();
@@ -468,7 +574,7 @@ export async function getAppSnapshot(): Promise<LogisticsSnapshot> {
       estoquenow: getEstoqueNowStatus(),
     };
 
-  const [profilesResult, teamsResult, membersResult, vehiclesResult, operationsResult, itemChecksResult, eventsResult, incidentsResult] =
+  const [profilesResult, teamsResult, membersResult, vehiclesResult, operationsResult, itemChecksResult, eventsResult, incidentsResult, syncHealth] =
     await Promise.all([
       supabase
         .from("profiles")
@@ -501,6 +607,9 @@ export async function getAppSnapshot(): Promise<LogisticsSnapshot> {
           "id,operation_id,stage,type,severity,impact,description,status,latitude,longitude,accuracy,photo_path,created_at,resolved_at,actor:profiles!incidents_actor_id_fkey(full_name),responsible:profiles!incidents_responsible_id_fkey(full_name)",
         )
         .order("created_at", { ascending: false }),
+      currentProfile.role === "manager"
+        ? readEstoqueNowSyncHealth(supabase)
+        : Promise.resolve(null),
     ]);
 
   const error =
@@ -608,6 +717,9 @@ export async function getAppSnapshot(): Promise<LogisticsSnapshot> {
     vehicles,
     operations,
     incidents,
-    estoquenow: getEstoqueNowStatus(lastSyncAt, imported.length),
+    estoquenow: {
+      ...getEstoqueNowStatus(lastSyncAt, imported.length),
+      sync_health: syncHealth,
+    },
   };
 }

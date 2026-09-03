@@ -43,6 +43,7 @@ import type {
   Operation,
   OperationEvent,
   OperationStage,
+  EstoqueNowSyncRun,
 } from "./types";
 import {
   formatDate,
@@ -145,6 +146,34 @@ type EstoqueNowDetailPreview = {
     mediaFields: Array<{ path: string; signatures: string[]; occurrences: number }>;
   };
 };
+
+type PreviewRequestState = "idle" | "loading" | "succeeded" | "failed";
+
+const automaticRunStatus = (
+  run: EstoqueNowSyncRun | null,
+  stale: boolean,
+): { label: string; tone: "neutral" | "green" | "amber" | "red" } => {
+  if (!run) return { label: "Ainda não executado", tone: "neutral" };
+  if (run.status === "running") return { label: "Em andamento", tone: "amber" };
+  if (run.status === "failed" || run.status === "abandoned")
+    return { label: "Falha", tone: "red" };
+  if (run.status === "partial") return { label: "Parcial", tone: "amber" };
+  if (run.status === "skipped") return { label: "Ignorado", tone: "amber" };
+  if (stale) return { label: "Desatualizado", tone: "amber" };
+  return { label: "Saudável", tone: "green" };
+};
+
+const isAutomaticRunStale = (run: EstoqueNowSyncRun | null) => {
+  const finishedAt = run?.finishedAt;
+  return Boolean(
+    finishedAt && Date.now() - Date.parse(finishedAt) > 26 * 60 * 60 * 1000,
+  );
+};
+
+const formatSyncWindowDate = (value: string) =>
+  /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? value.split("-").reverse().join("/")
+    : formatDate(value);
 
 const formValue = (form: FormData, name: string) =>
   String(form.get(name) ?? "").trim();
@@ -1477,23 +1506,58 @@ function IntegrationsView(props: Props) {
   const [preview, setPreview] = useState<EstoqueNowPreview | null>(null);
   const [detailPreview, setDetailPreview] = useState<EstoqueNowDetailPreview | null>(null);
   const [canaryId, setCanaryId] = useState("");
+  const [previewRequestState, setPreviewRequestState] =
+    useState<PreviewRequestState>("idle");
   const selectedCanary = preview?.candidates.find(
     (candidate) => candidate.externalId === canaryId,
   );
+  const syncHealth = props.snapshot.estoquenow.sync_health;
+  const automaticRuns = syncHealth
+    ? [syncHealth.lastRun, ...syncHealth.recentRuns].filter(
+        (run): run is EstoqueNowSyncRun => run?.trigger === "scheduled",
+      )
+    : [];
+  const latestAutomaticRun = automaticRuns[0] ?? null;
+  const latestAutomaticSuccess = syncHealth?.lastSuccessfulScheduledRun ?? null;
+  const automaticStatus = syncHealth
+    ? automaticRunStatus(
+        latestAutomaticRun,
+        isAutomaticRunStale(latestAutomaticRun),
+      )
+    : { label: "Indisponível", tone: "neutral" as const };
+  const automaticReviewCount = latestAutomaticRun
+    ? latestAutomaticRun.blocked +
+      latestAutomaticRun.deferred +
+      latestAutomaticRun.failed
+    : 0;
+  const previewReviewCount = preview
+    ? preview.counts.new +
+      preview.counts.update +
+      preview.counts.diverged +
+      preview.counts.blocked +
+      preview.counts.skipped
+    : 0;
   const sync = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     let result = "Prévia concluída sem gravar no banco da Império.";
+    setPreviewRequestState("loading");
     void props.run(async () => {
-      const nextPreview = await postJson<EstoqueNowPreview>("sync-estoquenow", {
-        mode: "preview",
-        startDate: formValue(form, "startDate"),
-        endDate: formValue(form, "endDate"),
-      });
-      setPreview(nextPreview);
-      setDetailPreview(null);
-      setCanaryId("");
-      result = `${nextPreview.total} logística(s), ${nextPreview.movementsTotal} movimento(s) · ${nextPreview.counts.new} nova(s) · ${nextPreview.counts.update} atualização(ões) · ${nextPreview.counts.unchanged} conciliada(s) · ${nextPreview.counts.diverged} divergente(s) · ${nextPreview.counts.blocked} histórica(s) bloqueada(s) · ${nextPreview.counts.skipped} inválida(s). Nenhuma gravação realizada.`;
+      try {
+        const nextPreview = await postJson<EstoqueNowPreview>("sync-estoquenow", {
+          mode: "preview",
+          startDate: formValue(form, "startDate"),
+          endDate: formValue(form, "endDate"),
+        });
+        setPreview(nextPreview);
+        setDetailPreview(null);
+        setCanaryId("");
+        setPreviewRequestState("succeeded");
+        result = `${nextPreview.total} logística(s), ${nextPreview.movementsTotal} movimento(s) · ${nextPreview.counts.new} nova(s) · ${nextPreview.counts.update} atualização(ões) · ${nextPreview.counts.unchanged} conciliada(s) · ${nextPreview.counts.diverged} divergente(s) · ${nextPreview.counts.blocked} histórica(s) bloqueada(s) · ${nextPreview.counts.skipped} inválida(s). Nenhuma gravação realizada.`;
+      } catch (error) {
+        setPreviewRequestState("failed");
+        throw error;
+      }
     }, () => result);
   };
   const inspectDetail = () => {
@@ -1561,7 +1625,7 @@ function IntegrationsView(props: Props) {
         <article className="rounded-xl border border-[#d7dfd9] bg-white p-5">
           <div className="flex items-start justify-between gap-4">
             <div><Link2 size={21} className="text-[#3d7567]" /><h3 className="mt-3 text-xl font-semibold">EstoqueNOW</h3></div>
-            <Pill tone={props.snapshot.estoquenow.source === "estoquenow" ? "green" : "amber"}>{props.snapshot.estoquenow.source === "estoquenow" ? "Importação ativa" : props.snapshot.estoquenow.configured ? "Credenciais no servidor" : "Sem credenciais"}</Pill>
+            <Pill tone={props.snapshot.estoquenow.source === "estoquenow" ? "green" : "amber"}>{props.snapshot.estoquenow.source === "estoquenow" ? "Leitura conectada" : props.snapshot.estoquenow.configured ? "Credenciais no servidor" : "Sem credenciais"}</Pill>
           </div>
           <p className="mt-3 text-sm text-[#65746c]">{props.snapshot.estoquenow.notice}</p>
           <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
@@ -1570,22 +1634,50 @@ function IntegrationsView(props: Props) {
           </dl>
           <div className="mt-4 rounded-lg bg-[#eef5f1] p-3 text-xs leading-relaxed text-[#285f50]">A consulta à API é somente leitura e ocorre no servidor. Cada confirmação importa exatamente uma operação para o Postgres da Império.</div>
           <div className={`mt-3 rounded-lg p-3 text-xs ${props.snapshot.estoquenow.import_enabled ? "bg-[#e3f2ec] text-[#28624f]" : "bg-[#fff6dd] text-[#705817]"}`}>
-            Importação individual {props.snapshot.estoquenow.import_enabled ? "habilitada" : "bloqueada"} por ambiente. Importação em lote indisponível.
+            Importação individual {props.snapshot.estoquenow.import_enabled ? "habilitada" : "bloqueada"} por ambiente. Pull automático separado, com lote máximo de cinco.
           </div>
         </article>
-        <form onSubmit={sync} className="rounded-xl border border-[#d7dfd9] bg-white p-5">
+        <form onSubmit={sync} aria-busy={previewRequestState === "loading"} className="rounded-xl border border-[#d7dfd9] bg-white p-5">
           <p className="font-mono text-xs uppercase tracking-[0.14em] text-[#5f7067]">Passo 1</p>
-          <h3 className="mt-2 text-xl font-semibold">Pré-visualizar leitura</h3>
-          <p className="mt-2 text-sm leading-relaxed text-[#65746c]">Consulte um período e confira IDs, datas e divergências. Esta etapa nunca grava operações.</p>
+          <h3 className="mt-2 text-xl font-semibold">Consultar alterações</h3>
+          <p className="mt-2 text-sm leading-relaxed text-[#65746c]">Consulte um período e confira IDs, datas e divergências. Esta etapa não cria nem altera operações.</p>
           <div className="grid gap-x-4 sm:grid-cols-2"><Input name="startDate" label="Início" type="date" defaultValue={operationDateInput(today)} /><Input name="endDate" label="Fim" type="date" defaultValue={operationDateInput(future)} /></div>
-          <button disabled={props.busy || !props.snapshot.configured || !props.snapshot.estoquenow.configured} className="mt-5 min-h-11 w-full rounded-lg bg-[#5b4bcc] px-4 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">Gerar prévia sem gravar</button>
+          <button disabled={props.busy || previewRequestState === "loading" || !props.snapshot.configured || !props.snapshot.estoquenow.configured} className="mt-5 min-h-11 w-full rounded-lg bg-[#5b4bcc] px-4 py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40">{previewRequestState === "loading" ? "Consultando EstoqueNOW..." : "Buscar alterações sem importar"}</button>
+          <div aria-live="polite">
+            {previewRequestState === "loading" && <p className="mt-3 flex items-center gap-2 text-xs font-medium text-[#5b4bcc]"><RefreshCw className="animate-spin" size={14} aria-hidden="true" />A leitura pode levar alguns segundos.</p>}
+            {previewRequestState === "failed" && <p className="mt-3 rounded-lg bg-[#fae5e2] p-3 text-xs font-semibold text-[#923d34]" role="alert">A consulta não foi concluída. Confirme a disponibilidade do conector e tente novamente.</p>}
+          </div>
           {!props.snapshot.estoquenow.configured && <p className="mt-3 text-xs text-[#705817]">Adicione as credenciais apenas no servidor para liberar a prévia.</p>}
         </form>
+        <article className="rounded-xl border border-[#d7dfd9] bg-white p-5 xl:col-span-2" aria-labelledby="automatic-read-title">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="font-mono text-xs uppercase tracking-[0.14em] text-[#5f7067]">Pull incremental</p>
+              <h3 id="automatic-read-title" className="mt-2 text-xl font-semibold">Última leitura automática</h3>
+              <p className="mt-1 text-sm text-[#65746c]">Janela móvel com métricas sanitizadas; nenhum payload externo é exibido.</p>
+            </div>
+            <Pill tone={automaticStatus.tone}>{automaticStatus.label}</Pill>
+          </div>
+          {syncHealth ? (
+            <>
+              <dl className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
+                <div className="rounded-lg bg-[#f2f5f3] p-3"><dt className="text-xs text-[#5f7067]">Último sucesso</dt><dd className="mt-1 break-words font-semibold">{latestAutomaticSuccess?.finishedAt ? formatDate(latestAutomaticSuccess.finishedAt) : "Nunca"}</dd></div>
+                <div className="rounded-lg bg-[#f2f5f3] p-3"><dt className="text-xs text-[#5f7067]">Janela consultada</dt><dd className="mt-1 break-words text-sm font-semibold">{latestAutomaticRun ? `${formatSyncWindowDate(latestAutomaticRun.windowStart)} a ${formatSyncWindowDate(latestAutomaticRun.windowEnd)}` : "Ainda não consultada"}</dd></div>
+                <div className="rounded-lg bg-[#f2f5f3] p-3"><dt className="text-xs text-[#5f7067]">Logísticas lidas</dt><dd className="mt-1 text-2xl font-semibold">{latestAutomaticRun?.fetched ?? 0}</dd></div>
+                <div className="rounded-lg bg-[#f2f5f3] p-3"><dt className="text-xs text-[#5f7067]">A revisar</dt><dd className="mt-1 text-2xl font-semibold">{automaticReviewCount}</dd></div>
+              </dl>
+              {latestAutomaticRun && <p className="mt-3 text-xs text-[#5f7067]">Válidas {latestAutomaticRun.valid} · elegíveis {latestAutomaticRun.eligible} · aplicadas {latestAutomaticRun.applied} · sem mudança {latestAutomaticRun.unchanged}</p>}
+              {latestAutomaticRun && ["failed", "partial", "abandoned"].includes(latestAutomaticRun.status) && <p className="mt-3 rounded-lg bg-[#fae5e2] p-3 text-xs font-semibold text-[#923d34]" role="alert">A última leitura automática não terminou com sucesso{latestAutomaticRun.errorCode ? ` · código ${latestAutomaticRun.errorCode}` : ""}.</p>}
+            </>
+          ) : (
+            <p className="mt-4 rounded-lg bg-[#f2f5f3] p-3 text-sm text-[#5f7067]">Saúde da leitura automática indisponível. A consulta manual continua separada abaixo.</p>
+          )}
+        </article>
         {preview && (
-          <article className="rounded-xl border border-[#d7dfd9] bg-white p-5 xl:col-span-2">
+          <article className="rounded-xl border border-[#d7dfd9] bg-white p-5 xl:col-span-2" aria-live="polite">
             <div className="flex flex-wrap items-start justify-between gap-4">
-              <div><p className="font-mono text-xs uppercase tracking-[0.14em] text-[#5f7067]">Passo 2 · prévia sem escrita</p><h3 className="mt-2 text-xl font-semibold">Escolha exatamente uma operação</h3><p className="mt-1 text-sm text-[#65746c]">Período {preview.startDate.split("-").reverse().join("/")} a {preview.endDate.split("-").reverse().join("/")}</p></div>
-              <Pill tone="green">Nenhuma gravação realizada</Pill>
+              <div><p className="font-mono text-xs uppercase tracking-[0.14em] text-[#5f7067]">Resultado da consulta</p><h3 className="mt-2 text-xl font-semibold">Fila de revisão · {previewReviewCount}</h3><p className="mt-1 text-sm text-[#65746c]">Período {preview.startDate.split("-").reverse().join("/")} a {preview.endDate.split("-").reverse().join("/")} · {preview.total} logística(s) · {preview.movementsTotal} movimento(s)</p></div>
+              <Pill tone="green">Nenhuma operação alterada</Pill>
             </div>
             <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
               {[
@@ -1597,6 +1689,7 @@ function IntegrationsView(props: Props) {
                 ["Inválidas", preview.counts.skipped],
               ].map(([label, value]) => <div key={label} className="rounded-lg bg-[#f2f5f3] p-3"><p className="text-xs text-[#5f7067]">{label}</p><p className="mt-1 text-2xl font-semibold">{value}</p></div>)}
             </div>
+            {previewReviewCount === 0 && <p className="mt-4 rounded-lg bg-[#eef5f1] p-3 text-sm font-medium text-[#285f50]">Nenhuma operação exige revisão neste período.</p>}
             {preview.counts.diverged > 0 && <p className="mt-4 flex items-start gap-2 rounded-lg bg-[#fff3d1] p-3 text-sm text-[#705817]"><AlertTriangle className="mt-0.5 shrink-0" size={17} />{preview.counts.diverged} registro(s) mudaram no EstoqueNOW. Selecione um por vez e revise antes de atualizar.</p>}
             {preview.counts.blocked > 0 && <p className="mt-3 flex items-start gap-2 rounded-lg bg-[#fbe9e7] p-3 text-sm text-[#8a3025]"><AlertTriangle className="mt-0.5 shrink-0" size={17} />{preview.counts.blocked} operação(ões) têm histórico e não podem reescrever rótulo, endereço ou agenda.</p>}
             {preview.counts.skipped > 0 && <div className="mt-3 rounded-lg border border-[#eadcae] bg-[#fffaf0] p-3 text-xs text-[#705817]"><strong>Registros inválidos, sem gravação:</strong><p className="mt-1">{[
@@ -1610,7 +1703,7 @@ function IntegrationsView(props: Props) {
             ].filter(([, count]) => Number(count) > 0).map(([label, count]) => `${count} ${label}`).join(" · ")}</p></div>}
             {preview.candidates.length > 0 ? (
               <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,.8fr)]">
-                <label className="text-sm font-medium">ID externo da operação
+                <label className="text-sm font-medium">Operação da consulta
                   <select value={canaryId} onChange={(event) => { setCanaryId(event.target.value); setDetailPreview(null); }} className="mt-2 min-h-11 w-full rounded-lg border border-[#cbd4ce] bg-white px-3 py-2.5">
                     <option value="">Selecione uma operação válida</option>
                     {preview.candidates.map((candidate) => <option key={candidate.externalId} value={candidate.externalId}>{candidate.externalId} · {candidate.eventName}{candidate.state === "blocked" ? " · histórico bloqueado" : candidate.state === "diverged" ? " · divergência canônica" : candidate.state === "update" ? " · atualização disponível" : candidate.state === "unchanged" ? " · já conciliada" : " · nova"}</option>)}
@@ -1618,7 +1711,7 @@ function IntegrationsView(props: Props) {
                 </label>
                 {selectedCanary ? <div className="rounded-lg border border-[#dce3de] bg-[#f8faf8] p-4"><div className="flex items-center justify-between gap-3"><strong className="text-sm">{selectedCanary.eventName}</strong><Pill tone={selectedCanary.state === "new" ? "green" : selectedCanary.state === "diverged" || selectedCanary.state === "blocked" ? "red" : "neutral"}>{selectedCanary.state === "new" ? "Nova" : selectedCanary.state === "blocked" ? "Histórico bloqueado" : selectedCanary.state === "diverged" ? "Divergente" : selectedCanary.state === "update" ? "Atualização" : "Conciliada"}</Pill></div><p className="mt-2 text-xs text-[#5f7067]">{selectedCanary.destination}</p><p className="mt-1 text-xs text-[#5f7067]">Entrega {formatDate(selectedCanary.scheduledAt)}{selectedCanary.returnAt ? ` · devolução ${formatDate(selectedCanary.returnAt)}` : ""}</p><p className="mt-1 text-xs text-[#5f7067]">Pedido {selectedCanary.orderId ?? "não informado"} · entrega {selectedCanary.externalStatus ?? "não informada"}{selectedCanary.externalConcluded === true ? " concluída" : ""} · devolução {selectedCanary.returnExternalStatus ?? "não informada"}{selectedCanary.returnExternalConcluded === true ? " concluída" : ""}</p><p className="mt-1 text-xs text-[#5f7067]">Itens {selectedCanary.itemCount ?? "não informado"} · versão {selectedCanary.sourceVersion ?? "não informada"}</p>{selectedCanary.changedFields.length > 0 && <p className="mt-2 text-xs font-medium text-[#705817]">Mudou: {selectedCanary.changedFields.join(" · ")}</p>}</div> : <div className="rounded-lg bg-[#f2f5f3] p-4 text-sm text-[#5f7067]">Selecione um ID para revisar o registro exato.</div>}
               </div>
-            ) : <div className="mt-5"><Empty>Nenhum candidato válido neste período.</Empty></div>}
+            ) : <div className="mt-5"><Empty>{preview.counts.skipped > 0 ? "Nenhuma operação válida; revise os registros inválidos acima." : "Nenhuma logística retornada para este período."}</Empty></div>}
             {selectedCanary && (
               <button type="button" onClick={inspectDetail} disabled={props.busy} className="mt-4 min-h-11 rounded-lg border border-[#bfcfc6] px-3 py-2 text-sm font-semibold disabled:opacity-40">
                 Inspecionar itens e vínculos sem gravar

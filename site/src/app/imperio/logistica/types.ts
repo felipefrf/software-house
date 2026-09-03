@@ -142,6 +142,41 @@ export type EstoqueNowStatus = {
   notice: string;
   last_sync_at: string | null;
   imported_count: number;
+  sync_health?: EstoqueNowSyncHealth | null;
+};
+
+export type EstoqueNowSyncRun = {
+  id: string;
+  trigger: "scheduled" | "manual";
+  mode: "observe" | "apply";
+  status:
+    | "running"
+    | "succeeded"
+    | "partial"
+    | "failed"
+    | "abandoned"
+    | "skipped";
+  windowStart: string;
+  windowEnd: string;
+  batchLimit: number | null;
+  startedAt: string;
+  finishedAt: string | null;
+  fetched: number;
+  valid: number;
+  eligible: number;
+  attempted: number;
+  applied: number;
+  unchanged: number;
+  blocked: number;
+  deferred: number;
+  failed: number;
+  errorCode: string | null;
+};
+
+export type EstoqueNowSyncHealth = {
+  lastRun: EstoqueNowSyncRun | null;
+  lastSuccessfulScheduledRun: EstoqueNowSyncRun | null;
+  recentRuns: EstoqueNowSyncRun[];
 };
 
 export type LogisticsSnapshot = {

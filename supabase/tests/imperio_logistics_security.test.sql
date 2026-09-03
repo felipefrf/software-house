@@ -4,7 +4,7 @@ set local role postgres;
 create extension if not exists pgtap with schema extensions;
 set local search_path = extensions, public;
 
-select plan(78);
+select plan(130);
 
 select has_table(
   'public',
@@ -1191,6 +1191,643 @@ select ok(
     where operation_id = '40000000-0000-4000-8000-000000000012'
   ),
   'refresh da origem remove item ausente e redefine check de equipamento alterado'
+);
+
+set local role postgres;
+select has_table(
+  'private',
+  'estoquenow_sync_runs',
+  'ledger privado de execuções do sync existe'
+);
+select has_table(
+  'private',
+  'estoquenow_sync_items',
+  'ledger privado de itens do sync existe'
+);
+select is(
+  (select relrowsecurity from pg_catalog.pg_class
+    where oid = 'private.estoquenow_sync_runs'::regclass),
+  true,
+  'ledger de execuções usa RLS'
+);
+select is(
+  (select relrowsecurity from pg_catalog.pg_class
+    where oid = 'private.estoquenow_sync_items'::regclass),
+  true,
+  'ledger de itens usa RLS'
+);
+select ok(
+  not has_table_privilege('service_role', 'private.estoquenow_sync_runs', 'SELECT')
+    and not has_table_privilege('service_role', 'private.estoquenow_sync_runs', 'INSERT')
+    and not has_table_privilege('service_role', 'private.estoquenow_sync_runs', 'UPDATE')
+    and not has_table_privilege('service_role', 'private.estoquenow_sync_items', 'SELECT')
+    and not has_table_privilege('service_role', 'private.estoquenow_sync_items', 'INSERT')
+    and not has_table_privilege('service_role', 'private.estoquenow_sync_items', 'UPDATE'),
+  'service_role acessa o ledger somente pelos RPCs estreitos'
+);
+select ok(
+  not has_table_privilege('authenticated', 'private.estoquenow_sync_runs', 'SELECT')
+    and not has_table_privilege('authenticated', 'private.estoquenow_sync_items', 'SELECT')
+    and not has_table_privilege('anon', 'private.estoquenow_sync_runs', 'SELECT')
+    and not has_table_privilege('anon', 'private.estoquenow_sync_items', 'SELECT'),
+  'clientes não leem diretamente o ledger privado'
+);
+select ok(
+  has_function_privilege(
+    'service_role',
+    'public.begin_estoquenow_sync(text,text,date,date,integer)',
+    'EXECUTE'
+  )
+    and not has_function_privilege(
+      'authenticated',
+      'public.begin_estoquenow_sync(text,text,date,date,integer)',
+      'EXECUTE'
+    )
+    and not has_function_privilege(
+      'anon',
+      'public.begin_estoquenow_sync(text,text,date,date,integer)',
+      'EXECUTE'
+    ),
+  'somente service_role inicia o sync'
+);
+select ok(
+  has_function_privilege(
+    'service_role',
+    'public.record_estoquenow_sync_item(uuid,text,text,text,text,text,text,text,timestamptz,text,timestamptz,uuid,jsonb,text,text,text,jsonb,timestamptz)',
+    'EXECUTE'
+  )
+    and not has_function_privilege(
+      'authenticated',
+      'public.record_estoquenow_sync_item(uuid,text,text,text,text,text,text,text,timestamptz,text,timestamptz,uuid,jsonb,text,text,text,jsonb,timestamptz)',
+      'EXECUTE'
+    )
+    and not has_function_privilege(
+      'anon',
+      'public.record_estoquenow_sync_item(uuid,text,text,text,text,text,text,text,timestamptz,text,timestamptz,uuid,jsonb,text,text,text,jsonb,timestamptz)',
+      'EXECUTE'
+    ),
+  'somente service_role confirma e registra item do sync'
+);
+select ok(
+  has_function_privilege(
+    'service_role',
+    'public.finish_estoquenow_sync(uuid,integer,integer,integer,integer,integer,text,text)',
+    'EXECUTE'
+  )
+    and not has_function_privilege(
+      'authenticated',
+      'public.finish_estoquenow_sync(uuid,integer,integer,integer,integer,integer,text,text)',
+      'EXECUTE'
+    )
+    and not has_function_privilege(
+      'anon',
+      'public.finish_estoquenow_sync(uuid,integer,integer,integer,integer,integer,text,text)',
+      'EXECUTE'
+    ),
+  'somente service_role finaliza o sync'
+);
+select ok(
+  has_function_privilege(
+    'authenticated',
+    'public.get_estoquenow_sync_health(integer)',
+    'EXECUTE'
+  )
+    and not has_function_privilege(
+      'service_role',
+      'public.get_estoquenow_sync_health(integer)',
+      'EXECUTE'
+    )
+    and not has_function_privilege(
+      'anon',
+      'public.get_estoquenow_sync_health(integer)',
+      'EXECUTE'
+    ),
+  'health é exposto somente a usuário autenticado e valida gestor internamente'
+);
+select ok(
+  not exists (
+    select 1
+    from pg_catalog.pg_proc procedure
+    join pg_catalog.pg_namespace namespace on namespace.oid = procedure.pronamespace
+    where namespace.nspname = 'public'
+      and procedure.proname in (
+        'begin_estoquenow_sync', 'record_estoquenow_sync_item',
+        'finish_estoquenow_sync', 'get_estoquenow_sync_health'
+      )
+      and (
+        not procedure.prosecdef
+        or not coalesce(procedure.proconfig, '{}'::text[]) @> array['search_path=""']
+      )
+  ),
+  'RPCs do sync são SECURITY DEFINER com search_path vazio'
+);
+select ok(
+  not exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'private'
+      and table_name in ('estoquenow_sync_runs', 'estoquenow_sync_items')
+      and column_name in (
+        'payload', 'response', 'error_message', 'event_name', 'destination', 'notes'
+      )
+  ),
+  'ledger não possui colunas de payload, PII ou erro livre'
+);
+
+create temp table sync_test_runs (
+  label text primary key,
+  run_id uuid not null
+);
+grant select, insert, update on sync_test_runs to service_role;
+
+set local role service_role;
+select throws_ok(
+  $$
+    select public.begin_estoquenow_sync(
+      'scheduled', 'observe', '2026-09-01', '2026-09-03', 6
+    )
+  $$,
+  'P0001',
+  'invalid sync run',
+  'begin rejeita lote acima do limite de cinco'
+);
+insert into sync_test_runs (label, run_id)
+select 'observe', (result->>'runId')::uuid
+from (
+  select public.begin_estoquenow_sync(
+    'scheduled', 'observe', '2026-09-01', '2026-09-03', 5
+  ) result
+) started;
+
+set local role postgres;
+select is(
+  (select status from private.estoquenow_sync_runs
+    where id = (select run_id from sync_test_runs where label = 'observe')),
+  'running',
+  'begin cria execução observacional ativa'
+);
+
+set local role service_role;
+insert into sync_test_runs (label, run_id)
+select 'skipped', (result->>'runId')::uuid
+from (
+  select public.begin_estoquenow_sync(
+    'scheduled', 'observe', '2026-09-01', '2026-09-03', 5
+  ) result
+) skipped;
+
+set local role postgres;
+select is(
+  (select status from private.estoquenow_sync_runs
+    where id = (select run_id from sync_test_runs where label = 'skipped')),
+  'skipped',
+  'segunda execução concorrente fica registrada como skipped'
+);
+select is(
+  (select count(*) from private.estoquenow_sync_runs where status = 'running'),
+  1::bigint,
+  'single-flight mantém exatamente uma execução ativa'
+);
+
+set local role service_role;
+select is(
+  public.finish_estoquenow_sync(
+    (select run_id from sync_test_runs where label = 'observe'),
+    5, 4, 2, 1, 2, repeat('c', 64), null
+  )->>'status',
+  'partial',
+  'execução observe sinaliza bloqueios sem tentar escrita externa'
+);
+
+set local role postgres;
+select ok(
+  (select fetched_count = 5
+      and valid_count = 4
+      and eligible_count = 2
+      and attempted_count = 0
+      and blocked_count = 1
+      and deferred_count = 2
+      and contract_hash = repeat('c', 64)
+      and error_code = 'item_blocked'
+    from private.estoquenow_sync_runs
+    where id = (select run_id from sync_test_runs where label = 'observe')),
+  'resumo observe reconcilia contagens e hash sem payload'
+);
+
+set local role service_role;
+insert into sync_test_runs (label, run_id)
+select 'apply', (result->>'runId')::uuid
+from (
+  select public.begin_estoquenow_sync(
+    'manual', 'apply', '2026-09-01', '2026-09-03', 1
+  ) result
+) started;
+
+set local role postgres;
+select is(
+  (select status from private.estoquenow_sync_runs
+    where id = (select run_id from sync_test_runs where label = 'apply')),
+  'running',
+  'begin inicia execução apply depois da anterior finalizar'
+);
+
+set local role service_role;
+select is(
+  public.record_estoquenow_sync_item(
+    (select run_id from sync_test_runs where label = 'apply'),
+    'external-sync-ledger-1', '1', repeat('a', 64), repeat('b', 64), 'new',
+    'Operação sync ledger', 'Destino de teste',
+    '2026-09-04 12:00:00-03'::timestamptz, '',
+    '2026-09-03 12:00:00-03'::timestamptz,
+    '10000000-0000-4000-8000-000000000001',
+    '{"order_id":"sync-order-1","delivery_status_type":"pending","delivery_concluded":false,"item_count":"1"}'::jsonb,
+    'Operação sync ledger', 'Destino de teste', '',
+    '[{"id":"sync-line-1","itemId":"sync-item-1","orderId":"sync-order-1","name":"Mesa"}]'::jsonb,
+    null
+  )->>'outcome',
+  'applied',
+  'record confirma operação e registra resultado no mesmo RPC'
+);
+
+set local role postgres;
+select ok(
+  exists (
+    select 1
+    from public.operations operation
+    join public.estoquenow_operation_contexts context
+      on context.operation_id = operation.id
+    where operation.source = 'estoquenow'
+      and operation.external_id = 'external-sync-ledger-1'
+      and context.order_id = 'sync-order-1'
+      and pg_catalog.jsonb_array_length(context.items) = 1
+  ),
+  'wrapper atômico persiste operação e contexto estruturado'
+);
+select is(
+  (select outcome from private.estoquenow_sync_items
+    where run_id = (select run_id from sync_test_runs where label = 'apply')
+      and external_id = 'external-sync-ledger-1'),
+  'applied',
+  'ledger registra o desfecho aplicado sem conteúdo operacional'
+);
+
+set local role service_role;
+select is(
+  public.record_estoquenow_sync_item(
+    (select run_id from sync_test_runs where label = 'apply'),
+    'external-sync-ledger-1', '1', repeat('a', 64), repeat('b', 64), 'new',
+    'Operação sync ledger', 'Destino de teste',
+    '2026-09-04 12:00:00-03'::timestamptz, '',
+    '2026-09-03 12:00:00-03'::timestamptz,
+    '10000000-0000-4000-8000-000000000001',
+    '{"order_id":"sync-order-1","delivery_status_type":"pending","delivery_concluded":false,"item_count":"1"}'::jsonb,
+    'Operação sync ledger', 'Destino de teste', '',
+    '[{"id":"sync-line-1","itemId":"sync-item-1","orderId":"sync-order-1","name":"Mesa"}]'::jsonb,
+    null
+  )->>'outcome',
+  'applied',
+  'retry do mesmo item retorna o resultado registrado'
+);
+
+set local role postgres;
+select is(
+  (select count(*) from private.estoquenow_sync_items
+    where run_id = (select run_id from sync_test_runs where label = 'apply')),
+  1::bigint,
+  'retry idempotente não duplica item do ledger'
+);
+
+set local role service_role;
+select is(
+  public.record_estoquenow_sync_item(
+    (select run_id from sync_test_runs where label = 'apply'),
+    'external-sync-ledger-2', '1', repeat('d', 64), repeat('e', 64), 'new',
+    'Operação fora do lote', 'Destino de teste',
+    '2026-09-04 13:00:00-03'::timestamptz, '',
+    '2026-09-03 12:01:00-03'::timestamptz,
+    '10000000-0000-4000-8000-000000000001',
+    '{"order_id":"sync-order-2"}'::jsonb,
+    'Operação fora do lote', 'Destino de teste', '', '[]'::jsonb, null
+  )->>'errorCode',
+  'batch_exhausted',
+  'segundo item é bloqueado pelo cap persistido do lote'
+);
+
+set local role postgres;
+select is(
+  (select attempted_count from private.estoquenow_sync_runs
+    where id = (select run_id from sync_test_runs where label = 'apply')),
+  1,
+  'cap do lote permanece correto após tentativa excedente'
+);
+select is(
+  (select count(*) from public.operations where external_id = 'external-sync-ledger-2'),
+  0::bigint,
+  'item acima do cap não chega à persistência operacional'
+);
+
+set local role service_role;
+select is(
+  public.finish_estoquenow_sync(
+    (select run_id from sync_test_runs where label = 'apply'),
+    2, 2, 2, 0, 1, repeat('f', 64), null
+  )->>'status',
+  'succeeded',
+  'finish reconcilia item aplicado e candidato adiado'
+);
+
+set local role postgres;
+select ok(
+  (select attempted_count = 1
+      and applied_count = 1
+      and unchanged_count = 0
+      and failed_count = 0
+      and deferred_count = 1
+      and contract_hash = repeat('f', 64)
+    from private.estoquenow_sync_runs
+    where id = (select run_id from sync_test_runs where label = 'apply')),
+  'resumo apply deriva desfechos do ledger e preserva hash do contrato'
+);
+
+set local role service_role;
+select is(
+  public.finish_estoquenow_sync(
+    (select run_id from sync_test_runs where label = 'apply'),
+    99, 99, 99, 99, 99, repeat('0', 64), 'internal'
+  )->>'status',
+  'succeeded',
+  'finish repetido é idempotente e não reescreve resumo final'
+);
+
+insert into sync_test_runs (label, run_id)
+select 'expired', (result->>'runId')::uuid
+from (
+  select public.begin_estoquenow_sync(
+    'manual', 'apply', '2026-09-01', '2026-09-03', 1
+  ) result
+) started;
+
+select is(
+  public.record_estoquenow_sync_item(
+    (select run_id from sync_test_runs where label = 'expired'),
+    'external-sync-expired-begin', '1', repeat('1', 64), repeat('2', 64), 'new',
+    'Operação lease begin', 'Destino de teste',
+    '2026-09-04 14:00:00-03'::timestamptz, '',
+    '2026-09-03 12:02:00-03'::timestamptz,
+    '10000000-0000-4000-8000-000000000001',
+    '{"order_id":"sync-order-expired-begin"}'::jsonb,
+    'Operação lease begin', 'Destino de teste', '',
+    '[{"id":"sync-line-expired-begin","itemId":"sync-item-expired-begin","orderId":"sync-order-expired-begin","name":"Mesa"}]'::jsonb,
+    null
+  )->>'outcome',
+  'applied',
+  'run que vencerá registra desfecho antes da expiração'
+);
+
+set local role postgres;
+update private.estoquenow_sync_runs
+set lease_expires_at = started_at + interval '1 microsecond'
+where id = (select run_id from sync_test_runs where label = 'expired');
+
+set local role service_role;
+insert into sync_test_runs (label, run_id)
+select 'replacement', (result->>'runId')::uuid
+from (
+  select public.begin_estoquenow_sync(
+    'scheduled', 'observe', '2026-09-01', '2026-09-03', 5
+  ) result
+) started;
+
+set local role postgres;
+select ok(
+  (select status = 'abandoned'
+      and attempted_count = 1
+      and applied_count = 1
+      and failed_count = 0
+    from private.estoquenow_sync_runs
+    where id = (select run_id from sync_test_runs where label = 'expired')),
+  'begin abandona lease vencido reconciliando o desfecho persistido'
+);
+select is(
+  (select status from private.estoquenow_sync_runs
+    where id = (select run_id from sync_test_runs where label = 'replacement')),
+  'running',
+  'novo ciclo assume o single-flight depois do lease vencido'
+);
+select is(
+  (select count(*) from private.estoquenow_sync_runs where status = 'running'),
+  1::bigint,
+  'troca de lease mantém uma única execução ativa'
+);
+
+set local role service_role;
+select is(
+  public.finish_estoquenow_sync(
+    (select run_id from sync_test_runs where label = 'replacement'),
+    0, 0, 0, 0, 0, null, null
+  )->>'status',
+  'succeeded',
+  'execução substituta finaliza normalmente'
+);
+
+insert into sync_test_runs (label, run_id)
+select 'finish-expired', (result->>'runId')::uuid
+from (
+  select public.begin_estoquenow_sync(
+    'manual', 'apply', '2026-09-01', '2026-09-03', 1
+  ) result
+) started;
+select is(
+  public.record_estoquenow_sync_item(
+    (select run_id from sync_test_runs where label = 'finish-expired'),
+    'external-sync-expired-finish', '1', repeat('3', 64), repeat('4', 64), 'new',
+    'Operação lease finish', 'Destino de teste',
+    '2026-09-04 15:00:00-03'::timestamptz, '',
+    '2026-09-03 12:03:00-03'::timestamptz,
+    '10000000-0000-4000-8000-000000000001',
+    '{"order_id":"sync-order-expired-finish"}'::jsonb,
+    'Operação lease finish', 'Destino de teste', '',
+    '[{"id":"sync-line-expired-finish","itemId":"sync-item-expired-finish","orderId":"sync-order-expired-finish","name":"Mesa"}]'::jsonb,
+    null
+  )->>'outcome',
+  'applied',
+  'finish expirado possui desfecho persistido para reconciliar'
+);
+
+set local role postgres;
+update private.estoquenow_sync_runs
+set lease_expires_at = started_at + interval '1 microsecond'
+where id = (select run_id from sync_test_runs where label = 'finish-expired');
+
+set local role service_role;
+select is(
+  public.finish_estoquenow_sync(
+    (select run_id from sync_test_runs where label = 'finish-expired'),
+    0, 0, 0, 0, 0, null, 'internal'
+  )->>'status',
+  'abandoned',
+  'finish vencido abandona o run sem perder o desfecho já confirmado'
+);
+
+set local role postgres;
+select ok(
+  (select attempted_count = 1
+      and applied_count = 1
+      and failed_count = 0
+      and error_code = 'lease_expired'
+    from private.estoquenow_sync_runs
+    where id = (select run_id from sync_test_runs where label = 'finish-expired')),
+  'finish vencido reconcilia contagens pelo ledger de itens'
+);
+
+set local role service_role;
+insert into sync_test_runs (label, run_id)
+select 'all-failed', (result->>'runId')::uuid
+from (
+  select public.begin_estoquenow_sync(
+    'manual', 'apply', '2026-09-01', '2026-09-03', 1
+  ) result
+) started;
+select is(
+  public.record_estoquenow_sync_item(
+    (select run_id from sync_test_runs where label = 'all-failed'),
+    'external-sync-all-failed', '1', repeat('5', 64), repeat('6', 64), 'new',
+    'Operação inválida', 'Destino de teste',
+    '2026-09-04 16:00:00-03'::timestamptz, '',
+    '2026-09-03 12:04:00-03'::timestamptz,
+    '10000000-0000-4000-8000-000000000001',
+    '{"order_id":"sync-order-all-failed"}'::jsonb,
+    'Operação inválida', 'Destino de teste', '',
+    'null'::jsonb,
+    null
+  )->>'outcome',
+  'failed',
+  'wrapper registra falha sanitizada sem persistir operação inválida'
+);
+select ok(
+  (select result->>'status' = 'failed'
+      and result->>'errorCode' = 'item_failure'
+    from (
+      select public.finish_estoquenow_sync(
+        (select run_id from sync_test_runs where label = 'all-failed'),
+        1, 1, 1, 0, 0, null, null
+      ) result
+    ) finished),
+  'finish alinha status failed quando todos os attempts falham'
+);
+
+set local role authenticated;
+set local "request.jwt.claim.sub" = '10000000-0000-4000-8000-000000000002';
+select throws_ok(
+  $$select public.get_estoquenow_sync_health(10)$$,
+  'P0001',
+  'forbidden',
+  'funcionário não acessa observabilidade gerencial'
+);
+
+set local role authenticated;
+set local "request.jwt.claim.sub" = '10000000-0000-4000-8000-000000000001';
+select ok(
+  pg_catalog.jsonb_typeof(public.get_estoquenow_sync_health(10)->'recentRuns') = 'array'
+    and public.get_estoquenow_sync_health(10) ? 'lastRun'
+    and public.get_estoquenow_sync_health(10) ? 'lastSuccessfulScheduledRun',
+  'gestor recebe health agregado com histórico recente e último sucesso agendado'
+);
+select ok(
+  position(
+    'external-sync-ledger-1' in public.get_estoquenow_sync_health(10)::text
+  ) = 0,
+  'health não expõe IDs externos nem detalhes de itens'
+);
+select ok(
+  public.get_estoquenow_sync_health(1)->'lastSuccessfulScheduledRun' is not null,
+  'último sucesso agendado não depende do limite do histórico recente'
+);
+
+set local role postgres;
+select ok(
+  pg_catalog.to_regprocedure('public.get_estoquenow_sync_existing(text[])') is not null,
+  'RPC estreito de leitura incremental existe'
+);
+select ok(
+  has_function_privilege(
+    'service_role', 'public.get_estoquenow_sync_existing(text[])', 'EXECUTE'
+  )
+    and not has_function_privilege(
+      'authenticated', 'public.get_estoquenow_sync_existing(text[])', 'EXECUTE'
+    )
+    and not has_function_privilege(
+      'anon', 'public.get_estoquenow_sync_existing(text[])', 'EXECUTE'
+    ),
+  'somente service_role executa a leitura incremental'
+);
+select ok(
+  (select procedure.prosecdef
+      and coalesce(procedure.proconfig, '{}'::text[]) @> array['search_path=""']
+    from pg_catalog.pg_proc procedure
+    where procedure.oid = 'public.get_estoquenow_sync_existing(text[])'::regprocedure),
+  'RPC de leitura usa SECURITY DEFINER com search_path vazio'
+);
+
+set local role service_role;
+select throws_ok(
+  $$
+    select public.get_estoquenow_sync_existing(
+      array(select 'external-' || number from pg_catalog.generate_series(1, 101) number)
+    )
+  $$,
+  'P0001',
+  'invalid external ids',
+  'RPC rejeita mais de cem IDs externos'
+);
+select is(
+  public.get_estoquenow_sync_existing('{}'::text[]),
+  '[]'::jsonb,
+  'RPC aceita lote vazio sem consultar dados amplos'
+);
+select ok(
+  (select pg_catalog.jsonb_array_length(response) = 1
+      and (select count(*) from pg_catalog.jsonb_object_keys(response->0)) = 9
+      and (response->0) ?& array[
+        'external_id', 'event_name', 'destination', 'scheduled_at', 'notes',
+        'imported_at', 'status', 'has_events', 'source_context'
+      ]
+      and pg_catalog.jsonb_typeof(response->0->'has_events') = 'boolean'
+    from (
+      select public.get_estoquenow_sync_existing(
+        array[' external-canary-1 ', 'external-canary-1']
+      ) response
+    ) result),
+  'RPC deduplica IDs e retorna somente o envelope necessário'
+);
+select ok(
+  (select (select count(*)
+      from pg_catalog.jsonb_object_keys(response->0->'source_context')) = 21
+      and (response->0->'source_context') ?& array[
+        'order_id', 'protocol', 'source_version', 'return_at', 'venue',
+        'address_zipcode', 'address_street', 'address_number', 'address_complement',
+        'address_neighborhood', 'address_city', 'address_state',
+        'delivery_status_id', 'delivery_status_type', 'delivery_concluded',
+        'return_status_id', 'return_status_type', 'return_concluded',
+        'item_count', 'order_type', 'logistic_type_id'
+      ]
+    from (
+      select public.get_estoquenow_sync_existing(
+        array['external-canary-1']
+      ) response
+    ) result),
+  'contexto 1:1 usa allowlist estável e não inclui items'
+);
+
+set local role postgres;
+update public.operations
+set external_id = 'external-manual-sync-read'
+where id = '40000000-0000-4000-8000-000000000001' and source = 'manual';
+set local role service_role;
+select is(
+  public.get_estoquenow_sync_existing(array['external-manual-sync-read']),
+  '[]'::jsonb,
+  'RPC nunca mistura operação manual com leitura do EstoqueNOW'
 );
 
 select * from finish();

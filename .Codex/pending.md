@@ -1,5 +1,7 @@
 - [x] Credenciais e contrato real de listagem do EstoqueNOW validados por OAuth e prévia somente leitura em produção; segredos permanecem server-only.
 - [x] Importação individual do EstoqueNOW colocada em operação — lock idempotente aplicado, site publicado, flag habilitada e primeira operação real reconciliada sem duplicação.
+- [ ] Ativar o pull incremental do EstoqueNOW em produção — código, cron diário e ledger estão prontos; configurar CRON_SECRET e iniciar em modo observe, reconciliar uma execução e só então autorizar lote apply de até 5.
+- [x] Atualizar os READMEs da integração EstoqueNOW — flags e capacidades alinhadas ao estado live de importação, detalhe, itens, fotos e checklist.
 - [ ] Escritas de entrega/retorno no EstoqueNOW estão conectadas apenas em código e mock — manter flags falsas e homologar somente após autorização específica do cliente.
 - [ ] Proteção contra senhas vazadas está desabilitada no Supabase — habilitar no painel após validar o impacto no fluxo de login dos usuários reais.
 - [ ] Sessão, cache, outbox e fotos do app de campo ficam em armazenamento local sem criptografia — adotar SecureStore/SQLCipher antes de guardar dados reais sensíveis no aparelho.

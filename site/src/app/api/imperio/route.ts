@@ -11,12 +11,15 @@ import {
   canonicalItems,
   isValidExternalId,
   isValidIsoDate,
-  operationDestination,
-  sourceFieldsDiverged,
-  toScheduledAt,
-  type EstoqueNowOperation,
   type EstoqueNowItem,
 } from "@/app/imperio/logistica/estoquenow";
+import {
+  buildEstoqueNowSyncPlan,
+  loadExistingEstoqueNowOperations,
+  type EstoqueNowImportRow,
+  type EstoqueNowSourceContext,
+  type EstoqueNowSyncDatabase,
+} from "@/app/imperio/logistica/estoquenow-sync";
 import { getAppSnapshot } from "@/app/imperio/logistica/server";
 import type { OperationStage } from "@/app/imperio/logistica/types";
 import {
@@ -45,53 +48,6 @@ const validDateInput = (value: string) => isValidIsoDate(value);
 const itemsTokenFor = (items: EstoqueNowItem[]) =>
   createHash("sha256").update(JSON.stringify(canonicalItems(items))).digest("hex");
 
-type EstoqueNowImportRow = {
-  source: "estoquenow";
-  external_id: string;
-  event_name: string;
-  destination: string;
-  scheduled_at: string;
-  notes: string;
-  imported_at: string;
-  legacy_event_name: string;
-  legacy_destination: string;
-  legacy_notes: string;
-  source_context: EstoqueNowSourceContext;
-};
-
-type EstoqueNowSourceContext = {
-  order_id: string | null;
-  protocol: string | null;
-  source_version: string | null;
-  return_at: string | null;
-  venue: string | null;
-  address_zipcode: string | null;
-  address_street: string | null;
-  address_number: string | null;
-  address_complement: string | null;
-  address_neighborhood: string | null;
-  address_city: string | null;
-  address_state: string | null;
-  delivery_status_id: string | null;
-  delivery_status_type: string | null;
-  delivery_concluded: boolean | null;
-  return_status_id: string | null;
-  return_status_type: string | null;
-  return_concluded: boolean | null;
-  item_count: string | null;
-  order_type: string | null;
-  logistic_type_id: string | null;
-};
-
-type EstoqueNowSkipReason =
-  | "missing_external_id"
-  | "invalid_external_id"
-  | "missing_event_name"
-  | "invalid_event_name"
-  | "missing_destination"
-  | "invalid_destination"
-  | "invalid_scheduled_date_or_time";
-
 const reviewTokenFor = (row: EstoqueNowImportRow) =>
   createHash("sha256")
     .update(JSON.stringify({
@@ -102,47 +58,6 @@ const reviewTokenFor = (row: EstoqueNowImportRow) =>
       source_context: row.source_context,
     }))
     .digest("hex");
-
-const sourceContextDiverged = (
-  current: EstoqueNowSourceContext | null,
-  incoming: EstoqueNowSourceContext,
-) =>
-  !current ||
-  Object.entries(incoming).some(
-    ([key, value]) =>
-      [
-        "source_version",
-        "delivery_status_id",
-        "delivery_status_type",
-        "delivery_concluded",
-        "return_status_id",
-        "return_status_type",
-        "return_concluded",
-        "item_count",
-      ].includes(key)
-        ? false
-        : key === "return_at" && value && current.return_at
-        ? Date.parse(current.return_at) !== Date.parse(value as string)
-        : current[key as keyof EstoqueNowSourceContext] !== value,
-  );
-
-const mutableSourceContextDiverged = (
-  current: EstoqueNowSourceContext | null,
-  incoming: EstoqueNowSourceContext,
-) =>
-  !current ||
-  [
-    "source_version",
-    "delivery_status_id",
-    "delivery_status_type",
-    "delivery_concluded",
-    "return_status_id",
-    "return_status_type",
-    "return_concluded",
-    "item_count",
-  ].some(
-    (key) => current[key as keyof EstoqueNowSourceContext] !== incoming[key as keyof EstoqueNowSourceContext],
-  );
 
 const sourceContextChanges = (
   current: EstoqueNowSourceContext | null,
@@ -179,84 +94,6 @@ const sourceContextChanges = (
         : current[key] !== incoming[key],
     )
     .map((key) => labels[key]);
-};
-
-const estoqueNowImportRow = (
-  operation: EstoqueNowOperation,
-  importedAt: string,
-): { row: EstoqueNowImportRow | null; reason: EstoqueNowSkipReason | null } => {
-  const externalId = operation.id.trim();
-  if (!externalId) return { row: null, reason: "missing_external_id" };
-  if (!isValidExternalId(externalId)) return { row: null, reason: "invalid_external_id" };
-  const eventName = operation.eventName.trim();
-  if (!eventName) return { row: null, reason: "missing_event_name" };
-  if (eventName.length < 2) return { row: null, reason: "invalid_event_name" };
-  const destinationParts = [operation.venue.trim(), operation.city.trim()].filter(
-    (value, index, values) => value && values.indexOf(value) === index,
-  );
-  const legacyDestination = destinationParts.join(" · ");
-  const destination = operationDestination(operation) || legacyDestination;
-  if (!destination) return { row: null, reason: "missing_destination" };
-  if (destination.length < 5) return { row: null, reason: "invalid_destination" };
-  const scheduledAt = toScheduledAt(operation.scheduledDate, operation.scheduledTime);
-  if (!scheduledAt)
-    return { row: null, reason: "invalid_scheduled_date_or_time" };
-
-  const legacyContextNotes = [
-    operation.orderId.trim() ? `Pedido ${operation.orderId.trim()}.` : "",
-    operation.returnDate.trim() ? `Retorno previsto: ${operation.returnDate.trim()}.` : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
-  const legacyNotes = ["Importado por leitura do EstoqueNOW.", legacyContextNotes]
-    .filter(Boolean)
-    .join(" ");
-  const returnAt = operation.returnDate.trim()
-    ? toScheduledAt(operation.returnDate, operation.returnTime)
-    : null;
-  if ((operation.returnDate.trim() || operation.returnTime.trim()) && !returnAt)
-    return { row: null, reason: "invalid_scheduled_date_or_time" };
-  if (returnAt && Date.parse(returnAt) <= Date.parse(scheduledAt))
-    return { row: null, reason: "invalid_scheduled_date_or_time" };
-
-  return {
-    row: {
-      source: "estoquenow",
-      external_id: externalId,
-      event_name: eventName,
-      destination,
-      scheduled_at: scheduledAt,
-      notes: "",
-      imported_at: importedAt,
-      legacy_event_name: operation.legacyEventName.trim(),
-      legacy_destination: legacyDestination,
-      legacy_notes: legacyNotes,
-      source_context: {
-        order_id: operation.orderId.trim() || null,
-        protocol: operation.protocol.trim() || null,
-        source_version: operation.sourceVersion.trim() || null,
-        return_at: returnAt,
-        venue: operation.venue.trim() || null,
-        address_zipcode: operation.address.zipcode.trim() || null,
-        address_street: operation.address.street.trim() || null,
-        address_number: operation.address.number.trim() || null,
-        address_complement: operation.address.complement.trim() || null,
-        address_neighborhood: operation.address.neighborhood.trim() || null,
-        address_city: operation.address.city.trim() || null,
-        address_state: operation.address.state.trim() || null,
-        delivery_status_id: operation.deliveryStatus.id.trim() || null,
-        delivery_status_type: operation.deliveryStatus.type.trim() || null,
-        delivery_concluded: operation.deliveryStatus.concluded,
-        return_status_id: operation.returnStatus.id.trim() || null,
-        return_status_type: operation.returnStatus.type.trim() || null,
-        return_concluded: operation.returnStatus.concluded,
-        item_count: operation.itemCount.trim() || null,
-        order_type: operation.orderType.trim() || null,
-        logistic_type_id: operation.logisticTypeId.trim() || null,
-      },
-    },
-    reason: null,
-  };
 };
 
 const evidenceFile = (value: FormDataEntryValue | null) => {
@@ -600,96 +437,23 @@ export async function POST(request: Request) {
         );
       }
       const importedAt = new Date().toISOString();
-      const skippedReasons: Record<EstoqueNowSkipReason, number> = {
-        missing_external_id: 0,
-        invalid_external_id: 0,
-        missing_event_name: 0,
-        invalid_event_name: 0,
-        missing_destination: 0,
-        invalid_destination: 0,
-        invalid_scheduled_date_or_time: 0,
-      };
-      const rows: EstoqueNowImportRow[] = [];
-      for (const operation of external) {
-        const candidate = estoqueNowImportRow(operation, importedAt);
-        if (candidate.row) rows.push(candidate.row);
-        else if (candidate.reason) skippedReasons[candidate.reason] += 1;
-      }
-
-      const existingById = new Map<
-        string,
-        {
-          external_id: string | null;
-          event_name: string;
-          destination: string;
-          scheduled_at: string;
-          notes: string | null;
-          imported_at: string | null;
-          status: "active" | "completed" | "cancelled";
-          has_history: boolean;
-          source_context: EstoqueNowSourceContext | null;
-        }
-      >();
-      for (let index = 0; index < rows.length; index += 100) {
-        const externalIds = rows.slice(index, index + 100).map((row) => row.external_id);
-        const existing = await supabase
-          .from("operations")
-          .select(
-            "id,external_id,event_name,destination,scheduled_at,notes,imported_at,status,source_context:estoquenow_operation_contexts(order_id,protocol,source_version,return_at,venue,address_zipcode,address_street,address_number,address_complement,address_neighborhood,address_city,address_state,delivery_status_id,delivery_status_type,delivery_concluded,return_status_id,return_status_type,return_concluded,item_count,order_type,logistic_type_id)",
-          )
-          .eq("source", "estoquenow")
-          .in("external_id", externalIds);
-        if (existing.error) throw existing.error;
-        const existingRows = (existing.data ?? []) as unknown as Array<{
-          id: string;
-          external_id: string | null;
-          event_name: string;
-          destination: string;
-          scheduled_at: string;
-          notes: string | null;
-          imported_at: string | null;
-          status: "active" | "completed" | "cancelled";
-          source_context: EstoqueNowSourceContext | null;
-        }>;
-        const events = existingRows.length
-          ? await supabase
-              .from("operation_events")
-              .select("operation_id")
-              .in("operation_id", existingRows.map((operation) => operation.id))
-          : { data: [], error: null };
-        if (events.error) throw events.error;
-        const withHistory = new Set((events.data ?? []).map((event) => event.operation_id));
-        for (const { id, ...operation } of existingRows) {
-          if (operation.external_id)
-            existingById.set(operation.external_id, {
-              ...operation,
-              has_history: operation.status !== "active" || withHistory.has(id),
-            });
-        }
-      }
-
-      const candidates = rows.map((row) => {
+      const externalIds = [
+        ...new Set(
+          external
+            .map((operation) => operation.id.trim())
+            .filter(isValidExternalId),
+        ),
+      ];
+      const existingOperations = await loadExistingEstoqueNowOperations(
+        supabase as unknown as EstoqueNowSyncDatabase,
+        externalIds,
+      );
+      const existingById = new Map(
+        existingOperations.map((operation) => [operation.external_id, operation]),
+      );
+      const plan = buildEstoqueNowSyncPlan(external, existingOperations, importedAt);
+      const candidates = plan.candidates.map(({ row, state }) => {
         const existing = existingById.get(row.external_id);
-        const legacyBackfill =
-          existing &&
-          existing.source_context === null &&
-          existing.event_name === row.legacy_event_name &&
-          existing.destination === row.legacy_destination &&
-          new Date(existing.scheduled_at).getTime() === new Date(row.scheduled_at).getTime() &&
-          existing.notes === row.legacy_notes;
-        const stableChanged = existing
-          ? sourceFieldsDiverged(existing, row) ||
-            sourceContextDiverged(existing.source_context, row.source_context)
-          : false;
-        const state = !existing
-          ? ("new" as const)
-          : legacyBackfill
-            ? existing.has_history ? ("blocked" as const) : ("update" as const)
-            : stableChanged
-              ? existing.has_history ? ("blocked" as const) : ("diverged" as const)
-              : mutableSourceContextDiverged(existing.source_context, row.source_context)
-                ? ("update" as const)
-                : ("unchanged" as const);
         return {
           externalId: row.external_id,
           eventName: row.event_name,
@@ -748,14 +512,14 @@ export async function POST(request: Request) {
             state: candidate.state,
           })),
           counts: {
-            new: candidates.filter((candidate) => candidate.state === "new").length,
-            unchanged: candidates.filter((candidate) => candidate.state === "unchanged").length,
-            update: candidates.filter((candidate) => candidate.state === "update").length,
-            blocked: candidates.filter((candidate) => candidate.state === "blocked").length,
-            diverged: candidates.filter((candidate) => candidate.state === "diverged").length,
-            skipped: external.length - rows.length,
+            new: plan.counts.new,
+            unchanged: plan.counts.unchanged,
+            update: plan.counts.update,
+            blocked: plan.counts.blocked,
+            diverged: plan.counts.diverged,
+            skipped: plan.counts.skipped,
           },
-          skippedReasons,
+          skippedReasons: plan.skippedReasons,
           contract,
         });
       }
@@ -826,7 +590,7 @@ export async function POST(request: Request) {
         backfilled: confirmed.data === "backfilled" ? 1 : 0,
         updated: confirmed.data === "updated" ? 1 : 0,
         diverged: 0,
-        skipped: external.length - rows.length,
+        skipped: plan.counts.skipped,
       });
     }
 
