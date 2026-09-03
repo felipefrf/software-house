@@ -380,7 +380,7 @@ test("proxy de foto bloqueia hosts, redirects, tipos e tamanhos inseguros", asyn
   };
   await assert.rejects(
     () => fetchEstoqueNowItemPhoto("https://media.estoquenow.com.br/item.jpg", badRedirect),
-    /MEDIA_HOST_NOT_ALLOWED/,
+    /MEDIA_HOST_NOT_ALLOWED@evil\.test/,
   );
   assert.equal(redirects, 1);
 

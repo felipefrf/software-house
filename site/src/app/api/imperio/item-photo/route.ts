@@ -79,11 +79,14 @@ export async function GET(request: Request) {
       },
     });
   } catch (error) {
-    const reason = error instanceof Error && SAFE_PHOTO_ERRORS.has(error.message)
-      ? error.message
+    const [rawReason, blockedHost] = error instanceof Error
+      ? error.message.split("@", 2)
+      : ["PHOTO_UNAVAILABLE", ""];
+    const reason = SAFE_PHOTO_ERRORS.has(rawReason)
+      ? rawReason
       : "PHOTO_UNAVAILABLE";
     return NextResponse.json(
-      { error: "Foto indisponível.", reason, ...(sourceHost ? { sourceHost } : {}) },
+      { error: "Foto indisponível.", reason, ...((blockedHost || sourceHost) ? { sourceHost: blockedHost || sourceHost } : {}) },
       { status: 404 },
     );
   }

@@ -384,7 +384,7 @@ const allowedMediaUrl = (value: string) => {
     url.port ||
     !(host === "estoquenow.com.br" || host.endsWith(".estoquenow.com.br"))
   )
-    throw new Error("MEDIA_HOST_NOT_ALLOWED");
+    throw new Error(`MEDIA_HOST_NOT_ALLOWED@${/^[a-z0-9.-]{1,253}$/.test(host) ? host : "invalid"}`);
   return url;
 };
 
@@ -764,12 +764,15 @@ export class EstoqueNowClient {
         const image = await fetchEstoqueNowItemPhoto(photo.url, this.config.fetchImpl ?? fetch);
         mediaProbe = { available: true, sourceHost, contentType: image.contentType, reason: null };
       } catch (error) {
+        const [reason, blockedHost] = error instanceof Error
+          ? error.message.split("@", 2)
+          : ["PHOTO_UNAVAILABLE", ""];
         mediaProbe = {
           available: false,
-          sourceHost,
+          sourceHost: blockedHost || sourceHost,
           contentType: null,
-          reason: error instanceof Error && /^(MEDIA_|ESTOQUENOW_(SOURCE_ITEM_CHANGED|ITEM_PHOTO_UNAVAILABLE|INVALID_ITEM_PHOTO))/.test(error.message)
-            ? error.message
+          reason: /^(MEDIA_|ESTOQUENOW_(SOURCE_ITEM_CHANGED|ITEM_PHOTO_UNAVAILABLE|INVALID_ITEM_PHOTO))/.test(reason)
+            ? reason
             : "PHOTO_UNAVAILABLE",
         };
       }
