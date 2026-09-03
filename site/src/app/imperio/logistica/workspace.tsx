@@ -46,16 +46,24 @@ export async function postJson<T = { ok: boolean }>(action: string, body: object
   return payload;
 }
 
-function Brand({ surface, inverted = false }: { surface?: "web" | "field"; inverted?: boolean }) {
+function Brand({
+  surface,
+  inverted = false,
+  compact = false,
+}: {
+  surface?: "web" | "field";
+  inverted?: boolean;
+  compact?: boolean;
+}) {
   return (
-    <div className="flex min-w-0 items-center gap-3">
+    <div className="flex min-w-0 items-center gap-3" aria-label={compact ? "Império Logística" : undefined}>
       <span aria-hidden="true" className={`grid size-9 shrink-0 place-items-center rounded-xl ${inverted ? "bg-white/12 text-white" : "bg-imp-green-deep text-white shadow-imp-soft"}`}>
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
           <path d="M3 14h14M5 14V8l5-3 5 3v6" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
           <path d="M8 14v-3h4v3" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
         </svg>
       </span>
-      <span className="min-w-0 leading-tight">
+      <span className={compact ? "sr-only" : "min-w-0 leading-tight"}>
         <span className={`block font-imp-display text-[22px] font-semibold tracking-tight ${inverted ? "text-white" : "text-imp-ink"}`}>Império Logística</span>
         {surface && (
           <span className={`block text-[13px] ${inverted ? "text-white/70" : "text-imp-muted"}`}>
@@ -149,6 +157,7 @@ export function LogisticsWorkspace({
   );
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [navigationCollapsed, setNavigationCollapsed] = useState(false);
 
   // Sucesso some sozinho; erros e avisos longos ficam até fechar.
   useEffect(() => {
@@ -310,7 +319,11 @@ export function LogisticsWorkspace({
         }`}
       >
         <div className="mx-auto flex min-h-14 max-w-[1720px] items-center justify-between gap-3">
-          <Brand surface={surface === "field" && isManager ? "field" : undefined} inverted={fieldChrome} />
+          <Brand
+            surface={surface === "field" && isManager ? "field" : undefined}
+            inverted={fieldChrome}
+            compact={surface === "web" && isManager && navigationCollapsed}
+          />
           <div className="flex items-center gap-2 md:gap-3">
             <span className={`hidden items-center gap-2 text-[13px] md:flex ${fieldChrome ? "text-white/70" : "text-imp-muted"}`} title="Ambiente atual">
               <span aria-hidden="true" className={`size-2 rounded-full ${snapshot.configured ? (fieldChrome ? "bg-white/70" : "bg-imp-green") : "bg-imp-amber"}`} />
@@ -391,6 +404,8 @@ export function LogisticsWorkspace({
           run={run}
           refresh={refresh}
           refreshState={{ lastUpdatedAt, failed: refreshFailed }}
+          navigationCollapsed={navigationCollapsed}
+          onNavigationCollapsedChange={setNavigationCollapsed}
         />
       ) : (
         <FieldApp

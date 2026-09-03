@@ -9,6 +9,8 @@ import {
   ExternalLink,
   Link2,
   ListChecks,
+  PanelLeftClose,
+  PanelLeftOpen,
   RefreshCw,
   Sun,
   Truck,
@@ -76,6 +78,8 @@ type Props = {
   run: Run;
   refresh: () => Promise<void>;
   refreshState: { lastUpdatedAt: string | null; failed: boolean };
+  navigationCollapsed: boolean;
+  onNavigationCollapsedChange: (collapsed: boolean) => void;
 };
 
 type View =
@@ -294,12 +298,14 @@ function OperationRow({
   selected,
   onOpen,
   showDate,
+  compact = false,
 }: {
   operation: Operation;
   snapshot: LogisticsSnapshot;
   selected: boolean;
   onOpen: () => void;
   showDate: boolean;
+  compact?: boolean;
 }) {
   const place = placeParts(operation);
   const scale = scaleText(snapshot, operation);
@@ -310,27 +316,29 @@ function OperationRow({
         type="button"
         onClick={onOpen}
         aria-current={selected ? "true" : undefined}
-        className={`grid w-full gap-x-4 gap-y-2 px-4 py-3 text-left hover:bg-imp-ground/70 @3xl:grid-cols-[88px_minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)_20px] @3xl:items-center ${
+        className={`grid w-full gap-x-4 gap-y-2 px-4 py-3 text-left hover:bg-imp-ground/70 ${
+          compact ? "grid-cols-[minmax(0,1fr)_auto]" : "@3xl:grid-cols-[88px_minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)_20px] @3xl:items-center"
+        } ${
           selected ? "bg-imp-green-tint/50" : ""
         }`}
       >
-        <span className="font-imp-display text-[20px] font-semibold leading-6 tabular-nums">
+        <span className={`${compact ? "col-span-2 text-[13px] font-semibold text-imp-green" : "text-[14px] font-semibold leading-5 text-imp-green"} tabular-nums`}>
           {showDate ? formatWhen(operation.scheduled_at) : formatTime(operation.scheduled_at)}
         </span>
-        <span className="min-w-0">
+        <span className={`min-w-0 ${compact ? "col-span-2" : ""}`}>
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <strong className="break-words text-[16px] leading-5">{operation.event_name}</strong>
+            <strong className="break-words font-imp-display text-[18px] leading-5">{operation.event_name}</strong>
             {risk === "critical" && <Pill tone="red">Crítica</Pill>}
             {risk === "attention" && <Pill tone="amber">Atenção</Pill>}
             {operation.status !== "active" && <Pill tone={operation.status === "completed" ? "green" : "red"}>{statusLabel[operation.status]}</Pill>}
           </span>
           <span className="mt-0.5 line-clamp-1 block text-[14px] text-imp-muted">{place.address}</span>
         </span>
-        <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[14px]">
+        <span className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-[14px] ${compact ? "min-w-0" : ""}`}>
           <RouteDots operation={operation} />
           <span className="font-medium">{stageLabels[operation.stage]}</span>
         </span>
-        <span className="text-[14px]">
+        <span className={`text-[14px] ${compact ? "hidden" : ""}`}>
           {scale.complete ? (
             <span className="text-imp-muted">
               {scale.team} · {scale.vehicle} · {scale.driver}
@@ -341,7 +349,7 @@ function OperationRow({
             <span className="text-imp-muted">{[scale.team, scale.vehicle, scale.driver].filter(Boolean).join(" · ") || "Sem escala"}</span>
           )}
         </span>
-        <ChevronRight size={18} className="hidden justify-self-end text-imp-muted @3xl:block" aria-hidden="true" />
+        <ChevronRight size={18} className={`${compact ? "self-center justify-self-end" : "hidden justify-self-end @3xl:block"} text-imp-muted`} aria-hidden="true" />
       </button>
     </li>
   );
@@ -354,6 +362,7 @@ function OperationList({
   onOpen,
   showDate = true,
   emptyText = "Nenhuma operação nesta visão.",
+  compact = false,
 }: {
   operations: Operation[];
   snapshot: LogisticsSnapshot;
@@ -361,11 +370,12 @@ function OperationList({
   onOpen: (id: string) => void;
   showDate?: boolean;
   emptyText?: string;
+  compact?: boolean;
 }) {
   if (!operations.length) return <Empty>{emptyText}</Empty>;
   return (
     <Card className="@container overflow-hidden">
-      <div className="hidden grid-cols-[88px_minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)_20px] gap-x-4 border-b border-imp-line px-4 py-2 text-[13px] font-semibold text-imp-muted @3xl:grid">
+      <div className={`${compact ? "hidden" : "hidden @3xl:grid"} grid-cols-[88px_minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)_20px] gap-x-4 border-b border-imp-line px-4 py-2 text-[13px] font-semibold text-imp-muted`}>
         <span>{showDate ? "Quando" : "Hora"}</span>
         <span>Operação</span>
         <span>Etapa</span>
@@ -381,6 +391,7 @@ function OperationList({
             selected={selectedId === operation.id}
             onOpen={() => onOpen(operation.id)}
             showDate={showDate}
+            compact={compact}
           />
         ))}
       </ul>
@@ -536,9 +547,9 @@ function OperationDetail({
           <p className="text-[15px] font-medium tabular-nums text-imp-muted">{formatWhen(operation.scheduled_at)}</p>
           <Pill tone={operation.status === "completed" ? "green" : operation.status === "cancelled" ? "red" : "neutral"}>{statusLabel[operation.status]}</Pill>
         </div>
-        <h3 className="mt-1 break-words font-imp-display text-[26px] font-semibold leading-tight md:text-[30px]">
+        <h2 className="mt-1 break-words font-imp-display text-[26px] font-semibold leading-tight md:text-[30px]">
           {operation.event_name}
-        </h3>
+        </h2>
         <p className="mt-1 text-[15px] leading-5 text-imp-muted">{place.address}</p>
         <p className="mt-1 text-[13px] text-imp-muted">{sourceText(operation)}</p>
       </header>
@@ -912,6 +923,7 @@ function OperationsView(
   useEffect(() => {
     if (!detailOpen || !detailRef.current || window.matchMedia("(min-width: 1280px)").matches) return;
     detailRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    detailRef.current.focus({ preventScroll: true });
   }, [detailOpen, selected?.id]);
 
   const create = (event: FormEvent<HTMLFormElement>) => {
@@ -1003,7 +1015,7 @@ function OperationsView(
         )}
       </Card>
 
-      <div className={`mt-5 grid items-start gap-5 ${detailOpen ? "xl:grid-cols-[minmax(0,1fr)_minmax(420px,.9fr)]" : ""}`}>
+      <div className={`mt-5 grid items-start gap-5 ${detailOpen ? "xl:grid-cols-[minmax(280px,340px)_minmax(0,1fr)]" : ""}`}>
         <div ref={listRef} className={`min-w-0 space-y-5 ${detailOpen ? "hidden xl:block" : ""}`}>
           <OperationList
             operations={filtered}
@@ -1014,6 +1026,7 @@ function OperationsView(
               setDetailOpen(true);
             }}
             emptyText={hasFilters ? "Nenhuma operação corresponde aos filtros." : "Nenhuma operação cadastrada ou importada."}
+            compact={detailOpen}
           />
           <Card className="px-5">
             <Disclosure className="border-t-0" summary="Criar operação interna" open={!props.snapshot.operations.length}>
@@ -1032,7 +1045,7 @@ function OperationsView(
           </Card>
         </div>
         {detailOpen && (
-          <div ref={detailRef} className="min-w-0 scroll-mt-20 space-y-3 xl:sticky xl:top-20">
+          <div ref={detailRef} tabIndex={-1} className="min-w-0 scroll-mt-20 space-y-3 outline-none xl:sticky xl:top-20">
             <div className="flex justify-between xl:justify-end">
               <span className="xl:hidden">
                 <Button variant="ghost" className="-ml-3" onClick={closeDetail}>
@@ -1917,25 +1930,37 @@ export function WebDashboard(props: Props) {
     setView(id);
   };
   return (
-    <div className="mx-auto w-full max-w-[1720px] lg:grid lg:grid-cols-[220px_minmax(0,1fr)]">
+    <div className={`mx-auto w-full max-w-[1720px] lg:grid ${props.navigationCollapsed ? "lg:grid-cols-[72px_minmax(0,1fr)]" : "lg:grid-cols-[220px_minmax(0,1fr)]"}`}>
       <aside className="border-b border-imp-line bg-imp-surface lg:sticky lg:top-[calc(3.5rem+1px+env(safe-area-inset-top))] lg:h-[calc(100dvh-3.5rem-1px-env(safe-area-inset-top))] lg:overflow-y-auto lg:border-b-0 lg:border-r">
-        <nav className="grid grid-cols-4 gap-1 px-2 py-2 lg:block lg:px-3 lg:py-4" aria-label="Torre de controle">
+        <button
+          type="button"
+          className="mx-auto mt-3 hidden min-h-11 min-w-11 place-items-center rounded-xl text-imp-muted hover:bg-imp-ground hover:text-imp-ink lg:grid"
+          aria-controls="tower-navigation"
+          aria-expanded={!props.navigationCollapsed}
+          aria-label={props.navigationCollapsed ? "Expandir navegação" : "Recolher navegação"}
+          title={props.navigationCollapsed ? "Expandir navegação" : "Recolher navegação"}
+          onClick={() => props.onNavigationCollapsedChange(!props.navigationCollapsed)}
+        >
+          {props.navigationCollapsed ? <PanelLeftOpen size={19} aria-hidden="true" /> : <PanelLeftClose size={19} aria-hidden="true" />}
+        </button>
+        <nav id="tower-navigation" className={`grid grid-cols-4 gap-1 px-2 py-2 lg:block lg:py-4 ${props.navigationCollapsed ? "lg:px-2" : "lg:px-3"}`} aria-label="Torre de controle">
           {groups.map(([group, items], groupIndex) => (
             <div key={group} className={`contents lg:block ${groupIndex > 0 ? "lg:mt-5" : ""}`}>
-              <p className="hidden px-3 pb-1 text-[13px] font-semibold text-imp-muted lg:block">{group}</p>
+              <p className={`hidden px-3 pb-1 text-[13px] font-semibold text-imp-muted ${props.navigationCollapsed ? "" : "lg:block"}`}>{group}</p>
               {items.map(([id, label, Icon, shortLabel, badge]) => (
                 <button
                   key={id}
                   type="button"
                   onClick={() => select(id)}
                   aria-current={view === id ? "page" : undefined}
-                  className={`relative flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl px-1 text-center text-[13px] font-medium lg:min-h-11 lg:w-full lg:flex-row lg:justify-start lg:gap-2.5 lg:px-3 lg:text-left lg:text-[15px] ${
+                  title={props.navigationCollapsed ? label : undefined}
+                  className={`relative flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl px-1 text-center text-[13px] font-medium lg:min-h-11 lg:w-full lg:text-[15px] ${props.navigationCollapsed ? "lg:px-0" : "lg:flex-row lg:justify-start lg:gap-2.5 lg:px-3 lg:text-left"} ${
                     view === id ? "bg-imp-green-tint text-imp-green shadow-imp-soft" : "text-imp-ink/80 hover:bg-imp-ground"
                   }`}
                 >
                   <Icon size={18} aria-hidden="true" className={view === id ? "text-imp-green" : "text-imp-muted"} />
                   <span className="lg:hidden">{shortLabel}</span>
-                  <span className="hidden flex-1 lg:inline">{label}</span>
+                  <span className={props.navigationCollapsed ? "sr-only" : "hidden flex-1 lg:inline"}>{label}</span>
                   {badge ? <span className="absolute right-1 top-1 rounded-sm bg-imp-amber-tint px-1.5 text-[13px] font-semibold text-imp-amber lg:static">{badge}</span> : null}
                 </button>
               ))}
