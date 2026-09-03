@@ -12,6 +12,7 @@ import {
   operationDestination,
   sourceFieldsDiverged,
   toScheduledAt,
+  withEstoqueNowMediaSlot,
 } from "./estoquenow.ts";
 
 test("canonicaliza itens sem depender da ordem das chaves", () => {
@@ -417,6 +418,121 @@ test("proxy de foto bloqueia hosts, redirects, tipos e tamanhos inseguros", asyn
   );
   assert.equal(image.contentType, "image/webp");
   assert.equal(image.bytes.byteLength, 2);
+});
+
+test("proxy limita concorrência de mídia e repete somente falhas transitórias", async () => {
+  let active = 0;
+  let peak = 0;
+  const releases: Array<() => void> = [];
+  const tasks = Array.from({ length: 8 }, () =>
+    withEstoqueNowMediaSlot(async () => {
+      active += 1;
+      peak = Math.max(peak, active);
+      await new Promise<void>((resolve) => releases.push(resolve));
+      active -= 1;
+    }),
+  );
+  while (releases.length < 4) await Promise.resolve();
+  assert.equal(peak, 4);
+  releases.splice(0).forEach((release) => release());
+  while (releases.length < 4) await Promise.resolve();
+  releases.splice(0).forEach((release) => release());
+  await Promise.all(tasks);
+  assert.equal(peak, 4);
+
+  let reads = 0;
+  const delays: number[] = [];
+  const image = await fetchEstoqueNowItemPhoto(
+    "https://thumb110.estoquenow.com.br:8443/item.jpg",
+    async () => {
+      reads += 1;
+      return reads < 3
+        ? new Response(null, { status: 503 })
+        : new Response("ok", { headers: { "content-type": "image/jpeg" } });
+    },
+    async (milliseconds) => {
+      delays.push(milliseconds);
+    },
+  );
+  assert.equal(reads, 3);
+  assert.deepEqual(delays, [250, 500]);
+  assert.equal(image.bytes.byteLength, 2);
+
+  reads = 0;
+  await assert.rejects(
+    () => fetchEstoqueNowItemPhoto(
+      "https://thumb110.estoquenow.com.br:8443/missing.jpg",
+      async () => {
+        reads += 1;
+        return new Response(null, { status: 404 });
+      },
+      async () => undefined,
+    ),
+    /MEDIA_FETCH_FAILED/,
+  );
+  assert.equal(reads, 1);
+
+  const holders: Array<() => void> = [];
+  const activeHolders = Array.from({ length: 4 }, () =>
+    withEstoqueNowMediaSlot(
+      () => new Promise<void>((resolve) => holders.push(resolve)),
+    ),
+  );
+  while (holders.length < 4) await Promise.resolve();
+  const queued = Array.from({ length: 32 }, () =>
+    withEstoqueNowMediaSlot(async () => undefined, 1_000),
+  );
+  await assert.rejects(
+    () => withEstoqueNowMediaSlot(async () => undefined, 1_000),
+    /MEDIA_QUEUE_BUSY/,
+  );
+  holders.splice(0).forEach((release) => release());
+  await Promise.all([...activeHolders, ...queued]);
+
+  const timeoutHolders: Array<() => void> = [];
+  const activeTimeoutHolders = Array.from({ length: 4 }, () =>
+    withEstoqueNowMediaSlot(
+      () => new Promise<void>((resolve) => timeoutHolders.push(resolve)),
+    ),
+  );
+  while (timeoutHolders.length < 4) await Promise.resolve();
+  await assert.rejects(
+    () => withEstoqueNowMediaSlot(async () => undefined, 1),
+    /MEDIA_QUEUE_BUSY/,
+  );
+  timeoutHolders.splice(0).forEach((release) => release());
+  await Promise.all(activeTimeoutHolders);
+});
+
+test("detalhe de foto normaliza timeout, rede, 429 e 5xx como indisponibilidade transitória", async () => {
+  for (const failure of [
+    () => new Response(null, { status: 429 }),
+    () => new Response(null, { status: 503 }),
+    () => { throw new TypeError("network unavailable"); },
+    () => { const error = new Error("timed out"); error.name = "TimeoutError"; throw error; },
+  ]) {
+    let authenticated = false;
+    const client = new EstoqueNowClient({
+      clientId: "id",
+      clientSecret: "secret",
+      sleep: async () => undefined,
+      fetchImpl: async (input) => {
+        if (String(input).endsWith("/oauth2/token")) {
+          authenticated = true;
+          return Response.json({ token: "token", expires: "2099-01-01 00:00:00" });
+        }
+        return failure();
+      },
+    });
+    await assert.rejects(
+      () => client.getLogisticItemPhoto(
+        "123",
+        { id: "row-1", itemId: "item-1", orderId: "order-1", name: "Mesa" },
+      ),
+      /ESTOQUENOW_PHOTO_SOURCE_UNAVAILABLE/,
+    );
+    assert.equal(authenticated, true);
+  }
 });
 
 test("pagina a listagem sem duplicar IDs", async () => {

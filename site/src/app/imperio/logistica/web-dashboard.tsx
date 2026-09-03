@@ -1634,7 +1634,7 @@ function IntegrationsView(props: Props) {
           </dl>
           <div className="mt-4 rounded-lg bg-[#eef5f1] p-3 text-xs leading-relaxed text-[#285f50]">A consulta à API é somente leitura e ocorre no servidor. Cada confirmação importa exatamente uma operação para o Postgres da Império.</div>
           <div className={`mt-3 rounded-lg p-3 text-xs ${props.snapshot.estoquenow.import_enabled ? "bg-[#e3f2ec] text-[#28624f]" : "bg-[#fff6dd] text-[#705817]"}`}>
-            Importação individual {props.snapshot.estoquenow.import_enabled ? "habilitada" : "bloqueada"} por ambiente. Pull automático separado, com lote máximo de cinco.
+            Importação individual {props.snapshot.estoquenow.import_enabled ? "habilitada" : "bloqueada"} por ambiente. Pull automático {props.snapshot.estoquenow.pull_apply_enabled ? "com aplicação interna habilitada" : "em observação; aplicação interna desabilitada"}, com lote máximo de cinco.
           </div>
         </article>
         <form onSubmit={sync} aria-busy={previewRequestState === "loading"} className="rounded-xl border border-[#d7dfd9] bg-white p-5">

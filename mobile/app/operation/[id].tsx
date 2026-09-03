@@ -14,6 +14,7 @@ const formatDate = (value: string) =>
     new Date(value),
   );
 const itemPhotoApi = process.env.EXPO_PUBLIC_IMPERIO_API_URL ?? "https://imperio-logistica.vercel.app";
+const PHOTO_LOAD_CONCURRENCY = 4;
 
 export default function OperationScreen() {
   const router = useRouter();
@@ -26,6 +27,12 @@ export default function OperationScreen() {
   const rail = useRef<ScrollView>(null);
   const [railWidth, setRailWidth] = useState(0);
   const [failedPhotos, setFailedPhotos] = useState<Set<string>>(new Set());
+  const sourceItems = operation?.estoquenow_context?.items ?? [];
+  const manifestPhotoKey = `${operation?.id ?? "unavailable"}:${operation?.imported_at ?? "unversioned"}`;
+  const [photoQueue, setPhotoQueue] = useState({
+    key: manifestPhotoKey,
+    limit: PHOTO_LOAD_CONCURRENCY,
+  });
 
   useEffect(() => {
     if (!railWidth) return;
@@ -62,7 +69,6 @@ export default function OperationScreen() {
   );
   const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(operation.destination)}`;
   const missingAssignments = missingRequiredAssignments(operation);
-  const sourceItems = operation.estoquenow_context?.items ?? [];
   const checkedItems = new Map(
     operation.item_checks.map((item) => [item.source_item_id, item]),
   );
@@ -70,6 +76,16 @@ export default function OperationScreen() {
   const checkedPercent = sourceItems.length
     ? Math.round((checkedCount / sourceItems.length) * 100)
     : 0;
+  const photoLoadLimit = photoQueue.key === manifestPhotoKey
+    ? photoQueue.limit
+    : PHOTO_LOAD_CONCURRENCY;
+  const advancePhotoQueue = () => setPhotoQueue((current) => ({
+    key: manifestPhotoKey,
+    limit: Math.min(
+      sourceItems.length,
+      (current.key === manifestPhotoKey ? current.limit : PHOTO_LOAD_CONCURRENCY) + 1,
+    ),
+  }));
 
   return (
     <Screen>
@@ -122,11 +138,11 @@ export default function OperationScreen() {
               <View style={[styles.progressValue, { width: `${checkedPercent}%` }]} />
             </View>
             {!online ? <Text style={styles.offlineNote}>Conecte o aparelho para atualizar a conferência.</Text> : null}
-            {sourceItems.map((item) => {
+            {sourceItems.map((item, itemIndex) => {
               const check = checkedItems.get(item.id);
               const marked = Boolean(check);
               const disabled = busy || !online || operation.status !== "active";
-              const photoKey = `${operation.imported_at ?? "unversioned"}:${item.id}`;
+              const photoKey = `${operation.id}:${operation.imported_at ?? "unversioned"}:${item.id}`;
               return (
                 <Pressable
                   key={item.id}
@@ -148,8 +164,16 @@ export default function OperationScreen() {
                 >
                   <View style={styles.photoPlaceholder}>
                     <Text style={styles.photoIcon}>▧</Text>
-                    <Text style={styles.photoLabel}>Foto não disponível</Text>
-                    {session && online && !failedPhotos.has(photoKey) ? (
+                    <Text style={styles.photoLabel}>
+                      {!online
+                        ? "Foto exige conexão"
+                        : failedPhotos.has(photoKey)
+                          ? "Foto não disponível"
+                          : itemIndex < photoLoadLimit
+                            ? "Carregando foto"
+                            : "Foto aguardando carregamento"}
+                    </Text>
+                    {session && online && itemIndex < photoLoadLimit && !failedPhotos.has(photoKey) ? (
                       <Image
                         source={{
                           uri: `${itemPhotoApi}/api/imperio/item-photo?operationId=${encodeURIComponent(operation.id)}&itemId=${encodeURIComponent(item.id)}&version=${encodeURIComponent(operation.imported_at ?? "unversioned")}`,
@@ -158,13 +182,10 @@ export default function OperationScreen() {
                         accessibilityLabel={`Foto de ${item.name}`}
                         resizeMode="cover"
                         style={styles.photoImage}
+                        onLoad={advancePhotoQueue}
                         onError={() => {
+                          advancePhotoQueue();
                           setFailedPhotos((current) => new Set(current).add(photoKey));
-                          setTimeout(() => setFailedPhotos((current) => {
-                            const next = new Set(current);
-                            next.delete(photoKey);
-                            return next;
-                          }), 30_000);
                         }}
                       />
                     ) : null}

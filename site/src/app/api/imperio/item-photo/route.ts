@@ -5,6 +5,7 @@ import { readEstoqueNowItemPhoto } from "@/app/imperio/logistica/data";
 import {
   fetchEstoqueNowItemPhoto,
   isValidExternalId,
+  withEstoqueNowMediaSlot,
   type EstoqueNowItem,
 } from "@/app/imperio/logistica/estoquenow";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -21,9 +22,11 @@ const SAFE_PHOTO_ERRORS = new Set([
   "MEDIA_FETCH_FAILED",
   "MEDIA_TYPE_INVALID",
   "MEDIA_TOO_LARGE",
+  "MEDIA_QUEUE_BUSY",
   "ESTOQUENOW_SOURCE_ITEM_CHANGED",
   "ESTOQUENOW_ITEM_PHOTO_UNAVAILABLE",
   "ESTOQUENOW_INVALID_ITEM_PHOTO",
+  "ESTOQUENOW_PHOTO_SOURCE_UNAVAILABLE",
 ]);
 
 export async function GET(request: Request) {
@@ -68,11 +71,49 @@ export async function GET(request: Request) {
   if (!data.external_id || !item || data.imported_at !== version)
     return NextResponse.json({ error: "Foto indisponível." }, { status: 404 });
 
+  const claim = await supabase.rpc("claim_estoquenow_item_photo_request", {
+    p_operation_id: operationId,
+  });
+  let claimData: unknown = claim.data;
+  if (Array.isArray(claimData))
+    claimData = claimData.length === 1 ? claimData[0] : null;
+  const claimRow = claimData && typeof claimData === "object"
+    ? claimData as Record<string, unknown>
+    : null;
+  if (
+    claim.error ||
+    !claimRow ||
+    typeof claimRow.allowed !== "boolean" ||
+    !Number.isInteger(claimRow.retry_after_seconds)
+  )
+    return NextResponse.json(
+      { error: "Foto indisponível." },
+      { status: 503, headers: { "cache-control": "no-store" } },
+    );
+  if (!claimRow.allowed) {
+    const retryAfter = Math.min(
+      Math.max(Number(claimRow.retry_after_seconds), 1),
+      60,
+    );
+    return NextResponse.json(
+      { error: "Muitas fotos solicitadas. Tente novamente em instantes." },
+      {
+        status: 429,
+        headers: {
+          "cache-control": "no-store",
+          "retry-after": String(retryAfter),
+        },
+      },
+    );
+  }
+
   let sourceHost = "";
   try {
-    const photo = await readEstoqueNowItemPhoto(data.external_id, item);
-    sourceHost = new URL(photo.url).hostname.toLowerCase();
-    const image = await fetchEstoqueNowItemPhoto(photo.url);
+    const image = await withEstoqueNowMediaSlot(async () => {
+      const photo = await readEstoqueNowItemPhoto(data.external_id!, item);
+      sourceHost = new URL(photo.url).hostname.toLowerCase();
+      return fetchEstoqueNowItemPhoto(photo.url);
+    });
     return new NextResponse(image.bytes, {
       headers: {
         "cache-control": "private, max-age=300",
@@ -88,9 +129,19 @@ export async function GET(request: Request) {
     const reason = SAFE_PHOTO_ERRORS.has(rawReason)
       ? rawReason
       : "PHOTO_UNAVAILABLE";
+    const transient = new Set([
+      "MEDIA_FETCH_FAILED",
+      "MEDIA_QUEUE_BUSY",
+      "ESTOQUENOW_PHOTO_SOURCE_UNAVAILABLE",
+    ]).has(reason);
     return NextResponse.json(
       { error: "Foto indisponível.", reason, ...((blockedHost || sourceHost) ? { sourceHost: blockedHost || sourceHost } : {}) },
-      { status: 404 },
+      {
+        status: transient ? 503 : 404,
+        headers: transient
+          ? { "cache-control": "no-store", "retry-after": "5" }
+          : { "cache-control": "private, max-age=60" },
+      },
     );
   }
 }

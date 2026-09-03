@@ -101,27 +101,42 @@ test("manifesto de carga expõe progresso e checkbox acessível", async () => {
   assert.match(manifest, /role="progressbar"/);
   assert.match(manifest, /type="checkbox"/);
   assert.match(manifest, /Foto não disponível/);
+  assert.match(manifest, /PHOTO_LOAD_CONCURRENCY = 4/);
+  assert.match(manifest, /itemIndex < photoLoadLimit/);
+  assert.match(manifest, /onLoad=\{advancePhotoQueue\}/);
   assert.match(route, /rpc\("set_operation_item_checked"/);
 });
 
 test("fotos de itens passam por proxy autenticado e limitado", async () => {
-  const route = await readFile(
-    new URL("../../api/imperio/item-photo/route.ts", import.meta.url),
-    "utf8",
-  );
+  const [route, manifest] = await Promise.all([
+    readFile(new URL("../../api/imperio/item-photo/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("./item-manifest.tsx", import.meta.url), "utf8"),
+  ]);
 
   assert.match(route, /auth\.getUser/);
   assert.match(route, /fetchEstoqueNowItemPhoto/);
+  assert.match(route, /withEstoqueNowMediaSlot/);
+  assert.match(route, /rpc\("claim_estoquenow_item_photo_request"/);
+  assert.match(route, /MEDIA_QUEUE_BUSY/);
+  assert.match(route, /ESTOQUENOW_PHOTO_SOURCE_UNAVAILABLE/);
   assert.match(route, /data\.imported_at !== version/);
   assert.match(route, /sourceHost/);
   assert.doesNotMatch(route, /pathname|searchParams\.toString/);
   assert.match(route, /x-content-type-options/);
+  assert.match(route, /status: transient \? 503 : 404/);
+  assert.match(route, /"cache-control": "no-store"/);
+  assert.ok(
+    route.indexOf('rpc("claim_estoquenow_item_photo_request"') <
+      route.indexOf("await readEstoqueNowItemPhoto"),
+  );
+  assert.doesNotMatch(manifest, /setTimeout/);
 });
 
 test("integrações expõem saúde sanitizada do pull e fila de revisão", async () => {
-  const [dashboard, server, types, cron] = await Promise.all([
+  const [dashboard, server, data, types, cron] = await Promise.all([
     readFile(new URL("./web-dashboard.tsx", import.meta.url), "utf8"),
     readFile(new URL("./server.ts", import.meta.url), "utf8"),
+    readFile(new URL("./data.ts", import.meta.url), "utf8"),
     readFile(new URL("./types.ts", import.meta.url), "utf8"),
     readFile(new URL("../../api/imperio/estoquenow-pull/route.ts", import.meta.url), "utf8"),
   ]);
@@ -129,7 +144,10 @@ test("integrações expõem saúde sanitizada do pull e fila de revisão", async
   assert.match(server, /rpc\("get_estoquenow_sync_health"/);
   assert.match(server, /if \(result\.error\) return null/);
   assert.match(types, /sync_health\?: EstoqueNowSyncHealth \| null/);
+  assert.match(types, /pull_apply_enabled: boolean/);
+  assert.match(data, /pull_apply_enabled: pullApplyEnabled/);
   assert.match(dashboard, /Leitura conectada/);
+  assert.match(dashboard, /aplicação interna desabilitada/);
   assert.match(dashboard, /Última leitura automática/);
   assert.match(dashboard, /Buscar alterações sem importar/);
   assert.match(dashboard, /Fila de revisão/);

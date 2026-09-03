@@ -4,7 +4,7 @@ set local role postgres;
 create extension if not exists pgtap with schema extensions;
 set local search_path = extensions, public;
 
-select plan(130);
+select plan(144);
 
 select has_table(
   'public',
@@ -1828,6 +1828,171 @@ select is(
   public.get_estoquenow_sync_existing(array['external-manual-sync-read']),
   '[]'::jsonb,
   'RPC nunca mistura operação manual com leitura do EstoqueNOW'
+);
+
+set local role postgres;
+select has_table(
+  'private',
+  'estoquenow_item_photo_rate_limits',
+  'rate limit privado do proxy de fotos existe'
+);
+select is(
+  (select relrowsecurity from pg_catalog.pg_class
+    where oid = 'private.estoquenow_item_photo_rate_limits'::regclass),
+  true,
+  'rate limit de fotos usa RLS como defesa em profundidade'
+);
+select ok(
+  not has_table_privilege(
+    'authenticated', 'private.estoquenow_item_photo_rate_limits', 'SELECT'
+  )
+    and not has_table_privilege(
+      'authenticated', 'private.estoquenow_item_photo_rate_limits', 'INSERT'
+    )
+    and not has_table_privilege(
+      'authenticated', 'private.estoquenow_item_photo_rate_limits', 'UPDATE'
+    )
+    and not has_table_privilege(
+      'anon', 'private.estoquenow_item_photo_rate_limits', 'SELECT'
+    )
+    and not has_table_privilege(
+      'service_role', 'private.estoquenow_item_photo_rate_limits', 'SELECT'
+    ),
+  'clientes e service_role não acessam diretamente o contador privado'
+);
+select ok(
+  pg_catalog.to_regprocedure(
+    'public.claim_estoquenow_item_photo_request(uuid)'
+  ) is not null,
+  'RPC estreito de claim de foto existe'
+);
+select ok(
+  has_function_privilege(
+    'authenticated',
+    'public.claim_estoquenow_item_photo_request(uuid)',
+    'EXECUTE'
+  )
+    and not has_function_privilege(
+      'anon',
+      'public.claim_estoquenow_item_photo_request(uuid)',
+      'EXECUTE'
+    )
+    and not has_function_privilege(
+      'service_role',
+      'public.claim_estoquenow_item_photo_request(uuid)',
+      'EXECUTE'
+    ),
+  'somente authenticated executa o claim de foto'
+);
+select ok(
+  (select procedure.prosecdef
+      and coalesce(procedure.proconfig, '{}'::text[]) @> array['search_path=""']
+    from pg_catalog.pg_proc procedure
+    where procedure.oid =
+      'public.claim_estoquenow_item_photo_request(uuid)'::regprocedure),
+  'claim de foto usa SECURITY DEFINER com search_path vazio'
+);
+
+set local role authenticated;
+set local "request.jwt.claim.sub" = '10000000-0000-4000-8000-000000000001';
+create temp table photo_rate_claims (
+  attempt integer primary key,
+  allowed boolean not null,
+  retry_after_seconds integer not null
+);
+
+do $$
+begin
+  for attempt in 1..61 loop
+    insert into photo_rate_claims
+    select attempt, claim.allowed, claim.retry_after_seconds
+    from public.claim_estoquenow_item_photo_request(
+      '40000000-0000-4000-8000-000000000012'
+    ) claim;
+  end loop;
+end
+$$;
+select is(
+  (select count(*) from photo_rate_claims where allowed),
+  60::bigint,
+  'janela permite sessenta fotos para um ator e operação'
+);
+select ok(
+  (select not allowed and retry_after_seconds between 1 and 60
+    from photo_rate_claims where attempt = 61),
+  'claim excedente é negado com retry-after curto e limitado'
+);
+set local role postgres;
+select ok(
+  (select request_count = 61
+    from private.estoquenow_item_photo_rate_limits
+    where actor_id = '10000000-0000-4000-8000-000000000001'
+      and operation_id = '40000000-0000-4000-8000-000000000012')
+    and (select count(*) from private.estoquenow_item_photo_rate_limits
+      where actor_id = '10000000-0000-4000-8000-000000000001'
+        and operation_id = '40000000-0000-4000-8000-000000000012') = 1,
+  'contador satura sem criar histórico ou linhas duplicadas'
+);
+
+set local role authenticated;
+set local "request.jwt.claim.sub" = '10000000-0000-4000-8000-000000000002';
+select ok(
+  (select allowed and retry_after_seconds = 0
+    from public.claim_estoquenow_item_photo_request(
+      '40000000-0000-4000-8000-000000000012'
+    )),
+  'participante acessível possui janela independente por ator'
+);
+
+set local role authenticated;
+set local "request.jwt.claim.sub" = '10000000-0000-4000-8000-000000000003';
+select throws_ok(
+  $$
+    select * from public.claim_estoquenow_item_photo_request(
+      '40000000-0000-4000-8000-000000000012'
+    )
+  $$,
+  '42501',
+  'forbidden',
+  'usuário sem acesso à operação não consome nem cria janela'
+);
+
+set local role authenticated;
+set local "request.jwt.claim.sub" = '10000000-0000-4000-8000-000000000001';
+select throws_ok(
+  $$
+    select * from public.claim_estoquenow_item_photo_request(
+      '40000000-0000-4000-8000-000000000001'
+    )
+  $$,
+  '42501',
+  'forbidden',
+  'claim rejeita operação que não pertence ao EstoqueNOW'
+);
+
+set local role postgres;
+update private.estoquenow_item_photo_rate_limits
+set window_started_at = statement_timestamp() - interval '61 seconds',
+  request_count = 61
+where actor_id = '10000000-0000-4000-8000-000000000001'
+  and operation_id = '40000000-0000-4000-8000-000000000012';
+set local role authenticated;
+set local "request.jwt.claim.sub" = '10000000-0000-4000-8000-000000000001';
+select ok(
+  (select allowed and retry_after_seconds = 0
+    from public.claim_estoquenow_item_photo_request(
+      '40000000-0000-4000-8000-000000000012'
+    )),
+  'janela vencida é resetada e permite novo claim'
+);
+set local role postgres;
+select is(
+  (select request_count
+    from private.estoquenow_item_photo_rate_limits
+    where actor_id = '10000000-0000-4000-8000-000000000001'
+      and operation_id = '40000000-0000-4000-8000-000000000012'),
+  1::smallint,
+  'reset reutiliza a mesma linha e reinicia o contador'
 );
 
 select * from finish();

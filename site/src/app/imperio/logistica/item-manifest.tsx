@@ -7,6 +7,8 @@ import { useState } from "react";
 import type { Operation } from "./types";
 import { formatDate, postJson, type Run } from "./workspace";
 
+const PHOTO_LOAD_CONCURRENCY = 4;
+
 export function ItemManifest({
   operation,
   configured,
@@ -24,8 +26,23 @@ export function ItemManifest({
 }) {
   const [failedPhotos, setFailedPhotos] = useState<Set<string>>(new Set());
   const items = operation.estoquenow_context?.items ?? [];
-  if (!items.length) return null;
   const photoVersion = operation.imported_at ?? "unversioned";
+  const manifestPhotoKey = `${operation.id}:${photoVersion}`;
+  const [photoQueue, setPhotoQueue] = useState({
+    key: manifestPhotoKey,
+    limit: PHOTO_LOAD_CONCURRENCY,
+  });
+  if (!items.length) return null;
+  const photoLoadLimit = photoQueue.key === manifestPhotoKey
+    ? photoQueue.limit
+    : PHOTO_LOAD_CONCURRENCY;
+  const advancePhotoQueue = () => setPhotoQueue((current) => ({
+    key: manifestPhotoKey,
+    limit: Math.min(
+      items.length,
+      (current.key === manifestPhotoKey ? current.limit : PHOTO_LOAD_CONCURRENCY) + 1,
+    ),
+  }));
 
   const checks = new Map(
     operation.item_checks.map((item) => [item.source_item_id, item]),
@@ -66,10 +83,10 @@ export function ItemManifest({
         </p>
       )}
       <ul className="mt-4 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr))]">
-        {items.map((item) => {
+        {items.map((item, itemIndex) => {
           const check = checks.get(item.id);
           const isChecked = Boolean(check);
-          const photoKey = `${photoVersion}:${item.id}`;
+          const photoKey = `${operation.id}:${photoVersion}:${item.id}`;
           return (
             <li key={item.id}>
               <label
@@ -81,8 +98,16 @@ export function ItemManifest({
               >
                 <span className="relative flex min-h-28 flex-col items-center justify-center gap-2 overflow-hidden border-r border-[#d7dfd9] bg-[#edf1ee] px-2 text-center text-[#687970]">
                   <ImageOff size={22} aria-hidden="true" />
-                  <small className="text-[11px] leading-tight">Foto não disponível</small>
-                  {online && !failedPhotos.has(photoKey) && (
+                  <small className="text-[11px] leading-tight">
+                    {!online
+                      ? "Foto exige conexão"
+                      : failedPhotos.has(photoKey)
+                        ? "Foto não disponível"
+                        : itemIndex < photoLoadLimit
+                          ? "Carregando foto"
+                          : "Foto aguardando carregamento"}
+                  </small>
+                  {online && itemIndex < photoLoadLimit && !failedPhotos.has(photoKey) && (
                     <Image
                       unoptimized
                       fill
@@ -90,13 +115,10 @@ export function ItemManifest({
                       src={`/api/imperio/item-photo?operationId=${encodeURIComponent(operation.id)}&itemId=${encodeURIComponent(item.id)}&version=${encodeURIComponent(photoVersion)}`}
                       alt={`Foto de ${item.name}`}
                       className="object-cover"
+                      onLoad={advancePhotoQueue}
                       onError={() => {
+                        advancePhotoQueue();
                         setFailedPhotos((current) => new Set(current).add(photoKey));
-                        window.setTimeout(() => setFailedPhotos((current) => {
-                          const next = new Set(current);
-                          next.delete(photoKey);
-                          return next;
-                        }), 30_000);
                       }}
                     />
                   )}

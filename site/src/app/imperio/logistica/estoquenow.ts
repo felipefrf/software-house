@@ -102,6 +102,48 @@ const DEFAULT_BASE_URL = "https://api.estoquenow.com.br";
 const REQUEST_TIMEOUT_MS = 8_000;
 const PAGE_SIZE = 50;
 const MAX_PAGES = 100;
+const MAX_CONCURRENT_MEDIA_REQUESTS = 4;
+const MAX_MEDIA_WAITERS = 32;
+const MEDIA_QUEUE_WAIT_MS = 5_000;
+const MAX_MEDIA_ATTEMPTS = 3;
+let activeMediaRequests = 0;
+const mediaWaiters: Array<{ acquire: () => void }> = [];
+
+export async function withEstoqueNowMediaSlot<T>(
+  task: () => Promise<T>,
+  queueWaitMs = MEDIA_QUEUE_WAIT_MS,
+): Promise<T> {
+  await new Promise<void>((resolve, reject) => {
+    if (activeMediaRequests < MAX_CONCURRENT_MEDIA_REQUESTS) {
+      activeMediaRequests += 1;
+      resolve();
+      return;
+    }
+    if (mediaWaiters.length >= MAX_MEDIA_WAITERS) {
+      reject(new Error("MEDIA_QUEUE_BUSY"));
+      return;
+    }
+    const waiter = {
+      acquire: () => {
+        clearTimeout(timeout);
+        activeMediaRequests += 1;
+        resolve();
+      },
+    };
+    const timeout = setTimeout(() => {
+      const index = mediaWaiters.indexOf(waiter);
+      if (index >= 0) mediaWaiters.splice(index, 1);
+      reject(new Error("MEDIA_QUEUE_BUSY"));
+    }, queueWaitMs);
+    mediaWaiters.push(waiter);
+  });
+  try {
+    return await task();
+  } finally {
+    activeMediaRequests -= 1;
+    mediaWaiters.shift()?.acquire();
+  }
+}
 const SAFE_FACET_FIELDS = ["type", "type_name", "status_type", "is_concluded"] as const;
 const SAFE_DETAIL_KEYS = new Set([
   "data", "id", "order_id", "protocol", "nu_version", "order_items",
@@ -386,50 +428,83 @@ const allowedMediaUrl = (value: string) => {
   return url;
 };
 
+const isTransientEstoqueNowReadError = (error: unknown) => {
+  if (!(error instanceof Error)) return false;
+  return error instanceof TypeError ||
+    error.name === "AbortError" ||
+    error.name === "TimeoutError" ||
+    /^ESTOQUENOW_HTTP_(429|5\d\d)$/.test(error.message);
+};
+
 export const fetchEstoqueNowItemPhoto = async (
   initialUrl: string,
   fetchImpl: typeof fetch = fetch,
+  sleep: (milliseconds: number) => Promise<void> = (milliseconds) =>
+    new Promise((resolve) => setTimeout(resolve, milliseconds)),
 ) => {
-  let url = allowedMediaUrl(initialUrl);
-  for (let redirects = 0; redirects <= 2; redirects += 1) {
-    const response = await fetchImpl(url, {
-      cache: "no-store",
-      redirect: "manual",
-      signal: AbortSignal.timeout(8_000),
-    });
-    if (response.status >= 300 && response.status < 400) {
-      const location = response.headers.get("location");
-      if (!location || redirects === 2) throw new Error("MEDIA_REDIRECT_INVALID");
-      url = allowedMediaUrl(new URL(location, url).toString());
-      continue;
-    }
-    if (!response.ok || !response.body) throw new Error("MEDIA_FETCH_FAILED");
-    const contentType = response.headers.get("content-type")?.split(";")[0] ?? "";
-    if (!new Set(["image/jpeg", "image/png", "image/webp"]).has(contentType))
-      throw new Error("MEDIA_TYPE_INVALID");
-    const declaredSize = Number(response.headers.get("content-length"));
-    if (Number.isFinite(declaredSize) && declaredSize > 6_000_000)
-      throw new Error("MEDIA_TOO_LARGE");
-    const reader = response.body.getReader();
-    const chunks: Uint8Array[] = [];
-    let size = 0;
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      size += value.byteLength;
-      if (size > 6_000_000) {
-        await reader.cancel();
-        throw new Error("MEDIA_TOO_LARGE");
+  for (let attempt = 0; attempt < MAX_MEDIA_ATTEMPTS; attempt += 1) {
+    let url = allowedMediaUrl(initialUrl);
+    for (let redirects = 0; redirects <= 2; redirects += 1) {
+      let response: Response;
+      try {
+        response = await fetchImpl(url, {
+          cache: "no-store",
+          redirect: "manual",
+          signal: AbortSignal.timeout(8_000),
+        });
+      } catch {
+        if (attempt + 1 < MAX_MEDIA_ATTEMPTS) {
+          await sleep(250 * 2 ** attempt);
+          break;
+        }
+        throw new Error("MEDIA_FETCH_FAILED");
       }
-      chunks.push(value);
+      if (response.status >= 300 && response.status < 400) {
+        const location = response.headers.get("location");
+        if (!location || redirects === 2) throw new Error("MEDIA_REDIRECT_INVALID");
+        url = allowedMediaUrl(new URL(location, url).toString());
+        continue;
+      }
+      if (!response.ok || !response.body) {
+        const transient = response.status === 429 || response.status >= 500;
+        if (transient && attempt + 1 < MAX_MEDIA_ATTEMPTS) {
+          const retryHeader = response.headers.get("retry-after");
+          const retryAfter = retryHeader === null ? Number.NaN : Number(retryHeader);
+          const delay = Number.isFinite(retryAfter)
+            ? Math.min(Math.max(retryAfter * 1_000, 250), 2_000)
+            : 250 * 2 ** attempt;
+          await sleep(delay);
+          break;
+        }
+        throw new Error("MEDIA_FETCH_FAILED");
+      }
+      const contentType = response.headers.get("content-type")?.split(";")[0] ?? "";
+      if (!new Set(["image/jpeg", "image/png", "image/webp"]).has(contentType))
+        throw new Error("MEDIA_TYPE_INVALID");
+      const declaredSize = Number(response.headers.get("content-length"));
+      if (Number.isFinite(declaredSize) && declaredSize > 6_000_000)
+        throw new Error("MEDIA_TOO_LARGE");
+      const reader = response.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let size = 0;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        size += value.byteLength;
+        if (size > 6_000_000) {
+          await reader.cancel();
+          throw new Error("MEDIA_TOO_LARGE");
+        }
+        chunks.push(value);
+      }
+      const bytes = new Uint8Array(size);
+      let offset = 0;
+      for (const chunk of chunks) {
+        bytes.set(chunk, offset);
+        offset += chunk.byteLength;
+      }
+      return { bytes, contentType };
     }
-    const bytes = new Uint8Array(size);
-    let offset = 0;
-    for (const chunk of chunks) {
-      bytes.set(chunk, offset);
-      offset += chunk.byteLength;
-    }
-    return { bytes, contentType };
   }
   throw new Error("MEDIA_FETCH_FAILED");
 };
@@ -796,6 +871,12 @@ export class EstoqueNowClient {
   }
 
   async getLogisticItemPhoto(id: string, item: EstoqueNowItem) {
-    return itemPhotoFromDetail(await this.logisticDetail(id, true), item);
+    try {
+      return itemPhotoFromDetail(await this.logisticDetail(id, true), item);
+    } catch (error) {
+      if (isTransientEstoqueNowReadError(error))
+        throw new Error("ESTOQUENOW_PHOTO_SOURCE_UNAVAILABLE");
+      throw error;
+    }
   }
 }

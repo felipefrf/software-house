@@ -23,11 +23,15 @@ export function getEstoqueNowStatus(
 ): EstoqueNowStatus {
   const { clientId, clientSecret } = credentials();
   const importEnabled = process.env.ESTOQUENOW_IMPORT_ENABLED === "true";
+  const pullApplyEnabled =
+    process.env.ESTOQUENOW_INCREMENTAL_PULL_ENABLED === "true" &&
+    process.env.ESTOQUENOW_PULL_APPLY_ENABLED === "true";
   if (!clientId || !clientSecret)
     return {
       source: "mock",
       configured: false,
       import_enabled: importEnabled,
+      pull_apply_enabled: pullApplyEnabled,
       notice: "Credenciais ausentes. Operações internas não vieram do EstoqueNOW.",
       last_sync_at: null,
       imported_count: 0,
@@ -37,6 +41,7 @@ export function getEstoqueNowStatus(
     source: lastSyncAt ? "estoquenow" : "mock",
     configured: true,
     import_enabled: importEnabled,
+    pull_apply_enabled: pullApplyEnabled,
     notice: lastSyncAt
       ? "Última importação individual confirmada após leitura externa."
       : importEnabled
