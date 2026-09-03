@@ -379,9 +379,10 @@ const allowedMediaUrl = (value: string) => {
   const host = url.hostname.toLowerCase();
   if (url.protocol !== "https:") throw new Error("MEDIA_PROTOCOL_NOT_ALLOWED");
   if (url.username || url.password) throw new Error("MEDIA_CREDENTIALS_NOT_ALLOWED");
-  if (url.port) throw new Error(`MEDIA_PORT_NOT_ALLOWED@${host}:${url.port}`);
-  if (!(host === "estoquenow.com.br" || host.endsWith(".estoquenow.com.br")))
+  if (host !== "thumb110.estoquenow.com.br")
     throw new Error(`MEDIA_HOST_NOT_ALLOWED@${/^[a-z0-9.-]{1,253}$/.test(host) ? host : "invalid"}`);
+  if (url.port !== "8443")
+    throw new Error(`MEDIA_PORT_NOT_ALLOWED@${host}:${url.port}`);
   return url;
 };
 

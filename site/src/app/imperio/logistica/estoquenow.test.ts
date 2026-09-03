@@ -310,7 +310,7 @@ test("prova a mídia sem retornar URL assinada", async () => {
   const fetchImpl: typeof fetch = async (input) => {
     const url = String(input);
     if (url.endsWith("/oauth2/token")) return Response.json({ token: "redacted" });
-    if (url.startsWith("https://media.estoquenow.com.br/"))
+    if (url.startsWith("https://thumb110.estoquenow.com.br:8443/"))
       return new Response("image", { headers: { "content-type": "image/jpeg" } });
     return Response.json({
       order_items: [{
@@ -318,7 +318,7 @@ test("prova a mídia sem retornar URL assinada", async () => {
         item_id: "item-1",
         order_id: "order-1",
         item_name: "Mesa",
-        item_url_image: "https://media.estoquenow.com.br/item.jpg?signature=redacted",
+        item_url_image: "https://thumb110.estoquenow.com.br:8443/item.jpg?signature=redacted",
       }],
     });
   };
@@ -326,7 +326,7 @@ test("prova a mídia sem retornar URL assinada", async () => {
   const detail = await client.inspectLogisticDetail("123", true);
   assert.deepEqual(detail.mediaProbe, {
     available: true,
-    sourceHost: "media.estoquenow.com.br",
+    sourceHost: "thumb110.estoquenow.com.br",
     contentType: "image/jpeg",
     reason: null,
   });
@@ -371,6 +371,9 @@ test("proxy de foto bloqueia hosts, redirects, tipos e tamanhos inseguros", asyn
     "https://estoquenow.com.br.evil.test/item.jpg",
     "https://user:pass@estoquenow.com.br/item.jpg",
     "https://estoquenow.com.br:8443/item.jpg",
+    "https://thumb110.estoquenow.com.br/item.jpg",
+    "https://api.estoquenow.com.br:8443/item.jpg",
+    "https://thumb110.estoquenow.com.br:9443/item.jpg",
   ]) await assert.rejects(() => fetchEstoqueNowItemPhoto(url, noFetch));
 
   let redirects = 0;
@@ -379,7 +382,7 @@ test("proxy de foto bloqueia hosts, redirects, tipos e tamanhos inseguros", asyn
     return new Response(null, { status: 302, headers: { location: "https://evil.test/item.jpg" } });
   };
   await assert.rejects(
-    () => fetchEstoqueNowItemPhoto("https://media.estoquenow.com.br/item.jpg", badRedirect),
+    () => fetchEstoqueNowItemPhoto("https://thumb110.estoquenow.com.br:8443/item.jpg", badRedirect),
     /MEDIA_HOST_NOT_ALLOWED@evil\.test/,
   );
   assert.equal(redirects, 1);
@@ -388,28 +391,28 @@ test("proxy de foto bloqueia hosts, redirects, tipos e tamanhos inseguros", asyn
     async () => new Response(body, { headers });
   await assert.rejects(
     () => fetchEstoqueNowItemPhoto(
-      "https://media.estoquenow.com.br/item.jpg",
+      "https://thumb110.estoquenow.com.br:8443/item.jpg",
       response("html", { "content-type": "text/html" }),
     ),
     /MEDIA_TYPE_INVALID/,
   );
   await assert.rejects(
     () => fetchEstoqueNowItemPhoto(
-      "https://media.estoquenow.com.br/item.jpg",
+      "https://thumb110.estoquenow.com.br:8443/item.jpg",
       response("x", { "content-type": "image/jpeg", "content-length": "6000001" }),
     ),
     /MEDIA_TOO_LARGE/,
   );
   await assert.rejects(
     () => fetchEstoqueNowItemPhoto(
-      "https://media.estoquenow.com.br/item.jpg",
+      "https://thumb110.estoquenow.com.br:8443/item.jpg",
       response(new Uint8Array(6_000_001), { "content-type": "image/jpeg" }),
     ),
     /MEDIA_TOO_LARGE/,
   );
 
   const image = await fetchEstoqueNowItemPhoto(
-    "https://media.estoquenow.com.br/item.jpg?signature=secret",
+    "https://thumb110.estoquenow.com.br:8443/item.jpg?signature=secret",
     response("ok", { "content-type": "image/webp" }),
   );
   assert.equal(image.contentType, "image/webp");
