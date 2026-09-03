@@ -4,7 +4,7 @@ set local role postgres;
 create extension if not exists pgtap with schema extensions;
 set local search_path = extensions, public;
 
-select plan(144);
+select plan(149);
 
 select has_table(
   'public',
@@ -1993,6 +1993,60 @@ select is(
       and operation_id = '40000000-0000-4000-8000-000000000012'),
   1::smallint,
   'reset reutiliza a mesma linha e reinicia o contador'
+);
+
+set local role postgres;
+select ok(
+  (select not public
+      and file_size_limit = 6000000
+      and allowed_mime_types = array['image/jpeg', 'image/png', 'image/webp']
+    from storage.buckets
+    where id = 'estoquenow-item-photos'
+      and name = 'estoquenow-item-photos'),
+  'cache de fotos do EstoqueNOW é privado e restringe tamanho e MIME'
+);
+select is(
+  (select count(*)
+    from pg_catalog.pg_policies
+    where schemaname = 'storage'
+      and tablename = 'objects'
+      and (
+        coalesce(qual, '') like '%estoquenow-item-photos%'
+        or coalesce(with_check, '') like '%estoquenow-item-photos%'
+      )),
+  0::bigint,
+  'cache não possui policy de objetos para clientes'
+);
+insert into storage.objects (bucket_id, name, metadata)
+values (
+  'estoquenow-item-photos',
+  'external-operation/external-item/source-version.webp',
+  '{}'::jsonb
+);
+
+set local role anon;
+select is(
+  (select count(*) from storage.objects
+    where bucket_id = 'estoquenow-item-photos'),
+  0::bigint,
+  'anon não lê o cache privado'
+);
+
+set local role authenticated;
+set local "request.jwt.claim.sub" = '10000000-0000-4000-8000-000000000001';
+select is(
+  (select count(*) from storage.objects
+    where bucket_id = 'estoquenow-item-photos'),
+  0::bigint,
+  'authenticated não lê o cache privado'
+);
+
+set local role service_role;
+select is(
+  (select count(*) from storage.objects
+    where bucket_id = 'estoquenow-item-photos'),
+  1::bigint,
+  'service role lê o cache pelo backend'
 );
 
 select * from finish();

@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
+import { readThroughItemPhotoCache } from "../../api/imperio/item-photo/cache.ts";
+
 test("o manifesto abre o app de campo em modo standalone", async () => {
   const manifest = JSON.parse(
     await readFile(
@@ -129,9 +131,51 @@ test("fotos de itens passam por proxy autenticado e limitado", async () => {
   assert.match(route, /"cache-control": "no-store"/);
   assert.ok(
     route.indexOf('rpc("claim_estoquenow_item_photo_request"') <
+      route.indexOf("await readThroughItemPhotoCache"),
+  );
+  assert.ok(
+    route.indexOf('rpc("claim_estoquenow_item_photo_request"') <
       route.indexOf("await readEstoqueNowItemPhoto"),
   );
   assert.doesNotMatch(manifest, /setTimeout/);
+});
+
+test("cache de fotos evita nova leitura da origem e salva misses", async () => {
+  const cached = { bytes: new Uint8Array([1]), contentType: "image/jpeg" };
+  let sourceReads = 0;
+  let writes = 0;
+  assert.equal(
+    await readThroughItemPhotoCache(
+      async () => cached,
+      async () => {
+        sourceReads += 1;
+        return cached;
+      },
+      async () => {
+        writes += 1;
+      },
+    ),
+    cached,
+  );
+  assert.equal(sourceReads, 0);
+  assert.equal(writes, 0);
+
+  const fetched = { bytes: new Uint8Array([2]), contentType: "image/png" };
+  assert.equal(
+    await readThroughItemPhotoCache(
+      async () => null,
+      async () => {
+        sourceReads += 1;
+        return fetched;
+      },
+      async () => {
+        writes += 1;
+      },
+    ),
+    fetched,
+  );
+  assert.equal(sourceReads, 1);
+  assert.equal(writes, 1);
 });
 
 test("integrações expõem saúde sanitizada do pull e fila de revisão", async () => {
