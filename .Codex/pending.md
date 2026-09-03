@@ -1,6 +1,7 @@
 - [x] Credenciais e contrato real de listagem do EstoqueNOW validados por OAuth e prévia somente leitura em produção; segredos permanecem server-only.
 - [x] Importação individual do EstoqueNOW colocada em operação — lock idempotente aplicado, site publicado, flag habilitada e primeira operação real reconciliada sem duplicação.
-- [ ] Autorizar o primeiro lote automático do EstoqueNOW — cron diário em observe está ativo e reconciliado; definir o gestor responsável, habilitar apply para um lote de 1, reconciliar e desligar a flag antes de ampliar.
+- [x] Primeiro lote automático do EstoqueNOW concluído — 1 operação importada, contexto e 4 itens reconciliados, sem duplicação; apply desligado novamente.
+- [ ] Revisar e autorizar o segundo lote unitário do EstoqueNOW — 28 candidatas continuam na fila; manter apply=false até nova autorização e repetir reconciliação após cada lote.
 - [x] Atualizar os READMEs da integração EstoqueNOW — flags e capacidades alinhadas ao estado live de importação, detalhe, itens, fotos e checklist.
 - [ ] Escritas de entrega/retorno no EstoqueNOW estão conectadas apenas em código e mock — manter flags falsas e homologar somente após autorização específica do cliente.
 - [ ] Proteção contra senhas vazadas está desabilitada no Supabase — habilitar no painel após validar o impacto no fluxo de login dos usuários reais.
