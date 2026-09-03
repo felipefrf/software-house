@@ -124,6 +124,7 @@ export function ItemManifest({
                   {online && itemIndex < photoLoadLimit && !failedPhotos.has(photoKey) && (
                     <Image
                       unoptimized
+                      loading="eager"
                       fill
                       sizes="96px"
                       src={`/api/imperio/item-photo?operationId=${encodeURIComponent(operation.id)}&itemId=${encodeURIComponent(item.id)}&version=${encodeURIComponent(photoVersion)}`}

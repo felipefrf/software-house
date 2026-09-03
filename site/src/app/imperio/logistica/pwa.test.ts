@@ -129,6 +129,7 @@ test("fotos de itens passam por proxy autenticado e limitado", async () => {
   assert.match(route, /x-content-type-options/);
   assert.match(route, /status: transient \? 503 : 404/);
   assert.match(route, /"cache-control": "no-store"/);
+  assert.match(manifest, /loading="eager"/);
   assert.ok(
     route.indexOf('rpc("claim_estoquenow_item_photo_request"') <
       route.indexOf("await readThroughItemPhotoCache"),
