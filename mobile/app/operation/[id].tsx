@@ -7,7 +7,7 @@ import { BrandHeader, Button, Card, Screen, StatusStrip } from "@/components/Ui"
 import { useApp } from "@/context/AppContext";
 import { operationStages } from "@/lib/types";
 import { missingRequiredAssignments, stageLabels } from "@/lib/checklist";
-import { colors } from "@/lib/theme";
+import { colors, fonts } from "@/lib/theme";
 
 const formatDate = (value: string) =>
   new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium", timeStyle: "short" }).format(
@@ -362,14 +362,14 @@ const styles = StyleSheet.create({
   content: { padding: 16, paddingBottom: 38 },
   backButton: { minHeight: 46, minWidth: 58, borderColor: colors.line, borderWidth: 1, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   backLabel: { color: colors.greenDark, fontSize: 12, fontWeight: "800" },
-  eventName: { color: colors.ink, fontSize: 29, lineHeight: 34, fontWeight: "900" },
+  eventName: { color: colors.ink, fontFamily: fonts.display, fontSize: 30, lineHeight: 35, fontWeight: "700" },
   destination: { color: colors.muted, fontSize: 14, lineHeight: 20, marginTop: 7 },
   schedule: { color: colors.green, fontSize: 12, fontWeight: "800", marginTop: 9 },
   cacheAge: { color: colors.muted, fontSize: 11, marginTop: 5 },
   manifest: { marginTop: 18, paddingTop: 16, borderTopWidth: 1, borderTopColor: colors.line, gap: 10 },
   manifestHead: { flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between", gap: 12 },
   manifestEyebrow: { color: colors.muted, fontSize: 10, letterSpacing: 1.3, fontWeight: "800" },
-  manifestTitle: { color: colors.ink, fontSize: 20, fontWeight: "900", marginTop: 4 },
+  manifestTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 22, fontWeight: "700", marginTop: 4 },
   manifestPercent: { color: colors.green, fontSize: 13, fontWeight: "900" },
   progressTrack: { height: 8, borderRadius: 4, overflow: "hidden", backgroundColor: colors.line },
   progressValue: { height: 8, borderRadius: 4, backgroundColor: colors.green },
@@ -404,8 +404,8 @@ const styles = StyleSheet.create({
   stageLabel: { color: colors.muted, fontSize: 11, fontWeight: "700", textAlign: "center", marginTop: 8 },
   stageLabelActive: { color: colors.purple },
   nextCard: { backgroundColor: "#fbfbfe", borderColor: "#d7d1f4" },
-  eyebrow: { color: colors.purple, fontSize: 11, letterSpacing: 1.4, textTransform: "uppercase", fontWeight: "800" },
-  nextTitle: { color: colors.ink, fontSize: 24, fontWeight: "900", marginTop: 5 },
+  eyebrow: { color: colors.green, fontSize: 13, fontWeight: "600" },
+  nextTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 25, fontWeight: "700", marginTop: 4 },
   cardTitle: { color: colors.ink, fontSize: 19, fontWeight: "800" },
   cardCopy: { color: colors.muted, fontSize: 13, lineHeight: 19, marginTop: 6 },
   assignmentWarning: { marginTop: 13, padding: 12, borderRadius: 10, backgroundColor: colors.amberSoft },

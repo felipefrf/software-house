@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { colors, shadow } from "@/lib/theme";
+import { colors, fonts, shadow } from "@/lib/theme";
 
 export function Screen({ children }: PropsWithChildren) {
   return (
@@ -163,13 +163,11 @@ const styles = StyleSheet.create({
   },
   headerCopy: { flex: 1 },
   eyebrow: {
-    color: colors.green,
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 1.8,
-    textTransform: "uppercase",
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: "600",
   },
-  headerTitle: { color: colors.ink, fontSize: 20, fontWeight: "700", marginTop: 2 },
+  headerTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 24, fontWeight: "700", marginTop: 1 },
   card: {
     backgroundColor: colors.surface,
     borderColor: colors.line,
@@ -228,6 +226,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   navigationItemActive: { backgroundColor: colors.sage },
-  navigationLabel: { color: colors.muted, fontSize: 12, fontWeight: "800" },
+  navigationLabel: { color: colors.muted, fontSize: 12, fontWeight: "600" },
   navigationLabelActive: { color: colors.greenDark },
 });

@@ -22,7 +22,7 @@ import {
 import { useApp } from "@/context/AppContext";
 import { stageLabels } from "@/lib/checklist";
 import { splitActiveOperations } from "@/lib/schedule";
-import { colors } from "@/lib/theme";
+import { colors, fonts } from "@/lib/theme";
 import type { Operation } from "@/lib/types";
 
 const portalUrl =
@@ -358,8 +358,8 @@ export default function TodayScreen() {
         ) : null}
 
         <Text style={styles.boundary}>
-          A fila sincroniza apenas com o app aberto ou ao voltar para o primeiro
-          plano. Não há rastreamento nem envio em background.
+          A fila de ações sincroniza com o app aberto ou ao voltar para o primeiro
+          plano. Durante uma rota iniciada com aceite, o GPS continua em segundo plano.
           {pending
             ? " Ao sair, registros não resolvidos permanecem separados para este usuário neste aparelho."
             : ""}
@@ -378,13 +378,11 @@ const styles = StyleSheet.create({
   centered: { flex: 1, alignItems: "center", justifyContent: "center", padding: 20 },
   loginCard: { width: "100%", maxWidth: 430, padding: 24 },
   eyebrow: {
-    color: colors.green,
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 1.8,
-    textTransform: "uppercase",
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: "600",
   },
-  loginTitle: { color: colors.ink, fontSize: 28, fontWeight: "800", marginTop: 9 },
+  loginTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 29, fontWeight: "700", marginTop: 7 },
   loginCopy: { color: colors.muted, fontSize: 14, lineHeight: 21, marginTop: 8 },
   label: {
     color: colors.ink,
@@ -415,7 +413,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   pageTitleCopy: { flex: 1 },
-  pageTitle: { color: colors.ink, fontSize: 27, lineHeight: 32, fontWeight: "800" },
+  pageTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 29, lineHeight: 34, fontWeight: "700" },
   pageCopy: { color: colors.muted, fontSize: 13, marginTop: 4 },
   identity: {
     color: colors.green,
@@ -425,7 +423,7 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
   freshness: { color: colors.muted, fontSize: 11, marginTop: 10 },
-  sectionTitle: { color: colors.ink, fontSize: 17, fontWeight: "900", marginTop: 22 },
+  sectionTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 19, fontWeight: "700", marginTop: 22 },
   notice: {
     backgroundColor: colors.amberSoft,
     borderColor: "#ecd49d",
@@ -454,9 +452,9 @@ const styles = StyleSheet.create({
   },
   pressed: { backgroundColor: colors.sage },
   timeColumn: { width: 72 },
-  time: { color: colors.ink, fontSize: 11, fontWeight: "800", lineHeight: 16 },
+  time: { color: colors.green, fontSize: 12, fontWeight: "700", lineHeight: 17 },
   operationCopy: { flex: 1 },
-  operationName: { color: colors.ink, fontSize: 15, fontWeight: "800" },
+  operationName: { color: colors.ink, fontFamily: fonts.display, fontSize: 17, fontWeight: "700" },
   operationDestination: {
     color: colors.muted,
     fontSize: 12,
@@ -485,8 +483,9 @@ const styles = StyleSheet.create({
   empty: { marginTop: 10, alignItems: "stretch" },
   emptyTitle: {
     color: colors.ink,
+    fontFamily: fonts.display,
     fontSize: 20,
-    fontWeight: "800",
+    fontWeight: "700",
     textAlign: "center",
   },
   emptyCopy: {

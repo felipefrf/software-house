@@ -10,7 +10,7 @@ import {
 import { useApp } from "@/context/AppContext";
 import { stageLabels } from "@/lib/checklist";
 import { isRetryable, outboxStateLabel } from "@/lib/outbox-state";
-import { colors } from "@/lib/theme";
+import { colors, fonts } from "@/lib/theme";
 import type { OutboxState } from "@/lib/types";
 
 const stateColor: Record<OutboxState, string> = {
@@ -167,7 +167,7 @@ export default function QueueScreen() {
 
 const styles = StyleSheet.create({
   content: { padding: 16, paddingBottom: 40 },
-  title: { color: colors.ink, fontSize: 27, lineHeight: 32, fontWeight: "900" },
+  title: { color: colors.ink, fontFamily: fonts.display, fontSize: 29, lineHeight: 34, fontWeight: "700" },
   copy: { color: colors.muted, fontSize: 13, lineHeight: 19, marginTop: 6 },
   notice: { backgroundColor: colors.sage, borderColor: colors.line, borderWidth: 1, borderRadius: 12, padding: 13, marginTop: 15 },
   noticeText: { color: colors.greenDark, fontSize: 13, lineHeight: 19 },
@@ -176,7 +176,7 @@ const styles = StyleSheet.create({
   item: { padding: 15 },
   itemHead: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
   itemCopy: { flex: 1 },
-  operation: { color: colors.ink, fontSize: 15, fontWeight: "900" },
+  operation: { color: colors.ink, fontFamily: fonts.display, fontSize: 17, fontWeight: "700" },
   stage: { color: colors.purple, fontSize: 12, fontWeight: "800", marginTop: 3 },
   state: { maxWidth: 135, textAlign: "right", fontSize: 11, lineHeight: 15, fontWeight: "900" },
   meta: { color: colors.muted, fontSize: 11, marginTop: 8 },
@@ -184,7 +184,7 @@ const styles = StyleSheet.create({
   conflictHelp: { color: colors.danger, fontSize: 12, lineHeight: 18, marginTop: 9 },
   retryGap: { marginTop: 12 },
   empty: { marginTop: 18, alignItems: "center" },
-  emptyTitle: { color: colors.ink, fontSize: 19, fontWeight: "900" },
+  emptyTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 20, fontWeight: "700" },
   emptyCopy: { color: colors.muted, fontSize: 13, lineHeight: 19, textAlign: "center", marginTop: 6 },
   boundary: { marginTop: 22, backgroundColor: colors.amberSoft, borderColor: "#ecd49d", borderWidth: 1, borderRadius: 12, padding: 14 },
   boundaryTitle: { color: colors.amber, fontSize: 12, fontWeight: "900" },

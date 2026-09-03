@@ -24,7 +24,7 @@ import {
   stageLabels,
 } from "@/lib/checklist";
 import { ROUTE_TRACKING_TERMS_TEXT } from "@/lib/route-tracking-policy";
-import { colors } from "@/lib/theme";
+import { colors, fonts } from "@/lib/theme";
 import type { LocationEvidence, OutboxAction } from "@/lib/types";
 
 export default function StageScreen() {
@@ -516,8 +516,8 @@ const styles = StyleSheet.create({
   warningCopy: { color: "#705f3d", fontSize: 13, lineHeight: 19, marginTop: 4 },
   missingItem: { color: colors.danger, fontSize: 13, fontWeight: "700", marginTop: 9 },
   sectionCard: { marginTop: 12 },
-  sectionEyebrow: { color: colors.green, fontSize: 10, letterSpacing: 1.4, textTransform: "uppercase", fontWeight: "800" },
-  sectionTitle: { color: colors.ink, fontSize: 20, fontWeight: "900", marginTop: 5 },
+  sectionEyebrow: { color: colors.muted, fontSize: 13, fontWeight: "600" },
+  sectionTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 22, fontWeight: "700", marginTop: 4 },
   sectionCopy: { color: colors.muted, fontSize: 12, lineHeight: 18, marginTop: 5 },
   checklist: { marginTop: 13, borderTopColor: colors.line, borderTopWidth: StyleSheet.hairlineWidth },
   trackingConsent: { minHeight: 66, flexDirection: "row", alignItems: "center", gap: 12, marginTop: 14, borderTopColor: colors.line, borderTopWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line, borderBottomWidth: StyleSheet.hairlineWidth },

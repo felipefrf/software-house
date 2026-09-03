@@ -19,7 +19,7 @@ import { PhotoCapture } from "@/components/PhotoCapture";
 import { BrandHeader, Button, Card, Screen, StatusStrip } from "@/components/Ui";
 import { useApp } from "@/context/AppContext";
 import { stageLabels } from "@/lib/checklist";
-import { colors } from "@/lib/theme";
+import { colors, fonts } from "@/lib/theme";
 import type { IncidentDraft, LocationEvidence } from "@/lib/types";
 
 const incidentTypes: Array<[IncidentDraft["type"], string]> = [
@@ -307,8 +307,8 @@ const styles = StyleSheet.create({
   warning: { backgroundColor: colors.amberSoft, borderColor: "#ecd49d", borderWidth: 1, borderRadius: 14, padding: 15, marginBottom: 12 },
   warningTitle: { color: colors.amber, fontSize: 15, fontWeight: "900" },
   warningCopy: { color: "#705f3d", fontSize: 12, lineHeight: 18, marginTop: 5 },
-  eyebrow: { color: colors.green, fontSize: 11, letterSpacing: 1.3, textTransform: "uppercase", fontWeight: "800" },
-  eyebrowGap: { color: colors.green, fontSize: 11, letterSpacing: 1.3, textTransform: "uppercase", fontWeight: "800", marginTop: 20 },
+  eyebrow: { color: colors.muted, fontSize: 13, fontWeight: "600" },
+  eyebrowGap: { color: colors.muted, fontSize: 13, fontWeight: "600", marginTop: 20 },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 11 },
   chip: { minHeight: 44, borderRadius: 22, paddingHorizontal: 14, borderColor: colors.line, borderWidth: 1, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" },
   chipSelected: { borderColor: colors.purple, backgroundColor: colors.purpleSoft },
@@ -318,7 +318,7 @@ const styles = StyleSheet.create({
   input: { minHeight: 50, borderColor: colors.line, borderWidth: 1, borderRadius: 11, paddingHorizontal: 13, color: colors.ink, backgroundColor: colors.surface, fontSize: 15, marginTop: 8 },
   textarea: { minHeight: 105, paddingTop: 13, textAlignVertical: "top" },
   sectionCard: { marginTop: 12 },
-  sectionTitle: { color: colors.ink, fontSize: 20, fontWeight: "900", marginTop: 5 },
+  sectionTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 22, fontWeight: "700", marginTop: 4 },
   sectionCopy: { color: colors.muted, fontSize: 12, lineHeight: 18, marginTop: 4 },
   captureGap: { marginTop: 13 },
   buttonGap: { marginTop: 16 },

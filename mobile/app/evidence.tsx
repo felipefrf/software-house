@@ -12,7 +12,7 @@ import {
 import { useApp } from "@/context/AppContext";
 import { stageLabels } from "@/lib/checklist";
 import { supabase } from "@/lib/supabase";
-import { colors } from "@/lib/theme";
+import { colors, fonts } from "@/lib/theme";
 import type { OperationEvent } from "@/lib/types";
 
 const formatDate = (value: string) =>
@@ -153,14 +153,14 @@ export default function EvidenceScreen() {
 
 const styles = StyleSheet.create({
   content: { padding: 16, paddingBottom: 40 },
-  title: { color: colors.ink, fontSize: 27, lineHeight: 32, fontWeight: "900" },
+  title: { color: colors.ink, fontFamily: fonts.display, fontSize: 29, lineHeight: 34, fontWeight: "700" },
   copy: { color: colors.muted, fontSize: 13, lineHeight: 19, marginTop: 6 },
   freshness: { color: colors.green, fontSize: 11, fontWeight: "700", marginTop: 10 },
   error: { color: colors.danger, fontSize: 13, marginTop: 14 },
   refreshGap: { marginTop: 14 },
   list: { marginTop: 16, gap: 10 },
   item: { padding: 15 },
-  operation: { color: colors.ink, fontSize: 16, fontWeight: "900" },
+  operation: { color: colors.ink, fontFamily: fonts.display, fontSize: 18, fontWeight: "700" },
   row: {
     flexDirection: "row",
     alignItems: "center",
@@ -182,7 +182,7 @@ const styles = StyleSheet.create({
   },
   buttonGap: { marginTop: 13 },
   empty: { marginTop: 18, alignItems: "center" },
-  emptyTitle: { color: colors.ink, fontSize: 19, fontWeight: "900" },
+  emptyTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 20, fontWeight: "700" },
   emptyCopy: {
     color: colors.muted,
     fontSize: 13,
