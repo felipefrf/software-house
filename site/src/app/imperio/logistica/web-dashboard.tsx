@@ -179,7 +179,7 @@ const automaticRunStatus = (
 
 const isAutomaticRunStale = (run: EstoqueNowSyncRun | null) => {
   const finishedAt = run?.finishedAt;
-  return Boolean(finishedAt && Date.now() - Date.parse(finishedAt) > 26 * 60 * 60 * 1000);
+  return Boolean(finishedAt && Date.now() - Date.parse(finishedAt) > 45 * 60 * 1000);
 };
 
 const formatSyncWindowDate = (value: string) =>
@@ -1604,7 +1604,7 @@ function IntegrationsView(props: Props) {
           <ul className="mt-4 space-y-1.5 text-[14px] leading-5 text-imp-muted">
             <li>Consulta somente leitura, executada no servidor. Cada confirmação importa uma operação por vez.</li>
             <li>
-              Importação individual {est.import_enabled ? "habilitada" : "bloqueada"} por ambiente. Pull automático {est.pull_apply_enabled ? "com aplicação interna habilitada" : "em observação; aplicação interna desabilitada"}, lote máximo de cinco.
+              Importação individual {est.import_enabled ? "habilitada" : "bloqueada"} por ambiente. Pull automático {est.pull_apply_enabled ? "com aplicação interna habilitada" : "em observação; aplicação interna desabilitada"}; cada lote processa até cinco e cada chamada pode drenar até seis lotes.
             </li>
             <li>Escrita de entrega e devolução no EstoqueNOW: desligada.</li>
           </ul>
@@ -1613,8 +1613,8 @@ function IntegrationsView(props: Props) {
         <Card className="p-5" aria-labelledby="automatic-read-title">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h3 id="automatic-read-title" className="text-[20px] font-semibold">Última leitura automática</h3>
-              <p className="mt-1 text-[15px] text-imp-muted">Janela móvel com métricas sanitizadas. Nenhum payload externo é exibido.</p>
+              <h3 id="automatic-read-title" className="text-[20px] font-semibold">Último lote automático</h3>
+              <p className="mt-1 text-[15px] text-imp-muted">O pull roda a cada 15 minutos e pode encadear até seis lotes. Aqui aparece o lote mais recente, sem payload externo.</p>
             </div>
             <Pill tone={automaticStatus.tone}>{automaticStatus.label}</Pill>
           </div>

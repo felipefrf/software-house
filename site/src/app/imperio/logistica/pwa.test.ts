@@ -194,7 +194,9 @@ test("integrações expõem saúde sanitizada do pull e fila de revisão", async
   assert.match(data, /pull_apply_enabled: pullApplyEnabled/);
   assert.match(dashboard, /Leitura conectada/);
   assert.match(dashboard, /aplicação interna desabilitada/);
-  assert.match(dashboard, /Última leitura automática/);
+  assert.match(dashboard, /Último lote automático/);
+  assert.match(dashboard, /45 \* 60 \* 1000/);
+  assert.doesNotMatch(server, /demo-item-/);
   assert.match(dashboard, /Buscar alterações sem importar/);
   assert.match(dashboard, /Fila de revisão/);
   assert.match(dashboard, /aria-busy=\{previewRequestState === "loading"\}/);
