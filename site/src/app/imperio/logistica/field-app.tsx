@@ -5,13 +5,13 @@ import {
   ArrowLeft,
   Camera,
   Check,
-  Clock3,
+  ClipboardList,
   ExternalLink,
-  FileClock,
+  Images,
   LocateFixed,
   RefreshCw,
-  Signal,
-  SignalZero,
+  UploadCloud,
+  WifiOff,
 } from "lucide-react";
 import Image from "next/image";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
@@ -19,18 +19,38 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   checklistForStage,
   isChecklistComplete,
+  isOperationalToday,
   localOutboxKey,
+  operationStages,
+  prioritizeOperations,
   stageLabels,
 } from "./action";
-import { ItemManifest } from "./item-manifest";
+import { ItemManifest, manifestSummary } from "./item-manifest";
 import { StageRail } from "./stage-rail";
-import type { LogisticsSnapshot, PendingAction } from "./types";
+import type { LogisticsSnapshot, Operation, PendingAction } from "./types";
 import {
-  formatDate,
-  formatDuration,
-  mapsUrl,
-  type Run,
-} from "./workspace";
+  Button,
+  capitalize,
+  Card,
+  CheckMark,
+  dateFormatter,
+  Disclosure,
+  Empty,
+  Field,
+  formatTime,
+  formatWhen,
+  inputClass,
+  linkClass,
+  mapsPointUrl,
+  Notice,
+  Pill,
+  placeParts,
+  plural,
+  RouteDots,
+  SectionTitle,
+  sourceText,
+} from "./ui";
+import { formatDate, formatDuration, mapsUrl, type Run } from "./workspace";
 
 type Props = {
   snapshot: LogisticsSnapshot;
@@ -58,9 +78,7 @@ async function compressPhoto(file: File) {
 function dataUrlFile(dataUrl: string) {
   const [header, content] = dataUrl.split(",");
   const mime = header.match(/data:(.*?);/)?.[1] ?? "image/jpeg";
-  const bytes = Uint8Array.from(atob(content), (character) =>
-    character.charCodeAt(0),
-  );
+  const bytes = Uint8Array.from(atob(content), (character) => character.charCodeAt(0));
   return new File([bytes], "evidencia.jpg", { type: mime });
 }
 
@@ -83,14 +101,7 @@ function useElapsed(startedAt?: string) {
   const [seconds, setSeconds] = useState(0);
   useEffect(() => {
     const update = () =>
-      setSeconds(
-        startedAt
-          ? Math.max(
-              0,
-              Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000),
-            )
-          : 0,
-      );
+      setSeconds(startedAt ? Math.max(0, Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000)) : 0);
     const first = window.setTimeout(update, 0);
     const timer = window.setInterval(update, 30_000);
     return () => {
@@ -101,25 +112,46 @@ function useElapsed(startedAt?: string) {
   return seconds;
 }
 
+/** Linha de requisito da ação: estado à esquerda, controle à direita. */
+function Requirement({
+  done,
+  label,
+  detail,
+  children,
+}: {
+  done: boolean;
+  label: string;
+  detail?: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-3 py-3">
+      <CheckMark checked={done} />
+      <span className="min-w-0 flex-1">
+        <span className="block text-[16px] font-medium leading-5">{label}</span>
+        {detail && <span className="mt-0.5 block text-[14px] text-imp-muted">{detail}</span>}
+      </span>
+      {children}
+    </div>
+  );
+}
+
 function CapturePhoto({
   value,
   onChange,
   run,
-  label = "Tirar foto agora",
+  label,
 }: {
   value: string;
   onChange: (value: string) => void;
   run: Run;
-  label?: string;
+  label: string;
 }) {
   return (
-    <>
-      <label className="mt-4 flex min-h-24 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-[#95b2a7] bg-[#f1f7f4] text-center">
-        <Camera size={24} />
-        <strong className="mt-2">{value ? "Substituir foto" : label}</strong>
-        <small className="px-3 text-[#66776f]">
-          A câmera traseira é solicitada; a imagem é comprimida no aparelho.
-        </small>
+    <div className="flex shrink-0 flex-col items-end gap-2">
+      <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-imp-line bg-imp-surface px-3.5 text-[15px] font-semibold shadow-imp-soft has-focus-visible:outline-3 has-focus-visible:outline-imp-green">
+        <Camera size={18} aria-hidden="true" />
+        {value ? "Refazer" : label}
         <input
           className="sr-only"
           type="file"
@@ -127,25 +159,65 @@ function CapturePhoto({
           capture="environment"
           onChange={(event) => {
             const file = event.target.files?.[0];
-            if (file)
-              void run(
-                async () => onChange(await compressPhoto(file)),
-                "Foto preparada no aparelho.",
-              );
+            if (file) void run(async () => onChange(await compressPhoto(file)), "Foto pronta.");
           }}
         />
       </label>
       {value && (
-        <Image
-          unoptimized
-          src={value}
-          alt="Prévia da evidência"
-          width={640}
-          height={320}
-          className="mt-3 h-32 w-full rounded-lg object-cover"
-        />
+        <Image unoptimized src={value} alt="Prévia da foto" width={160} height={96} className="h-16 w-24 rounded-lg object-cover" />
       )}
-    </>
+    </div>
+  );
+}
+
+function OperationRow({
+  operation,
+  onOpen,
+  emphasis,
+}: {
+  operation: Operation;
+  onOpen: () => void;
+  emphasis: boolean;
+}) {
+  const place = placeParts(operation);
+  const stageIndex = operationStages.indexOf(operation.stage) + 1;
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onOpen}
+        className={`w-full rounded-2xl border bg-imp-surface p-4 text-left shadow-imp-card transition-[box-shadow,border-color] hover:border-imp-line-strong hover:shadow-imp-lift ${
+          emphasis ? "border-imp-line/70" : "border-imp-line/70"
+        }`}
+      >
+        <span className="flex items-baseline justify-between gap-3">
+          <span className={`font-imp-display font-semibold tabular-nums ${emphasis ? "text-[26px] leading-7" : "text-[18px] leading-6"}`}>
+            {formatWhen(operation.scheduled_at)}
+          </span>
+          {operation.status !== "active" && (
+            <Pill tone={operation.status === "completed" ? "green" : "red"}>
+              {operation.status === "completed" ? "Concluída" : "Cancelada"}
+            </Pill>
+          )}
+        </span>
+        <span className={`mt-1 block break-words font-semibold ${emphasis ? "text-[19px] leading-6" : "text-[16px] leading-5"}`}>
+          {operation.event_name}
+        </span>
+        <span className="mt-0.5 line-clamp-2 block text-[14px] leading-5 text-imp-muted">{place.address}</span>
+        {operation.status === "active" && (
+          <span className="mt-3 flex items-end justify-between gap-3 border-t border-imp-line pt-3">
+            <span className="text-[14px]">
+              <RouteDots operation={operation} className="mb-1.5" />
+              <span className="block">
+                <strong>{stageLabels[operation.stage]}</strong>
+                <span className="text-imp-muted"> · etapa {stageIndex} de {operationStages.length}</span>
+              </span>
+            </span>
+            <span className="text-[15px] font-semibold text-imp-green">{isOperationalToday(operation) ? "Continuar" : "Abrir"}</span>
+          </span>
+        )}
+      </button>
+    </li>
   );
 }
 
@@ -161,23 +233,15 @@ export function FieldApp(props: Props) {
   const outboxKey = localOutboxKey(props.snapshot.user?.id ?? "anonymous");
   const online = useOnline();
   const selected =
-    props.snapshot.operations.find((operation) => operation.id === props.selectedId) ??
-    props.snapshot.operations[0];
+    props.snapshot.operations.find((operation) => operation.id === props.selectedId) ?? props.snapshot.operations[0];
   const elapsed = useElapsed(selected?.stage_started_at);
-  const currentItems = useMemo(
-    () => (selected ? checklistForStage(selected.stage) : []),
-    [selected],
-  );
-  const pendingForSelected = outbox.filter(
-    (action) => action.operationId === selected?.id,
-  );
+  const currentItems = useMemo(() => (selected ? checklistForStage(selected.stage) : []), [selected]);
+  const pendingForSelected = outbox.filter((action) => action.operationId === selected?.id);
   const responsiblePeople = useMemo(() => {
     if (!selected) return [];
     const team = props.snapshot.teams.find((item) => item.id === selected.team_id);
     const allowed = new Set(
-      [props.snapshot.user?.id, selected.driver_id, ...(team?.member_ids ?? [])].filter(
-        (id): id is string => Boolean(id),
-      ),
+      [props.snapshot.user?.id, selected.driver_id, ...(team?.member_ids ?? [])].filter((id): id is string => Boolean(id)),
     );
     return props.snapshot.people.filter((person) => allowed.has(person.id));
   }, [props.snapshot.people, props.snapshot.teams, props.snapshot.user?.id, selected]);
@@ -185,9 +249,7 @@ export function FieldApp(props: Props) {
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       try {
-        const stored = JSON.parse(
-          localStorage.getItem(outboxKey) ?? "[]",
-        ) as PendingAction[];
+        const stored = JSON.parse(localStorage.getItem(outboxKey) ?? "[]") as PendingAction[];
         setOutbox(stored);
       } catch {
         localStorage.removeItem(outboxKey);
@@ -201,9 +263,7 @@ export function FieldApp(props: Props) {
       localStorage.setItem(outboxKey, JSON.stringify(actions));
       setOutbox(actions);
     } catch {
-      throw new Error(
-        "O aparelho não conseguiu salvar a ação localmente. Libere espaço antes de sair da tela.",
-      );
+      throw new Error("O aparelho não conseguiu salvar a ação localmente. Libere espaço antes de sair da tela.");
     }
   };
 
@@ -254,13 +314,9 @@ export function FieldApp(props: Props) {
     form.set("arrivalReason", pending.arrivalReason);
     form.set("acceptanceName", pending.acceptanceName);
     form.set("photo", dataUrlFile(pending.photoDataUrl));
-    const response = await fetch("/api/imperio?action=confirm-action", {
-      method: "POST",
-      body: form,
-    });
+    const response = await fetch("/api/imperio?action=confirm-action", { method: "POST", body: form });
     const payload = (await response.json()) as { error?: string; state?: string };
-    if (!response.ok || payload.state !== "confirmed")
-      throw new Error(payload.error ?? "A ação ainda está pendente.");
+    if (!response.ok || payload.state !== "confirmed") throw new Error(payload.error ?? "A ação ainda está pendente.");
     removeFromOutbox(pending.deviceActionId);
     await props.refresh();
     resetCapture();
@@ -274,12 +330,9 @@ export function FieldApp(props: Props) {
           longitude: position.coords.longitude,
           accuracy: position.coords.accuracy,
         });
-        props.setMessage("GPS capturado neste momento.");
+        props.setMessage("Local marcado.");
       },
-      () =>
-        props.setMessage(
-          "Não foi possível capturar o GPS. Verifique a permissão do navegador.",
-        ),
+      () => props.setMessage("Não foi possível marcar o local. Permita o acesso à localização no navegador."),
       { enableHighAccuracy: true, timeout: 12_000, maximumAge: 0 },
     );
 
@@ -296,25 +349,28 @@ export function FieldApp(props: Props) {
       location,
       deviceCapturedAt: new Date().toISOString(),
       note: String(form.get("note") ?? "").trim(),
-      responsibleId:
-        String(form.get("responsibleId") ?? "") || props.snapshot.user?.id || "",
+      responsibleId: String(form.get("responsibleId") ?? "") || props.snapshot.user?.id || "",
       arrivalAccess,
       arrivalReason: String(form.get("arrivalReason") ?? "").trim(),
       acceptanceName: String(form.get("acceptanceName") ?? "").trim(),
       photoDataUrl,
     };
-    void props.run(async () => {
-      try {
-        saveOutbox([...outbox, pending]);
-      } catch (error) {
-        if (!online) throw error;
-      }
-      if (!online) return;
-      await syncAction(pending);
-    },
-    online
-      ? "Ação confirmada pelo servidor e exibida na torre."
-      : "Ação salva como pendente neste aparelho. Envie quando houver conexão.");
+    void props.run(
+      async () => {
+        try {
+          saveOutbox([...outbox, pending]);
+        } catch (error) {
+          if (!online) throw error;
+        }
+        if (!online) return;
+        await syncAction(pending);
+      },
+      online
+        ? arrivalAccess === "blocked"
+          ? "Bloqueio registrado. A torre foi avisada e a espera começou."
+          : `${stageLabels[selected.stage]} concluída. A torre já vê o registro.`
+        : "Salvo neste aparelho. Envie quando houver conexão.",
+    );
   };
 
   const submitIncident = (event: FormEvent<HTMLFormElement>) => {
@@ -335,22 +391,19 @@ export function FieldApp(props: Props) {
     }
     if (incidentPhoto) form.set("photo", dataUrlFile(incidentPhoto));
     void props.run(async () => {
-      const response = await fetch("/api/imperio?action=create-incident", {
-        method: "POST",
-        body: form,
-      });
+      const response = await fetch("/api/imperio?action=create-incident", { method: "POST", body: form });
       const payload = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(payload.error ?? "Ocorrência não registrada.");
       element.reset();
       setIncidentPhoto("");
       await props.refresh();
-    }, "Ocorrência registrada e exibida na torre.");
+    }, "Ocorrência registrada. A torre foi avisada.");
   };
 
   const defaultResponsibleId =
-    [selected?.driver_id, props.snapshot.user?.id].find((id) =>
-      responsiblePeople.some((person) => person.id === id),
-    ) ?? responsiblePeople[0]?.id ?? "";
+    [selected?.driver_id, props.snapshot.user?.id].find((id) => responsiblePeople.some((person) => person.id === id)) ??
+    responsiblePeople[0]?.id ??
+    "";
   const actionDisabled =
     props.busy ||
     !props.snapshot.configured ||
@@ -363,387 +416,615 @@ export function FieldApp(props: Props) {
     pendingForSelected.some((item) => item.stage === selected.stage) ||
     (selected.stage === "arrival" && !arrivalAccess);
 
+  const navPadding = "pb-[calc(76px+env(safe-area-inset-bottom))]";
+  const actionPadding = "pb-[calc(168px+env(safe-area-inset-bottom))]";
+
+  const firstName = props.snapshot.user?.full_name.split(" ")[0];
+  const today = props.snapshot.operations.filter((operation) => isOperationalToday(operation));
+  const upcoming = props.snapshot.operations.filter(
+    (operation) => operation.status === "active" && !isOperationalToday(operation),
+  );
+  const closed = props.snapshot.operations.filter((operation) => operation.status !== "active");
+
+  const openOperation = (operation: Operation) => {
+    props.setSelectedId(operation.id);
+    resetCapture();
+    setStageOpen(true);
+    window.scrollTo({ top: 0 });
+  };
+
+  const evidenceByOperation = props.snapshot.operations
+    .filter((operation) => operation.events.length > 0)
+    .map((operation) => ({
+      operation,
+      items: [...operation.events].sort((a, b) => Date.parse(b.server_received_at) - Date.parse(a.server_received_at)),
+    }))
+    .sort((a, b) => Date.parse(b.items[0].server_received_at) - Date.parse(a.items[0].server_received_at));
+
+  const connectionNotice =
+    !online ? (
+      <Notice tone="amber" title="Sem conexão">
+        Você pode concluir etapas; elas ficam salvas neste aparelho até a conexão voltar.
+        {outbox.length > 0 && ` ${plural(outbox.length, "registro aguarda", "registros aguardam")} envio.`}
+      </Notice>
+    ) : outbox.length > 0 ? (
+      <Notice
+        tone="amber"
+        title={`${plural(outbox.length, "registro aguarda", "registros aguardam")} envio`}
+        action={
+          <Button variant="secondary" onClick={() => setTab("queue")}>
+            Ver envios pendentes
+          </Button>
+        }
+      >
+        Foram salvos neste aparelho e ainda não chegaram à torre.
+      </Notice>
+    ) : null;
+
+  const bottomNav = (
+    <nav
+      className="fixed inset-x-0 bottom-0 z-20 border-t border-imp-line/70 bg-imp-surface pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_-12px_rgba(23,33,29,.12)]"
+      aria-label="App de campo"
+    >
+      <div className="mx-auto grid max-w-[480px] grid-cols-3">
+        {(
+          [
+            ["today", "Hoje", ClipboardList],
+            ["evidence", "Evidências", Images],
+            ["queue", outbox.length ? `Envios (${outbox.length})` : "Envios", UploadCloud],
+          ] as const
+        ).map(([id, label, Icon]) => (
+          <button
+            key={id}
+            type="button"
+            aria-current={tab === id ? "page" : undefined}
+            onClick={() => {
+              setTab(id);
+              if (id === "today") setStageOpen(false);
+            }}
+            className={`flex min-h-16 flex-col items-center justify-center gap-1 px-2 text-[13px] font-semibold ${
+              tab === id ? "text-imp-green" : "text-imp-muted"
+            }`}
+          >
+            <Icon size={20} aria-hidden="true" />
+            {label}
+          </button>
+        ))}
+      </div>
+    </nav>
+  );
+
   if (!selected)
     return (
-      <section className="mx-auto max-w-md px-4 py-8">
-        <div className="rounded-xl border border-[#d7dfd9] bg-white p-6 text-center">
-          <h2 className="text-xl font-semibold">Nenhuma operação escalada</h2>
-          <p className="mt-2 text-sm text-[#66756d]">
-            O gestor precisa associar você ou sua equipe a uma operação.
-          </p>
-        </div>
-      </section>
+      <>
+        <section className={`mx-auto max-w-[480px] px-4 py-6 ${navPadding}`}>
+          {connectionNotice}
+          <h1 className="mt-4 font-imp-display text-[30px] font-semibold leading-tight">Hoje</h1>
+          <p className="text-[15px] text-imp-muted">{dateFormatter.format(new Date())}</p>
+          <div className="mt-5">
+            <Empty>Nenhuma operação escalada para você. A coordenação precisa associar você ou sua equipe a uma operação.</Empty>
+          </div>
+        </section>
+        {bottomNav}
+      </>
     );
 
   const uncheckedCount = currentItems.filter((item) => !checks[item]).length;
-  const actionRequirements = [
-    uncheckedCount ? `${uncheckedCount} item(ns) do checklist` : "",
+  const hasPendingStage = pendingForSelected.some((item) => item.stage === selected.stage);
+  const requirementsLeft = [
+    uncheckedCount ? `${plural(uncheckedCount, "item", "itens")} do checklist` : "",
     photoDataUrl ? "" : "foto",
-    location ? "" : "GPS",
+    location ? "" : "local",
     defaultResponsibleId ? "" : "responsável",
-    selected.stage === "arrival" && !arrivalAccess ? "liberação de acesso" : "",
+    selected.stage === "arrival" && !arrivalAccess ? "situação do acesso" : "",
   ].filter(Boolean);
-  const hasPendingStage = pendingForSelected.some(
-    (item) => item.stage === selected.stage,
-  );
   const actionHint = props.busy
-    ? "Envio em andamento."
-    : !props.snapshot.configured
-      ? "Ação desativada no ambiente demonstrativo."
-      : hasPendingStage
-      ? "Esta etapa já tem um envio pendente neste aparelho."
-      : actionRequirements.length
-        ? `Falta: ${actionRequirements.join(", ")}.`
-        : online
-          ? "Tudo pronto para confirmar no servidor."
-          : "Tudo pronto; a ação ficará pendente neste aparelho.";
-  const evidence = props.snapshot.operations.flatMap((operation) =>
-    operation.events.map((item) => ({ operation, item })),
+    ? "Enviando…"
+    : hasPendingStage
+      ? "Esta etapa já tem um envio pendente neste aparelho. Veja em Envios."
+      : requirementsLeft.length
+        ? `Falta: ${requirementsLeft.join(", ")}.${props.snapshot.configured ? "" : " Demonstração: nada é enviado."}`
+        : !props.snapshot.configured
+          ? "Tudo pronto. Na demonstração, a conclusão não é enviada."
+          : online
+            ? "Tudo pronto. O registro vai direto para a torre."
+            : "Tudo pronto. Sem conexão, o registro fica salvo neste aparelho.";
+
+  const place = placeParts(selected);
+  const manifest = manifestSummary(selected);
+  // ponytail: conferir itens é a tarefa nas etapas de carga; nas demais fica recolhido.
+  const manifestIsTask = selected.stage === "preparation" || selected.stage === "departure";
+  const unresolvedIncidents = props.snapshot.incidents.filter(
+    (incident) => incident.operation_id === selected.id && incident.status !== "resolved",
+  );
+  const team = props.snapshot.teams.find((item) => item.id === selected.team_id);
+  const vehicle = props.snapshot.vehicles.find((item) => item.id === selected.vehicle_id);
+  const driver = props.snapshot.people.find((item) => item.id === selected.driver_id);
+  const stageIndex = operationStages.indexOf(selected.stage) + 1;
+
+  const manifestBlock = manifest.total > 0 && (
+    <Card className="mt-4 px-4">
+      <Disclosure
+        className="border-t-0"
+        open={manifestIsTask && !manifest.complete}
+        summary="Conferir itens da carga"
+        meta={
+          <span className={manifest.complete ? "text-imp-green" : ""}>
+            {manifest.checked} de {manifest.total}
+          </span>
+        }
+      >
+        <ItemManifest
+          operation={selected}
+          configured={props.snapshot.configured}
+          busy={props.busy}
+          online={online}
+          refresh={props.refresh}
+          run={props.run}
+          dense
+        />
+      </Disclosure>
+    </Card>
   );
 
   return (
-    <section className={`mx-auto max-w-[460px] px-4 py-6 ${tab === "today" && stageOpen && selected.status === "active" ? "pb-[calc(160px+env(safe-area-inset-bottom))]" : "pb-[calc(72px+env(safe-area-inset-bottom))]"}`}>
-      <div className="mb-3 flex items-center justify-between rounded-xl border border-[#d7dfd9] bg-white px-4 py-3 text-xs">
-        <span className="flex items-center gap-2 font-semibold">
-          {online ? <Signal size={16} /> : <SignalZero size={16} />}
-          {online ? "Com conexão" : "Sem conexão"}
-        </span>
-        <span className={outbox.length ? "text-[#8a6318]" : "text-[#2d6e58]"}>
-          {outbox.length ? `${outbox.length} pendente(s)` : "Fila local vazia"}
-        </span>
-      </div>
-
-      <details className="pwa-install-hint mb-4 rounded-xl border border-[#d7dfd9] bg-white px-4 py-3 text-sm">
-        <summary className="min-h-11 cursor-pointer content-center font-semibold text-[#315f52]">
-          Instalar app neste celular
-        </summary>
-        <p className="mt-2 text-[#5f7067]">
-          iPhone: abra no Safari, toque em Compartilhar e em Adicionar à Tela de
-          Início. Android: abra o menu do Chrome e escolha Instalar app.
-        </p>
-      </details>
-
-      {tab === "today" && (
-        <>
-          {!stageOpen ? (
-            <div>
-              <div className="flex items-end justify-between gap-3">
-                <div>
-                  <p className="font-mono text-xs uppercase tracking-[0.16em] text-[#5f7067]">
-                    Operação de campo
-                  </p>
-                  <h1 className="mt-1 text-3xl font-semibold tracking-tight">Meu turno</h1>
-                  <p className="mt-1 text-sm text-[#65746c]">
-                    Abra uma operação para ver a próxima ação.
-                  </p>
-                </div>
-                <button
-                  onClick={() => void props.run(props.refresh, "Operações atualizadas.")}
-                  className="grid min-h-11 min-w-11 place-items-center rounded-lg border border-[#d3dbd6] bg-white"
-                  aria-label="Atualizar operações"
-                >
-                  <RefreshCw size={16} />
-                </button>
-              </div>
-              <div className="mt-5 space-y-3">
-                {props.snapshot.operations.map((operation) => (
-                  <button
-                    key={operation.id}
-                    onClick={() => {
-                      props.setSelectedId(operation.id);
-                      resetCapture();
-                      setStageOpen(true);
-                    }}
-                    className="w-full min-w-0 rounded-xl border border-[#d7dfd9] bg-white p-4 text-left hover:border-[#aebbb4]"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <span className="font-mono text-xs font-semibold text-[#5f7067]">
-                        {formatDate(operation.scheduled_at)}
-                      </span>
-                      <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${operation.status === "completed" ? "bg-[#e3f2ec] text-[#28624f]" : operation.status === "cancelled" ? "bg-[#fae5e2] text-[#923d34]" : "bg-[#edf1ee] text-[#52655d]"}`}>
-                        {operation.status === "completed" ? "Concluída" : operation.status === "cancelled" ? "Cancelada" : "Em operação"}
-                      </span>
-                    </div>
-                    <strong className="mt-3 block break-words text-lg">{operation.event_name}</strong>
-                    <span className="mt-1 block text-sm text-[#65746c]">{operation.destination}</span>
-                    <span className="mt-4 flex items-center justify-between gap-3 border-t border-[#e1e7e3] pt-3 text-sm">
-                      <span><span className="text-[#5f7067]">Etapa atual</span><strong className="ml-2 text-[#5b4bcc]">{stageLabels[operation.stage]}</strong></span>
-                      <span className="font-semibold">Abrir</span>
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : (
+    <>
+      <section
+        className={`mx-auto max-w-[480px] px-4 pt-4 ${
+          tab === "today" && stageOpen && selected.status === "active" ? actionPadding : navPadding
+        }`}
+      >
+        {tab === "today" && !stageOpen && (
           <>
-          <div className="rounded-2xl border border-[#d7dfd9] bg-white p-5">
+            {connectionNotice}
+            <div className={`flex items-end justify-between gap-3 ${connectionNotice ? "mt-4" : ""}`}>
+              <div>
+                <p className="text-[15px] text-imp-muted">{firstName ? `Olá, ${firstName}. ` : ""}{capitalize(dateFormatter.format(new Date()))}</p>
+                <h1 className="font-imp-display text-[32px] font-semibold leading-tight">
+                  {today.length ? `${plural(today.length, "operação", "operações")} hoje` : "Nada escalado para hoje"}
+                </h1>
+              </div>
+              <button
+                type="button"
+                onClick={() => void props.run(props.refresh, "Operações atualizadas.")}
+                className="grid min-h-11 min-w-11 place-items-center rounded-xl border border-imp-line bg-imp-surface shadow-imp-soft"
+                aria-label="Atualizar operações"
+              >
+                <RefreshCw size={17} aria-hidden="true" />
+              </button>
+            </div>
+
+            <ul className="mt-4 space-y-3">
+              {prioritizeOperations(today, props.snapshot.incidents).map((operation) => (
+                <OperationRow key={operation.id} operation={operation} emphasis onOpen={() => openOperation(operation)} />
+              ))}
+            </ul>
+
+            {upcoming.length > 0 && (
+              <div className="mt-7">
+                <SectionTitle count={upcoming.length}>Próximas</SectionTitle>
+                <ul className="mt-3 space-y-2">
+                  {[...upcoming]
+                    .sort((a, b) => Date.parse(a.scheduled_at) - Date.parse(b.scheduled_at))
+                    .map((operation) => (
+                      <OperationRow key={operation.id} operation={operation} emphasis={false} onOpen={() => openOperation(operation)} />
+                    ))}
+                </ul>
+              </div>
+            )}
+
+            {closed.length > 0 && (
+              <div className="mt-6">
+                <Disclosure summary="Encerradas" meta={closed.length}>
+                  <ul className="space-y-2">
+                    {closed.map((operation) => (
+                      <OperationRow key={operation.id} operation={operation} emphasis={false} onOpen={() => openOperation(operation)} />
+                    ))}
+                  </ul>
+                </Disclosure>
+              </div>
+            )}
+
+            <details className="pwa-install-hint mt-8 text-[14px] text-imp-muted">
+              <summary className="min-h-11 cursor-pointer content-center font-semibold text-imp-green">Instalar como app neste celular</summary>
+              <p className="mt-1 leading-6">
+                iPhone: abra no Safari, toque em Compartilhar e em Adicionar à Tela de Início. Android: menu do Chrome e Instalar app.
+              </p>
+            </details>
+          </>
+        )}
+
+        {tab === "today" && stageOpen && (
+          <>
             <div className="flex items-center justify-between gap-3">
-              <button onClick={() => setStageOpen(false)} className="flex min-h-11 items-center gap-2 rounded-lg px-1 text-sm font-semibold text-[#5f7067]">
-                <ArrowLeft size={17} /> Meu turno
+              <button
+                type="button"
+                onClick={() => setStageOpen(false)}
+                className="-ml-2 flex min-h-11 items-center gap-1.5 rounded-xl px-2 text-[15px] font-semibold text-imp-green"
+              >
+                <ArrowLeft size={18} aria-hidden="true" /> Hoje
               </button>
               <button
+                type="button"
                 onClick={() =>
                   void props.run(async () => {
                     await props.refresh();
                     resetCapture();
-                  }, "Operações atualizadas.")
+                  }, "Operação atualizada.")
                 }
-                className="min-h-11 min-w-11 rounded-lg border border-[#d3dbd6] p-2"
+                className="grid min-h-11 min-w-11 place-items-center rounded-xl text-imp-muted"
                 aria-label="Atualizar operação"
               >
-                <RefreshCw size={16} />
+                <RefreshCw size={17} aria-hidden="true" />
               </button>
             </div>
-            <p
-              className={`mt-3 break-words font-mono text-xs uppercase tracking-[0.14em] ${
-                selected.source === "manual" ? "text-[#9b653e]" : "text-[#32705d]"
-              }`}
-            >
-              {selected.source === "manual"
-                ? "Operação manual · não originada do EstoqueNOW"
-                : `Origem EstoqueNOW · ID ${selected.external_id}`}
-            </p>
-            <h1 className="mt-2 text-3xl font-semibold tracking-tight">
-              {selected.event_name}
-            </h1>
-            <p className="mt-1 text-sm text-[#65746c]">{selected.destination}</p>
-            {selected.estoquenow_context && (
-              <div className="mt-2 text-sm text-[#3f554a]">
-              <p>
-                Pedido {selected.estoquenow_context.order_id ?? "não informado"}
-                {selected.estoquenow_context.return_at
-                  ? ` · devolução ${formatDate(selected.estoquenow_context.return_at)}`
-                  : ""}
-                {selected.estoquenow_context.item_count !== null
-                  ? ` · ${selected.estoquenow_context.item_count} item(ns)`
-                  : ""}
-              </p>
+
+            {connectionNotice && <div className="mt-2">{connectionNotice}</div>}
+
+            <div className="mt-2">
+              <p className="text-[15px] font-medium tabular-nums text-imp-muted">{formatWhen(selected.scheduled_at)}</p>
+              <h1 className="mt-0.5 break-words font-imp-display text-[28px] font-semibold leading-tight">
+                {selected.event_name}
+              </h1>
+              <p className="mt-1 text-[15px] leading-5 text-imp-muted">{place.address}</p>
+              <p className="mt-1 text-[13px] text-imp-muted">{sourceText(selected)}</p>
+            </div>
+
+            <Card className="mt-4 p-4">
+              <div className="flex items-baseline justify-between gap-3">
+                <p className="text-[15px]">
+                  <strong className="text-[17px]">{stageLabels[selected.stage]}</strong>
+                  <span className="text-imp-muted"> · etapa {stageIndex} de {operationStages.length}</span>
+                </p>
+                {selected.status === "active" && (
+                  <span className="text-[14px] tabular-nums text-imp-muted">há {formatDuration(elapsed)}</span>
+                )}
+              </div>
+              <div className="mt-2">
+                <StageRail operation={selected} compact />
+              </div>
+            </Card>
+
+            {selected.waiting_since && selected.stage === "arrival" && (
+              <div className="mt-4">
+                <Notice tone="amber" title={`Em espera desde ${formatTime(selected.waiting_since)}`}>
+                  O acesso estava bloqueado. Quando liberarem a entrada, marque “Sim, liberado” abaixo e conclua a chegada.
+                </Notice>
               </div>
             )}
-            <ItemManifest
-              operation={selected}
-              configured={props.snapshot.configured}
-              busy={props.busy}
-              online={online}
-              refresh={props.refresh}
-              run={props.run}
-            />
-            <StageRail operation={selected} />
-            <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-              <div className="rounded-lg bg-[#f2f5f3] p-3">
-                <span className="text-[#5f7067]">Equipe</span>
-                <strong className="mt-1 block">
-                  {props.snapshot.teams.find((team) => team.id === selected.team_id)
-                    ?.name ?? "Não escalada"}
-                </strong>
+            {unresolvedIncidents.length > 0 && (
+              <div className="mt-4">
+                <Notice tone="amber" title={`${plural(unresolvedIncidents.length, "ocorrência", "ocorrências")} em aberto`}>
+                  A torre foi avisada. Você pode seguir com a etapa.
+                </Notice>
               </div>
-              <div className="rounded-lg bg-[#f2f5f3] p-3">
-                <span className="text-[#5f7067]">Veículo</span>
-                <strong className="mt-1 block">
-                  {props.snapshot.vehicles.find(
-                    (vehicle) => vehicle.id === selected.vehicle_id,
-                  )?.name ?? "Não escalado"}
-                </strong>
-              </div>
-            </div>
-            <a
-              href={mapsUrl(selected.destination)}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-4 flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[#bfd0c7] px-3 py-3 font-semibold"
-            >
-              Abrir rota no Google Maps <ExternalLink size={16} />
-            </a>
-          </div>
+            )}
 
-          {selected.status !== "active" ? (
-            <div className="mt-4 rounded-xl border border-[#d7dfd9] bg-white p-5 text-center">
-              <Check className="mx-auto text-[#2d7461]" />
-              <strong className="mt-2 block">
-                {selected.status === "completed" ? "Operação concluída" : "Operação cancelada"}
-              </strong>
-              {selected.cancel_reason && (
-                <p className="mt-2 text-sm text-[#65746c]">{selected.cancel_reason}</p>
-              )}
-            </div>
-          ) : (
-            <form
-              id="stage-action"
-              onSubmit={submitAction}
-              className="mt-4 rounded-2xl border border-[#d7dfd9] bg-white p-5"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="font-mono text-xs uppercase tracking-[0.14em] text-[#5b4bcc]">
-                    Próxima ação
-                  </p>
-                  <h2 className="mt-1 text-2xl font-semibold">
-                    Concluir {stageLabels[selected.stage].toLowerCase()}
-                  </h2>
-                </div>
-                <span className="flex items-center gap-1 rounded-lg bg-[#f0edfb] px-2 py-1 text-xs text-[#5b4bcc]">
-                  <Clock3 size={14} /> {formatDuration(elapsed)}
-                </span>
-              </div>
-              {selected.waiting_since && selected.stage === "arrival" && (
-                <div className="mt-4 rounded-lg border border-[#ead5a4] bg-[#fff7e3] p-3 text-sm text-[#755615]">
-                  Espera iniciada em {formatDate(selected.waiting_since)}. Registre a liberação para avançar.
-                </div>
-              )}
-              <p className="mt-2 text-sm text-[#65746c]">
-                Checklist, foto, GPS e horários do aparelho e servidor ficam vinculados a esta etapa.
-              </p>
-              <div className="mt-5 space-y-2">
-                {currentItems.map((item) => (
-                  <label
-                    key={item}
-                    className="flex min-h-14 items-center gap-3 rounded-lg border border-[#d7dfd9] px-4"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={Boolean(checks[item])}
-                      onChange={(event) =>
-                        setChecks({ ...checks, [item]: event.target.checked })
-                      }
-                      className="size-5 accent-[#2d7461]"
-                    />
-                    <span className="font-medium">{item}</span>
-                  </label>
-                ))}
-              </div>
+            {manifestIsTask && manifestBlock}
 
-              {selected.stage === "arrival" && (
-                <fieldset className="mt-4 rounded-lg border border-[#d7dfd9] p-3">
-                  <legend className="px-1 text-sm font-semibold">O acesso ao local foi liberado?</legend>
-                  <div className="mt-2 grid grid-cols-2 gap-2">
-                    <label className="flex items-center gap-2 rounded-lg bg-[#eef5f1] p-3 text-sm font-medium"><input type="radio" name="arrivalAccess" value="released" checked={arrivalAccess === "released"} onChange={() => setArrivalAccess("released")} />Sim, liberado</label>
-                    <label className="flex items-center gap-2 rounded-lg bg-[#fff6df] p-3 text-sm font-medium"><input type="radio" name="arrivalAccess" value="blocked" checked={arrivalAccess === "blocked"} onChange={() => setArrivalAccess("blocked")} />Não, bloqueado</label>
+            {selected.status !== "active" ? (
+              <Card className="mt-4 p-5 text-center">
+                <Check className="mx-auto text-imp-green" aria-hidden="true" />
+                <strong className="mt-2 block text-[17px]">
+                  {selected.status === "completed" ? "Operação concluída" : "Operação cancelada"}
+                </strong>
+                {selected.cancel_reason && <p className="mt-2 text-[15px] text-imp-muted">{selected.cancel_reason}</p>}
+              </Card>
+            ) : (
+              <form id="stage-action" onSubmit={submitAction} className="mt-4 rounded-2xl border border-imp-line/70 bg-imp-surface shadow-imp-card p-4">
+                <p className="text-[14px] font-semibold text-imp-green">Próxima ação</p>
+                <h2 className="mt-0.5 font-imp-display text-[26px] font-semibold leading-tight">
+                  {selected.stage === "arrival" && arrivalAccess === "blocked"
+                    ? "Registrar bloqueio"
+                    : `Concluir ${stageLabels[selected.stage].toLowerCase()}`}
+                </h2>
+
+                <fieldset className="mt-4">
+                  <legend className="text-[14px] font-semibold text-imp-muted">Checklist</legend>
+                  <div className="mt-1 divide-y divide-imp-line">
+                    {currentItems.map((item) => (
+                      <label
+                        key={item}
+                        className="flex min-h-14 cursor-pointer items-center gap-3 py-2 has-focus-visible:outline-3 has-focus-visible:outline-imp-green"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={Boolean(checks[item])}
+                          onChange={(event) => setChecks({ ...checks, [item]: event.target.checked })}
+                          className="sr-only"
+                        />
+                        <CheckMark checked={Boolean(checks[item])} />
+                        <span className="text-[16px] font-medium leading-5">{item}</span>
+                      </label>
+                    ))}
                   </div>
-                  {arrivalAccess === "blocked" && (
-                    <label className="mt-3 block text-sm font-medium">Motivo obrigatório<textarea name="arrivalReason" required minLength={3} rows={2} className="mt-2 w-full rounded-lg border border-[#cbd4ce] px-3 py-2" /></label>
-                  )}
                 </fieldset>
-              )}
 
-              {selected.stage === "delivery" && (
-                <label className="mt-4 block text-sm font-medium">Responsável pelo aceite interno<input name="acceptanceName" required minLength={2} className="mt-2 w-full rounded-lg border border-[#cbd4ce] px-3 py-3" placeholder="Nome de quem conferiu no local" /></label>
-              )}
+                {selected.stage === "arrival" && (
+                  <fieldset className="mt-4">
+                    <legend className="text-[14px] font-semibold text-imp-muted">O acesso ao local foi liberado?</legend>
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      {(
+                        [
+                          ["released", "Sim, liberado"],
+                          ["blocked", "Não, bloqueado"],
+                        ] as const
+                      ).map(([value, label]) => (
+                        <label
+                          key={value}
+                          className={`flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-xl border text-[15px] font-semibold has-focus-visible:outline-3 has-focus-visible:outline-imp-green ${
+                            arrivalAccess === value
+                              ? value === "released"
+                                ? "border-imp-green bg-imp-green-tint text-imp-green"
+                                : "border-imp-amber bg-imp-amber-tint text-imp-amber"
+                              : "border-imp-line-strong"
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="arrivalAccess"
+                            value={value}
+                            className="sr-only"
+                            checked={arrivalAccess === value}
+                            onChange={() => setArrivalAccess(value)}
+                          />
+                          {label}
+                        </label>
+                      ))}
+                    </div>
+                    {arrivalAccess === "blocked" && (
+                      <Field label="Motivo do bloqueio" className="mt-3">
+                        <textarea name="arrivalReason" required minLength={3} rows={2} className={inputClass} />
+                      </Field>
+                    )}
+                  </fieldset>
+                )}
 
-              <CapturePhoto
-                value={photoDataUrl}
-                onChange={setPhotoDataUrl}
-                run={props.run}
-              />
-              <button
-                type="button"
-                onClick={captureGps}
-                className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-[#bfd0c7] px-3 py-3 font-semibold"
+                {selected.stage === "delivery" && (
+                  <Field label="Quem recebeu no local" className="mt-4">
+                    <input name="acceptanceName" required minLength={2} className={inputClass} placeholder="Nome de quem conferiu" />
+                  </Field>
+                )}
+
+                <div className="mt-4 divide-y divide-imp-line border-t border-imp-line">
+                  <Requirement
+                    done={Boolean(photoDataUrl)}
+                    label="Foto da etapa"
+                    detail={photoDataUrl ? "Foto pronta" : "Tire uma foto do resultado da etapa"}
+                  >
+                    <CapturePhoto value={photoDataUrl} onChange={setPhotoDataUrl} run={props.run} label="Tirar foto" />
+                  </Requirement>
+                  <Requirement
+                    done={Boolean(location)}
+                    label="Onde você está"
+                    detail={location ? `Local marcado (±${Math.round(location.accuracy)} m)` : "Marque o local para registrar onde a etapa terminou"}
+                  >
+                    <Button variant="secondary" onClick={captureGps}>
+                      <LocateFixed size={18} aria-hidden="true" /> {location ? "Marcar de novo" : "Marcar local"}
+                    </Button>
+                  </Requirement>
+                </div>
+
+                <Field label="Responsável pela etapa" className="mt-4">
+                  <select name="responsibleId" className={inputClass} defaultValue={defaultResponsibleId} required>
+                    {responsiblePeople.map((person) => (
+                      <option value={person.id} key={person.id}>
+                        {person.full_name} · {person.job_title}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Disclosure summary="Adicionar observação" className="mt-4">
+                  <textarea name="note" className={inputClass} rows={2} aria-label="Observação" />
+                </Disclosure>
+              </form>
+            )}
+
+            {!manifestIsTask && manifestBlock}
+
+            <Card className="mt-4 px-4">
+              <Disclosure className="border-t-0" summary={<span className="flex items-center gap-2"><AlertTriangle size={18} aria-hidden="true" /> Registrar ocorrência</span>}>
+                <p className="text-[15px] leading-6 text-imp-muted">Avisa a torre sem avançar a etapa.</p>
+                <form onSubmit={submitIncident} className="mt-3 space-y-3">
+                  <Field label="O que aconteceu">
+                    <select name="type" className={inputClass} required>
+                      <option value="delay">Atraso</option>
+                      <option value="access">Acesso</option>
+                      <option value="damage">Avaria</option>
+                      <option value="missing_item">Item ausente</option>
+                      <option value="other">Outro</option>
+                    </select>
+                  </Field>
+                  <Field label="Gravidade">
+                    <select name="severity" className={inputClass} required>
+                      <option value="low">Baixa</option>
+                      <option value="medium">Média</option>
+                      <option value="high">Alta</option>
+                    </select>
+                  </Field>
+                  <Field label="Descrição">
+                    <textarea name="description" required minLength={3} rows={3} className={inputClass} />
+                  </Field>
+                  <Field label="Impacto (opcional)">
+                    <input name="impact" className={inputClass} />
+                  </Field>
+                  <Field label="Quem trata">
+                    <select name="responsibleId" className={inputClass}>
+                      <option value="">A definir na torre</option>
+                      {responsiblePeople.map((person) => (
+                        <option value={person.id} key={person.id}>
+                          {person.full_name}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-[15px] font-medium">Foto (opcional)</span>
+                    <CapturePhoto value={incidentPhoto} onChange={setIncidentPhoto} run={props.run} label="Tirar foto" />
+                  </div>
+                  <Button type="submit" variant="danger" disabled={props.busy || !props.snapshot.configured || !online} className="w-full">
+                    Registrar ocorrência
+                  </Button>
+                  {!online ? (
+                    <p className="text-[13px] text-imp-amber">Sem conexão. Ocorrências só podem ser registradas com internet; tente de novo quando o sinal voltar.</p>
+                  ) : !props.snapshot.configured ? (
+                    <p className="text-[13px] text-imp-muted">Registro desativado no ambiente de demonstração.</p>
+                  ) : null}
+                </form>
+              </Disclosure>
+            </Card>
+
+            <Card className="mt-4 p-4">
+              <dl className="grid grid-cols-3 gap-3 text-[14px]">
+                <div>
+                  <dt className="text-imp-muted">Equipe</dt>
+                  <dd className="font-semibold">{team?.name ?? "Não escalada"}</dd>
+                </div>
+                <div>
+                  <dt className="text-imp-muted">Veículo</dt>
+                  <dd className="font-semibold">{vehicle?.name ?? "Não escalado"}</dd>
+                </div>
+                <div>
+                  <dt className="text-imp-muted">Motorista</dt>
+                  <dd className="font-semibold">{driver?.full_name.split(" ")[0] ?? "Não escalado"}</dd>
+                </div>
+              </dl>
+              <a
+                href={mapsUrl(selected.destination)}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-imp-line bg-imp-surface px-3 text-[15px] font-semibold shadow-imp-soft"
               >
-                <LocateFixed size={18} />
-                {location
-                  ? `GPS capturado · ${Math.round(location.accuracy)} m`
-                  : "Capturar GPS agora"}
-              </button>
-              <label className="mt-4 block text-sm font-medium">
-                Responsável
-                <select
-                  name="responsibleId"
-                  className="mt-2 w-full rounded-lg border border-[#cbd4ce] bg-white px-3 py-3"
-                  defaultValue={defaultResponsibleId}
-                  required
-                >
-                  {responsiblePeople.map((person) => (
-                    <option value={person.id} key={person.id}>
-                      {person.full_name} · {person.job_title}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="mt-4 block text-sm font-medium">
-                Observação opcional
-                <textarea
-                  name="note"
-                  className="mt-2 w-full rounded-lg border border-[#cbd4ce] px-3 py-3"
-                  rows={2}
-                />
-              </label>
-            </form>
-          )}
+                Abrir rota no Google Maps <ExternalLink size={16} aria-hidden="true" />
+              </a>
+            </Card>
 
-          <details className="mt-4 rounded-xl border border-[#d7dfd9] bg-white p-5">
-            <summary className="flex min-h-11 cursor-pointer items-center gap-2 font-semibold">
-              <AlertTriangle size={18} /> Registrar ocorrência
-            </summary>
-            <p className="mt-2 text-sm text-[#65746c]">
-              A ocorrência vai para a torre sem avançar a etapa.
-            </p>
-            <form onSubmit={submitIncident} className="mt-3">
-              <label className="block text-sm font-medium">Tipo<select name="type" className="mt-2 w-full rounded-lg border border-[#cbd4ce] bg-white px-3 py-3" required><option value="delay">Atraso</option><option value="access">Acesso</option><option value="damage">Avaria</option><option value="missing_item">Item ausente</option><option value="other">Outro</option></select></label>
-              <label className="mt-3 block text-sm font-medium">Severidade<select name="severity" className="mt-2 w-full rounded-lg border border-[#cbd4ce] bg-white px-3 py-3" required><option value="low">Baixa</option><option value="medium">Média</option><option value="high">Alta</option></select></label>
-              <label className="mt-3 block text-sm font-medium">Descrição<textarea name="description" required minLength={3} rows={3} className="mt-2 w-full rounded-lg border border-[#cbd4ce] px-3 py-3" /></label>
-              <label className="mt-3 block text-sm font-medium">Impacto opcional<input name="impact" className="mt-2 w-full rounded-lg border border-[#cbd4ce] px-3 py-3" /></label>
-              <label className="mt-3 block text-sm font-medium">Responsável pelo tratamento<select name="responsibleId" className="mt-2 w-full rounded-lg border border-[#cbd4ce] bg-white px-3 py-3"><option value="">A definir na torre</option>{responsiblePeople.map((person) => <option value={person.id} key={person.id}>{person.full_name}</option>)}</select></label>
-              <CapturePhoto value={incidentPhoto} onChange={setIncidentPhoto} run={props.run} label="Adicionar foto da ocorrência" />
-              <button disabled={props.busy || !props.snapshot.configured || !online} className="mt-4 w-full rounded-lg border border-[#9f5d53] px-4 py-3 font-semibold text-[#8d443b] disabled:opacity-40">Registrar ocorrência</button>
-              {!online && <p className="mt-2 text-xs text-[#80651c]">Ocorrências exigem conexão neste corte. A fila local cobre apenas ações de etapa.</p>}
-            </form>
-          </details>
-
-          {selected.status === "active" && (
-            <div className="fixed inset-x-4 bottom-[calc(56px+env(safe-area-inset-bottom))] z-20 mx-auto max-w-[428px] border border-[#d7dfd9] bg-white/95 p-3 shadow-[0_-8px_30px_rgba(23,35,31,0.08)] backdrop-blur">
-              <button
-                form="stage-action"
-                aria-disabled={actionDisabled}
-                aria-describedby="stage-action-hint"
-                onClick={(event) => {
-                  if (actionDisabled) event.preventDefault();
-                }}
-                className={`min-h-12 w-full rounded-lg bg-[#5b4bcc] px-4 py-3 font-semibold text-white ${actionDisabled ? "cursor-not-allowed opacity-40" : "hover:bg-[#493caf]"}`}
-              >
-                {selected.stage === "arrival" && arrivalAccess === "blocked"
-                  ? "Registrar bloqueio e iniciar espera"
-                  : `Confirmar ${stageLabels[selected.stage].toLowerCase()}`}
-              </button>
-              <p id="stage-action-hint" aria-live="polite" className="mt-1.5 text-center text-xs text-[#5f7067]">{actionHint}</p>
-            </div>
-          )}
+            {selected.status === "active" && (
+              <div className="fixed inset-x-0 bottom-[calc(65px+env(safe-area-inset-bottom))] z-20 border-t border-imp-line bg-imp-surface/95 backdrop-blur">
+                <div className="mx-auto max-w-[480px] px-4 py-3">
+                  <button
+                    type="submit"
+                    form="stage-action"
+                    aria-disabled={actionDisabled}
+                    aria-describedby="stage-action-hint"
+                    onClick={(event) => {
+                      if (actionDisabled) event.preventDefault();
+                    }}
+                    className={`min-h-13 w-full rounded-xl px-4 text-[17px] font-semibold transition-[background-color,box-shadow] ${
+                      actionDisabled ? "cursor-not-allowed bg-imp-line text-imp-muted" : "bg-imp-green text-white shadow-imp-lift hover:bg-imp-green-deep"
+                    }`}
+                  >
+                    {selected.stage === "arrival" && arrivalAccess === "blocked"
+                      ? "Registrar bloqueio"
+                      : `Concluir ${stageLabels[selected.stage].toLowerCase()}`}
+                  </button>
+                  <p id="stage-action-hint" aria-live="polite" className="mt-1.5 text-center text-[13px] leading-4 text-imp-muted">
+                    {actionHint}
+                  </p>
+                </div>
+              </div>
+            )}
           </>
-          )}
-        </>
-      )}
+        )}
 
-      {tab === "evidence" && (
-        <div>
-          <div className="mb-4"><p className="font-mono text-xs uppercase tracking-[0.16em] text-[#5f7067]">Servidor</p><h2 className="mt-1 text-3xl font-semibold">Evidências</h2><p className="mt-2 text-sm text-[#65746c]">Somente registros já confirmados.</p></div>
-          <div className="space-y-3">
-            {evidence.map(({ operation, item }) => (
-              <article key={item.id} className="rounded-xl border border-[#d7dfd9] bg-white p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><strong className="break-words">{operation.event_name}</strong><p className="text-sm text-[#65746c]">{stageLabels[item.stage]} · {item.actor_name}</p></div><Check size={18} className="shrink-0 text-[#2d7461]" /></div><p className="mt-2 text-xs text-[#5f7067]">{formatDate(item.server_received_at)} · GPS {item.latitude.toFixed(5)}, {item.longitude.toFixed(5)}</p>{item.photo_url && <a href={item.photo_url} target="_blank" rel="noreferrer" className="mt-3 inline-flex min-h-11 items-center text-sm font-semibold underline">Abrir foto</a>}</article>
-            ))}
-            {!evidence.length && <p className="rounded-xl border border-dashed border-[#cbd5ce] bg-white p-6 text-center text-sm text-[#66756d]">Conclua uma etapa para gerar a primeira evidência.</p>}
+        {tab === "evidence" && (
+          <div>
+            <h1 className="font-imp-display text-[30px] font-semibold leading-tight">Evidências</h1>
+            <p className="text-[15px] text-imp-muted">Etapas já recebidas pela torre, por operação.</p>
+            <div className="mt-4 space-y-3">
+              {evidenceByOperation.map(({ operation, items }) => (
+                <Card key={operation.id} className="px-4">
+                  <Disclosure
+                    className="border-t-0"
+                    open={isOperationalToday(operation)}
+                    summary={<span className="break-words">{operation.event_name}</span>}
+                    meta={plural(items.length, "registro", "registros")}
+                  >
+                    <ul className="divide-y divide-imp-line">
+                      {items.map((item) => (
+                        <li key={item.id} className="flex items-start gap-3 py-3">
+                          <Check size={18} className="mt-0.5 shrink-0 text-imp-green" aria-hidden="true" />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[16px] font-semibold">
+                              {stageLabels[item.stage]} <span className="font-normal text-imp-muted">· {formatWhen(item.server_received_at)}</span>
+                            </p>
+                            <p className="text-[14px] text-imp-muted">
+                              {item.actor_name} ·{" "}
+                              <a href={mapsPointUrl(item.latitude, item.longitude)} target="_blank" rel="noreferrer" className={linkClass}>
+                                Ver no mapa
+                              </a>
+                              {item.photo_url && (
+                                <>
+                                  {" · "}
+                                  <a href={item.photo_url} target="_blank" rel="noreferrer" className={linkClass}>
+                                    Abrir foto
+                                  </a>
+                                </>
+                              )}
+                            </p>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </Disclosure>
+                </Card>
+              ))}
+            </div>
+            {!evidenceByOperation.length && <div className="mt-4"><Empty>Conclua uma etapa para gerar a primeira evidência.</Empty></div>}
           </div>
-        </div>
-      )}
+        )}
 
-      {tab === "queue" && (
-        <div>
-          <div className="mb-4"><p className="font-mono text-xs uppercase tracking-[0.16em] text-[#5f7067]">Este aparelho</p><h2 className="mt-1 text-3xl font-semibold">Fila local</h2><p className="mt-2 text-sm text-[#65746c]">Reenvio idempotente com identificador único se a conexão cair com o app aberto. Abrir ou recarregar exige internet; não há sync offline completo nem resolução automática de conflitos.</p></div>
-          <div className="space-y-3">
-            {outbox.map((pending) => (
-              <article key={pending.deviceActionId} className="rounded-xl border border-[#ead9aa] bg-[#fff9e8] p-4 text-sm"><div className="flex items-start justify-between gap-3"><div><strong>{props.snapshot.operations.find((operation) => operation.id === pending.operationId)?.event_name ?? "Operação"}</strong><p className="text-[#75622f]">{stageLabels[pending.stage]} · capturada em {formatDate(pending.deviceCapturedAt)}</p></div><FileClock size={18} /></div><div className="mt-3 flex flex-wrap gap-2"><button disabled={!online || props.busy} className="min-h-11 px-2 font-semibold underline disabled:opacity-40" onClick={() => void props.run(async () => syncAction(pending), "Ação confirmada pelo servidor.")}>Tentar enviar novamente</button><button className="min-h-11 px-2 font-semibold text-[#8a4339] underline" onClick={() => { if (!window.confirm("Descartar esta ação somente deste aparelho?")) return; removeFromOutbox(pending.deviceActionId); props.setMessage("Ação pendente descartada somente deste aparelho."); }}>Descartar deste aparelho</button></div></article>
-            ))}
-            {!outbox.length && <p className="rounded-xl border border-dashed border-[#cbd5ce] bg-white p-6 text-center text-sm text-[#66756d]">Nenhuma ação pendente neste aparelho.</p>}
+        {tab === "queue" && (
+          <div>
+            <h1 className="font-imp-display text-[30px] font-semibold leading-tight">Envios pendentes</h1>
+            <p className="text-[15px] leading-6 text-imp-muted">
+              Etapas concluídas sem sinal ficam aqui até chegarem à torre. Abrir ou recarregar o app exige internet.
+            </p>
+            <ul className="mt-4 space-y-2">
+              {outbox.map((pending) => (
+                <li key={pending.deviceActionId} className="rounded-2xl border border-imp-amber/30 bg-imp-amber-tint p-4">
+                  <strong className="block text-[16px]">
+                    {props.snapshot.operations.find((operation) => operation.id === pending.operationId)?.event_name ?? "Operação"}
+                  </strong>
+                  <p className="text-[14px] text-imp-amber">
+                    {stageLabels[pending.stage]} · concluída {formatDate(pending.deviceCapturedAt)}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button
+                      variant="primary"
+                      disabled={!online || props.busy}
+                      onClick={() => void props.run(async () => syncAction(pending), "Registro recebido pela torre.")}
+                    >
+                      Enviar agora
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="text-imp-red hover:bg-imp-red-tint"
+                      onClick={() => {
+                        if (!window.confirm("Descartar esta ação somente deste aparelho?")) return;
+                        removeFromOutbox(pending.deviceActionId);
+                        props.setMessage("Registro descartado deste aparelho.");
+                      }}
+                    >
+                      Descartar
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            {!outbox.length && (
+              <div className="mt-4">
+                <Empty>
+                  {online ? "Nenhum registro aguardando envio." : (
+                    <span className="inline-flex items-center gap-2"><WifiOff size={16} aria-hidden="true" /> Sem conexão e nada pendente.</span>
+                  )}
+                </Empty>
+              </div>
+            )}
           </div>
-        </div>
-      )}
-
-      <nav className="fixed inset-x-0 bottom-0 z-20 mx-auto grid max-w-[460px] grid-cols-3 border-t border-[#d7dfd9] bg-white px-2 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_30px_rgba(23,35,31,0.08)]" aria-label="App de campo">
-        {([[
-          "today",
-          "Hoje",
-        ], ["evidence", "Evidências"], ["queue", `Fila${outbox.length ? ` (${outbox.length})` : ""}`]] as const).map(([id, label]) => (
-          <button key={id} aria-current={tab === id ? "page" : undefined} onClick={() => { setTab(id); if (id === "today") setStageOpen(false); }} className={`min-h-14 px-2 py-4 text-xs font-semibold ${tab === id ? "text-[#5b4bcc]" : "text-[#65746c]"}`}>{label}</button>
-        ))}
-      </nav>
-    </section>
+        )}
+      </section>
+      {bottomNav}
+    </>
   );
 }

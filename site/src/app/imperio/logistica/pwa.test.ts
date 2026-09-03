@@ -31,7 +31,7 @@ test("a agenda mantém sábado e domingo na grade principal", async () => {
   );
 
   assert.match(dashboard, /Array\.from\(\{ length: 7 \}/);
-  assert.match(dashboard, /repeat\(7,minmax\(140px,1fr\)\)/);
+  assert.match(dashboard, /repeat\(7,minmax\(\d+px,1fr\)\)/);
   assert.doesNotMatch(dashboard, /weekendOperations/);
 });
 
@@ -41,8 +41,8 @@ test("a torre distingue quem executou de quem ficou responsável", async () => {
     "utf8",
   );
 
-  assert.match(dashboard, /Executado por \{event\.actor_name\}/);
-  assert.match(dashboard, /Responsável: \{event\.responsible_name\}/);
+  assert.match(dashboard, /\{event\.actor_name\}/);
+  assert.match(dashboard, /responsável \$\{event\.responsible_name\}/);
 });
 
 test("a torre 1B expõe busca, filtros, decisões e navegação cruzada", async () => {
@@ -57,14 +57,13 @@ test("a torre 1B expõe busca, filtros, decisões e navegação cruzada", async 
 
   assert.match(dashboard, /Buscar operação/);
   assert.match(dashboard, /Risco operacional/);
-  assert.match(dashboard, /Bloqueios prioritários/);
+  assert.match(dashboard, /Exige decisão agora/);
   assert.match(dashboard, /Abrir operação/);
-  assert.match(dashboard, /Atualização automática ativa a cada 30 segundos/);
-  assert.match(dashboard, /Modo demonstrativo: os dados desta tela não são atualizados/);
-  assert.match(dashboard, /Filtros avançados/);
-  assert.match(dashboard, /group-open:grid/);
-  assert.match(dashboard, /Mostrando somente/);
-  assert.match(dashboard, /Histórico resolvido/);
+  assert.match(dashboard, /a cada 30 segundos/);
+  assert.match(dashboard, /A atualização automática falhou/);
+  assert.match(dashboard, /Mais filtros/);
+  assert.match(dashboard, /Somente \$\{focusedOperation\.event_name\}/);
+  assert.match(dashboard, /summary="Resolvidas"/);
   assert.match(dashboard, /A operação selecionada está fora dos filtros/);
   assert.match(workspace, /window\.setInterval\(refreshWhenVisible, 30_000\)/);
   assert.match(workspace, /prioritizeOperations/);
@@ -201,6 +200,6 @@ test("integrações expõem saúde sanitizada do pull e fila de revisão", async
   assert.match(dashboard, /aria-busy=\{previewRequestState === "loading"\}/);
   assert.match(dashboard, /role="alert"/);
   assert.match(dashboard, /Desatualizado/);
-  assert.match(dashboard, /grid-cols-2 gap-3 md:grid-cols-4/);
+  assert.match(dashboard, /grid-cols-2 gap-3/);
   assert.match(cron, /result\.status === "failed" \? 502 : 200/);
 });

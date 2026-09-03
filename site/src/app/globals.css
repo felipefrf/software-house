@@ -12,6 +12,24 @@
   --color-muted-foreground: var(--muted-foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-imp: var(--font-imperio-body), "Albert Sans", "Segoe UI", system-ui, sans-serif;
+  --font-imp-display: var(--font-imperio-display), "Newsreader", Georgia, "Times New Roman", serif;
+  --shadow-imp-soft: var(--imp-shadow-soft);
+  --shadow-imp-card: var(--imp-shadow-card);
+  --shadow-imp-lift: var(--imp-shadow-lift);
+  --color-imp-ground: var(--imp-ground);
+  --color-imp-surface: var(--imp-surface);
+  --color-imp-ink: var(--imp-ink);
+  --color-imp-muted: var(--imp-muted);
+  --color-imp-line: var(--imp-line);
+  --color-imp-line-strong: var(--imp-line-strong);
+  --color-imp-green: var(--imp-green);
+  --color-imp-green-deep: var(--imp-green-deep);
+  --color-imp-green-tint: var(--imp-green-tint);
+  --color-imp-amber: var(--imp-amber);
+  --color-imp-amber-tint: var(--imp-amber-tint);
+  --color-imp-red: var(--imp-red);
+  --color-imp-red-tint: var(--imp-red-tint);
   --animate-float: float 8s ease-in-out infinite;
   --animate-float-slow: float-slow 12s ease-in-out infinite;
   --animate-fade-up: fade-up 0.7s ease-out;
@@ -48,27 +66,71 @@ body:has(.imperio-shell) > footer {
 }
 
 .imperio-shell {
-  font-family: "Avenir Next", Avenir, "Segoe UI", sans-serif;
+  --imp-ground: #f6f4ef;
+  --imp-surface: #ffffff;
+  --imp-ink: #17211d;
+  --imp-muted: #5a645e;
+  --imp-line: #e3dfd6;
+  --imp-line-strong: #c4bfb3;
+  --imp-green: #1f5c46;
+  --imp-green-deep: #173d34;
+  --imp-green-tint: #e3efe8;
+  --imp-amber: #8f4c00;
+  --imp-amber-tint: #fbf0dc;
+  --imp-red: #a63a30;
+  --imp-red-tint: #fae8e5;
+  --imp-shadow-soft: 0 1px 2px rgba(23, 33, 29, 0.04), 0 1px 3px rgba(23, 33, 29, 0.06);
+  --imp-shadow-card: 0 1px 2px rgba(23, 33, 29, 0.04), 0 4px 16px -4px rgba(23, 33, 29, 0.08);
+  --imp-shadow-lift: 0 8px 30px -8px rgba(31, 92, 70, 0.22);
+  font-family: var(--font-imperio-body), "Albert Sans", "Segoe UI", system-ui, sans-serif;
+  font-feature-settings: "tnum" 1;
+  background: var(--imp-ground);
+  color: var(--imp-ink);
 }
 
-.imperio-shell :where(button, a, input, select, textarea, summary):focus-visible {
-  outline: 3px solid #8b7ee0;
+.imperio-shell :where(button, a, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 3px solid var(--imp-green);
   outline-offset: 2px;
 }
 
-.imperio-app-header {
-  padding-top: calc(0.625rem + env(safe-area-inset-top));
+.imperio-shell :where(input, select, textarea) {
+  accent-color: var(--imp-green);
 }
 
-@media (min-width: 48rem) {
-  .imperio-app-header {
-    padding-top: calc(0.75rem + env(safe-area-inset-top));
-  }
+.imperio-app-header {
+  padding-top: env(safe-area-inset-top);
+}
+
+.imp-scroll-x {
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
 }
 
 @media (display-mode: standalone) {
   .pwa-install-hint {
     display: none;
+  }
+}
+
+@keyframes imp-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.imp-rise {
+  animation: imp-rise 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .imperio-shell * {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
   }
 }
 

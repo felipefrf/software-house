@@ -1,11 +1,12 @@
 "use client";
 
-import { LogOut, Monitor, Smartphone, X } from "lucide-react";
+import { LogOut, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { prioritizeOperations } from "./action";
 import { FieldApp } from "./field-app";
 import type { LogisticsSnapshot } from "./types";
+import { Button, inputClass } from "./ui";
 import { WebDashboard } from "./web-dashboard";
 
 export type Run = (
@@ -45,6 +46,27 @@ export async function postJson<T = { ok: boolean }>(action: string, body: object
   return payload;
 }
 
+function Brand({ surface, inverted = false }: { surface?: "web" | "field"; inverted?: boolean }) {
+  return (
+    <div className="flex min-w-0 items-center gap-3">
+      <span aria-hidden="true" className={`grid size-9 shrink-0 place-items-center rounded-xl ${inverted ? "bg-white/12 text-white" : "bg-imp-green-deep text-white shadow-imp-soft"}`}>
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+          <path d="M3 14h14M5 14V8l5-3 5 3v6" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+          <path d="M8 14v-3h4v3" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+        </svg>
+      </span>
+      <span className="min-w-0 leading-tight">
+        <span className={`block font-imp-display text-[22px] font-semibold tracking-tight ${inverted ? "text-white" : "text-imp-ink"}`}>Império Logística</span>
+        {surface && (
+          <span className={`block text-[13px] ${inverted ? "text-white/70" : "text-imp-muted"}`}>
+            {surface === "field" ? "App de campo" : "Torre de controle"}
+          </span>
+        )}
+      </span>
+    </div>
+  );
+}
+
 function AccessCard({
   title,
   description,
@@ -61,35 +83,27 @@ function AccessCard({
   changePassword?: boolean;
 }) {
   return (
-    <div className="imperio-shell grid min-h-screen place-items-center bg-[#f4f6f4] p-6 text-[#17231f]">
+    <div className="imperio-shell grid min-h-dvh place-items-center p-6">
       <form
-        className="w-full max-w-sm rounded-2xl border border-[#d8dfda] bg-white p-7 shadow-sm"
+        className="imp-rise w-full max-w-sm rounded-2xl border border-imp-line/70 bg-imp-surface p-7 shadow-imp-card"
         onSubmit={(event) => {
           event.preventDefault();
           void onSubmit(new FormData(event.currentTarget));
         }}
       >
-        <p className="font-mono text-xs uppercase tracking-[0.18em] text-[#3d7567]">
-          Império logística
-        </p>
-        <h1 className="mt-3 text-3xl font-semibold tracking-tight">{title}</h1>
-        <p className="mt-2 text-sm text-[#63716a]">{description}</p>
+        <Brand />
+        <h1 className="mt-7 font-imp-display text-[32px] font-semibold leading-tight tracking-tight">{title}</h1>
+        <p className="mt-2 text-[15px] leading-6 text-imp-muted">{description}</p>
         {!changePassword && (
-          <label className="mt-7 block text-sm font-medium">
+          <label className="mt-6 block text-sm font-medium">
             E-mail
-            <input
-              className="mt-2 w-full rounded-lg border border-[#cbd4ce] px-3 py-3"
-              name="email"
-              type="email"
-              autoComplete="email"
-              required
-            />
+            <input className={inputClass} name="email" type="email" autoComplete="email" required autoFocus />
           </label>
         )}
         <label className="mt-4 block text-sm font-medium">
           {changePassword ? "Nova senha" : "Senha"}
           <input
-            className="mt-2 w-full rounded-lg border border-[#cbd4ce] px-3 py-3"
+            className={inputClass}
             name="password"
             type="password"
             autoComplete={changePassword ? "new-password" : "current-password"}
@@ -100,24 +114,14 @@ function AccessCard({
         {changePassword && (
           <label className="mt-4 block text-sm font-medium">
             Confirme a nova senha
-            <input
-              className="mt-2 w-full rounded-lg border border-[#cbd4ce] px-3 py-3"
-              name="confirmation"
-              type="password"
-              autoComplete="new-password"
-              minLength={10}
-              required
-            />
+            <input className={inputClass} name="confirmation" type="password" autoComplete="new-password" minLength={10} required />
           </label>
         )}
-        <button
-          disabled={busy}
-          className="mt-6 w-full rounded-lg bg-[#173d34] px-4 py-3 font-semibold text-white disabled:opacity-50"
-        >
+        <Button type="submit" variant="primary" disabled={busy} className="mt-6 w-full">
           {changePassword ? "Salvar nova senha" : "Entrar"}
-        </button>
+        </Button>
         {message && (
-          <p className="mt-4 text-sm" aria-live="polite">
+          <p className="mt-4 text-[15px] text-imp-red" aria-live="polite">
             {message}
           </p>
         )}
@@ -145,6 +149,13 @@ export function LogisticsWorkspace({
   );
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+
+  // Sucesso some sozinho; erros e avisos longos ficam até fechar.
+  useEffect(() => {
+    if (!message || message.length > 90) return;
+    const timer = window.setTimeout(() => setMessage(""), 5000);
+    return () => window.clearTimeout(timer);
+  }, [message]);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
   const [refreshFailed, setRefreshFailed] = useState(false);
   const refreshInFlightRef = useRef<Promise<void> | null>(null);
@@ -243,8 +254,8 @@ export function LogisticsWorkspace({
   if (snapshot.configured && !snapshot.user)
     return (
       <AccessCard
-        title="Acesse a operação"
-        description="Entre com o acesso criado pelo gestor."
+        title="Entrar na operação"
+        description="Use o e-mail e a senha criados pela coordenação."
         busy={busy}
         message={message}
         onSubmit={async (form) => {
@@ -263,7 +274,7 @@ export function LogisticsWorkspace({
     return (
       <AccessCard
         title="Defina sua senha"
-        description="A senha temporária precisa ser substituída antes da operação."
+        description="A senha temporária precisa ser trocada antes de operar."
         busy={busy}
         message={message}
         changePassword
@@ -281,47 +292,57 @@ export function LogisticsWorkspace({
       />
     );
 
+  const isManager = snapshot.user?.role === "manager";
+  const fieldChrome = surface === "field" || !isManager;
+  const environment = snapshot.configured
+    ? snapshot.estoquenow.source === "estoquenow"
+      ? "Produção · EstoqueNOW conectado"
+      : snapshot.estoquenow.configured
+        ? "Produção · EstoqueNOW configurado"
+        : "Produção · EstoqueNOW não conectado"
+    : "Demonstração";
+
   return (
-    <div className="imperio-shell min-h-dvh bg-[#f4f6f4] text-[#17231f]">
-      <header className="imperio-app-header border-b border-[#d7dfd9] bg-white px-4 pb-2.5 pt-2.5 md:px-8 md:pb-3 md:pt-3">
-        <div className="mx-auto flex max-w-[1500px] items-center justify-between gap-3">
-          <div>
-            <p className="font-mono text-xs uppercase tracking-[0.18em] text-[#3d7567]">
-              Império Eventos
-            </p>
-            <h1 className="text-lg font-semibold tracking-tight md:text-xl">
-              {surface === "field" ? "App de campo" : "Núcleo de logística"}
-            </h1>
-          </div>
-          <div className="flex items-center gap-2">
-            {snapshot.user?.role === "manager" && (
-              <nav
-                className="flex rounded-xl bg-[#edf1ee] p-1"
-                aria-label="Superfície do sistema"
-              >
-                <button
-                  onClick={() => selectSurface("web")}
-                  aria-label="Torre web"
-                  aria-pressed={surface === "web"}
-                  className={`flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium ${surface === "web" ? "border border-[#d7dfd9] bg-white text-[#234e42]" : "text-[#587067]"}`}
-                >
-                  <Monitor size={16} /> <span className="hidden sm:inline">Torre web</span>
-                </button>
-                <button
-                  onClick={() => selectSurface("field")}
-                  aria-label="App de campo"
-                  aria-pressed={surface === "field"}
-                  className={`flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium ${surface === "field" ? "border border-[#d7dfd9] bg-white text-[#234e42]" : "text-[#587067]"}`}
-                >
-                  <Smartphone size={16} /> <span className="hidden sm:inline">App de campo</span>
-                </button>
-              </nav>
+    <div className="imperio-shell min-h-dvh">
+      <header
+        className={`imperio-app-header sticky top-0 z-30 border-b px-4 md:px-6 ${
+          fieldChrome ? "border-imp-green-deep bg-imp-green-deep text-white" : "border-imp-line bg-imp-surface"
+        }`}
+      >
+        <div className="mx-auto flex min-h-14 max-w-[1720px] items-center justify-between gap-3">
+          <Brand surface={surface === "field" && isManager ? "field" : undefined} inverted={fieldChrome} />
+          <div className="flex items-center gap-2 md:gap-3">
+            <span className={`hidden items-center gap-2 text-[13px] md:flex ${fieldChrome ? "text-white/70" : "text-imp-muted"}`} title="Ambiente atual">
+              <span aria-hidden="true" className={`size-2 rounded-full ${snapshot.configured ? (fieldChrome ? "bg-white/70" : "bg-imp-green") : "bg-imp-amber"}`} />
+              {environment}
+            </span>
+            {isManager && (
+              <div className={`flex rounded-xl p-0.5 ${fieldChrome ? "bg-white/12" : "border border-imp-line bg-imp-ground"}`} role="group" aria-label="Superfície">
+                {(["web", "field"] as const).map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => selectSurface(item)}
+                    aria-pressed={surface === item}
+                    className={`min-h-11 rounded-lg px-3 text-[14px] font-semibold transition-colors ${
+                      surface === item
+                        ? "bg-imp-surface text-imp-ink shadow-imp-soft"
+                        : fieldChrome
+                          ? "text-white/80 hover:text-white"
+                          : "text-imp-muted hover:text-imp-ink"
+                    }`}
+                  >
+                    {item === "web" ? "Torre" : "Campo"}
+                  </button>
+                ))}
+              </div>
             )}
             {snapshot.configured && (
               <button
+                type="button"
+                aria-label={`Sair${snapshot.user ? ` (${snapshot.user.full_name})` : ""}`}
                 title="Sair"
-                aria-label="Sair"
-                className="min-h-11 min-w-11 rounded-lg border border-[#cad4cd] p-2.5"
+                className={`grid min-h-11 min-w-11 place-items-center rounded-xl ${fieldChrome ? "text-white/80 hover:bg-white/12 hover:text-white" : "text-imp-muted hover:bg-imp-ground hover:text-imp-ink"}`}
                 onClick={() =>
                   void run(async () => {
                     await postJson("logout", {});
@@ -329,39 +350,39 @@ export function LogisticsWorkspace({
                   }, "Sessão encerrada.")
                 }
               >
-                <LogOut size={17} />
+                <LogOut size={18} aria-hidden="true" />
               </button>
             )}
           </div>
         </div>
       </header>
 
-      <div
-        className={`border-b px-4 py-2 text-center text-xs font-semibold ${
-          snapshot.configured
-            ? "border-[#c9ded6] bg-[#eaf4f0] text-[#275f50]"
-            : "border-[#ead9aa] bg-[#fff6d9] text-[#765c16]"
-        }`}
-      >
-        {snapshot.configured ? (
-          <>
-            AMBIENTE OPERACIONAL · Supabase ativo · {snapshot.estoquenow.source === "estoquenow" ? "Operações EstoqueNOW no banco" : snapshot.estoquenow.configured ? "EstoqueNOW configurado" : "EstoqueNOW não configurado"}
-          </>
-        ) : (
-          <>DADOS DE DEMONSTRAÇÃO · Nada é persistido · EstoqueNOW não conectado</>
-        )}
-      </div>
+      {!snapshot.configured && (
+        <p className="border-b border-imp-amber/30 bg-imp-amber-tint px-4 py-1.5 text-center text-[13px] font-medium text-imp-amber">
+          <span className="md:hidden">Demonstração: nada é salvo.</span>
+          <span className="hidden md:inline">Ambiente de demonstração: nada é salvo e o EstoqueNOW não está conectado.</span>
+        </p>
+      )}
 
       {message && (
-        <div className="fixed right-4 top-4 z-50 flex w-[calc(100%-2rem)] max-w-sm items-start gap-3 rounded-xl border border-[#cbd7d0] bg-white p-4 shadow-[0_12px_36px_rgba(23,35,31,0.14)]" role="status" aria-live="polite">
-          <p className="min-w-0 flex-1 text-sm">{message}</p>
-          <button onClick={() => setMessage("")} className="grid min-h-11 min-w-11 place-items-center rounded-lg text-[#5f7067] hover:bg-[#edf1ee]" aria-label="Fechar mensagem">
-            <X size={17} />
+        <div
+          className="imp-rise fixed inset-x-3 bottom-[calc(88px+env(safe-area-inset-bottom))] z-50 mx-auto flex max-w-sm items-start gap-3 rounded-2xl border border-imp-line/70 bg-imp-surface p-3 pl-4 shadow-imp-lift md:inset-x-auto md:bottom-6 md:right-6"
+          role="status"
+          aria-live="polite"
+        >
+          <p className="min-w-0 flex-1 py-2 text-[15px] leading-5">{message}</p>
+          <button
+            type="button"
+            onClick={() => setMessage("")}
+            className="grid min-h-10 min-w-10 place-items-center rounded-lg text-imp-muted hover:bg-imp-ground"
+            aria-label="Fechar mensagem"
+          >
+            <X size={17} aria-hidden="true" />
           </button>
         </div>
       )}
 
-      {surface === "web" && snapshot.user?.role === "manager" ? (
+      {surface === "web" && isManager ? (
         <WebDashboard
           snapshot={snapshot}
           selectedId={selectedId}

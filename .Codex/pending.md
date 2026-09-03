@@ -4,7 +4,7 @@
 - [x] Revisar e autorizar o segundo lote do EstoqueNOW — autorização recebida; pull automático habilitado em produção com lote máximo de 5 e escrita externa desligada.
 - [ ] Reconciliar o rollout automático do EstoqueNOW — 28 operações elegíveis serão importadas em até 6 execuções diárias de 5; verificar duplicatas, contextos e falhas após cada execução.
 - [ ] Resolver o pedido de exclusão de “fotos antigas” — 26 fotos de itens agora estão no cache privado do Supabase e há 1 evidência interna ligada a evento/checks. Definir se o alvo é limpar só o cache, ocultar a mídia de origem ou excluir operação/evidência; antes de excluir, gerar backup e suppression para impedir reimportação.
-- [ ] Redesenhar a UI da torre web e do app de campo — excesso de informação, pouca orientação por tarefa e identidade visual fraca. Auditar fluxos por papel, definir hierarquia/paleta/tipografia/layout, implementar responsivo e validar desktop/mobile com usuários gestor e funcionário.
+- [x] Redesenhar a UI da torre web e do app de campo — arquitetura por papel (Hoje = decisões + quadro; detalhe só em Operações; campo = próxima ação no topo), sistema visual em DESIGN.md, QA desktop/mobile por subagentes, publicado em 2026-09-03. Pendente: validar com usuários reais gestor e funcionário em campo.
 - [x] Atualizar os READMEs da integração EstoqueNOW — flags e capacidades alinhadas ao estado live de importação, detalhe, itens, fotos e checklist.
 - [ ] Escritas de entrega/retorno no EstoqueNOW estão conectadas apenas em código e mock — manter flags falsas e homologar somente após autorização específica do cliente.
 - [ ] Proteção contra senhas vazadas está desabilitada no Supabase — habilitar no painel após validar o impacto no fluxo de login dos usuários reais.
