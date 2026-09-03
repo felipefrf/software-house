@@ -1,4 +1,5 @@
 import { EstoqueNowClient } from "./estoquenow";
+import type { EstoqueNowItem } from "./estoquenow";
 import type { EstoqueNowStatus } from "./types";
 
 const dateForApi = (date: Date) =>
@@ -80,4 +81,19 @@ export async function readEstoqueNowItems(externalId: string) {
     writeEnabled: process.env.ESTOQUENOW_WRITE_ENABLED === "true",
   });
   return liveClient.listLogisticItems(externalId);
+}
+
+export async function readEstoqueNowItemPhoto(
+  externalId: string,
+  item: EstoqueNowItem,
+) {
+  const { clientId, clientSecret } = credentials();
+  if (!clientId || !clientSecret) throw new Error("ESTOQUENOW_NOT_CONFIGURED");
+  liveClient ??= new EstoqueNowClient({
+    clientId,
+    clientSecret,
+    baseUrl: process.env.ESTOQUENOW_API_URL,
+    writeEnabled: process.env.ESTOQUENOW_WRITE_ENABLED === "true",
+  });
+  return liveClient.getLogisticItemPhoto(externalId, item);
 }

@@ -61,6 +61,11 @@ export type EstoqueNowItem = {
   name: string;
 };
 
+export type EstoqueNowItemPhoto = {
+  item: EstoqueNowItem;
+  url: string;
+};
+
 export const canonicalItems = (items: EstoqueNowItem[]) =>
   items
     .map(({ id, itemId, orderId, name }) => ({ id, itemId, orderId, name }))
@@ -335,6 +340,88 @@ export const itemsFromDetail = (payload: unknown): EstoqueNowItem[] => {
   return canonicalItems([...items.values()]);
 };
 
+export const itemPhotoFromDetail = (
+  payload: unknown,
+  expected: EstoqueNowItem,
+): EstoqueNowItemPhoto => {
+  const item = itemsFromDetail(payload).find((candidate) => candidate.id === expected.id);
+  if (!item || JSON.stringify(item) !== JSON.stringify(canonicalItems([expected])[0]))
+    throw new Error("ESTOQUENOW_SOURCE_ITEM_CHANGED");
+  const root = asObject(payload);
+  const detail = asObject(root?.data) ?? root;
+  const raw = Array.isArray(detail?.order_items)
+    ? detail.order_items.map(asObject).find((candidate) => text(candidate?.id) === item.id)
+    : null;
+  const value = text(raw?.item_url_image);
+  if (!value || value.length > 2_048) throw new Error("ESTOQUENOW_ITEM_PHOTO_UNAVAILABLE");
+  const url = new URL(value);
+  if (url.protocol !== "https:" || url.username || url.password || url.hash)
+    throw new Error("ESTOQUENOW_INVALID_ITEM_PHOTO");
+  return { item, url: url.toString() };
+};
+
+const allowedMediaUrl = (value: string) => {
+  const url = new URL(value);
+  const host = url.hostname.toLowerCase();
+  if (
+    url.protocol !== "https:" ||
+    url.username ||
+    url.password ||
+    url.port ||
+    !(host === "estoquenow.com.br" || host.endsWith(".estoquenow.com.br"))
+  )
+    throw new Error("MEDIA_HOST_NOT_ALLOWED");
+  return url;
+};
+
+export const fetchEstoqueNowItemPhoto = async (
+  initialUrl: string,
+  fetchImpl: typeof fetch = fetch,
+) => {
+  let url = allowedMediaUrl(initialUrl);
+  for (let redirects = 0; redirects <= 2; redirects += 1) {
+    const response = await fetchImpl(url, {
+      cache: "no-store",
+      redirect: "manual",
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get("location");
+      if (!location || redirects === 2) throw new Error("MEDIA_REDIRECT_INVALID");
+      url = allowedMediaUrl(new URL(location, url).toString());
+      continue;
+    }
+    if (!response.ok || !response.body) throw new Error("MEDIA_FETCH_FAILED");
+    const contentType = response.headers.get("content-type")?.split(";")[0] ?? "";
+    if (!new Set(["image/jpeg", "image/png", "image/webp"]).has(contentType))
+      throw new Error("MEDIA_TYPE_INVALID");
+    const declaredSize = Number(response.headers.get("content-length"));
+    if (Number.isFinite(declaredSize) && declaredSize > 6_000_000)
+      throw new Error("MEDIA_TOO_LARGE");
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > 6_000_000) {
+        await reader.cancel();
+        throw new Error("MEDIA_TOO_LARGE");
+      }
+      chunks.push(value);
+    }
+    const bytes = new Uint8Array(size);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return { bytes, contentType };
+  }
+  throw new Error("MEDIA_FETCH_FAILED");
+};
+
 const statusFrom = (record: JsonObject): EstoqueNowOperation["status"] => {
   if (record.is_concluded === 1 || record.is_concluded === "1" || record.is_concluded === true)
     return nestedText(record, ["type"]).toLowerCase() === "return"
@@ -442,6 +529,7 @@ export const normalizeLogistics = (payload: unknown): EstoqueNowOperation[] => {
 
 export class EstoqueNowClient {
   private token: { value: string; expiresAt: number } | null = null;
+  private detailCache = new Map<string, { expiresAt: number; value: Promise<unknown> }>();
   private readonly config: {
     clientId: string;
     clientSecret: string;
@@ -529,6 +617,25 @@ export class EstoqueNowClient {
     }
     if (!response.ok) throw new Error(`ESTOQUENOW_HTTP_${response.status}`);
     return response.json();
+  }
+
+  private logisticDetail(id: string, useCache = false) {
+    if (!isValidExternalId(id)) throw new Error("ESTOQUENOW_INVALID_LOGISTIC_ID");
+    const key = id.trim();
+    if (!useCache) {
+      const value = this.request(`/v1/logistic/${encodeURIComponent(key)}`);
+      void value.then(() => this.detailCache.delete(key));
+      return value;
+    }
+    for (const [cacheKey, entry] of this.detailCache)
+      if (entry.expiresAt <= Date.now()) this.detailCache.delete(cacheKey);
+    const cached = this.detailCache.get(key);
+    if (cached) return cached.value;
+    if (this.detailCache.size >= 8) this.detailCache.delete(this.detailCache.keys().next().value!);
+    const value = this.request(`/v1/logistic/${encodeURIComponent(key)}`);
+    this.detailCache.set(key, { expiresAt: Date.now() + 60_000, value });
+    void value.catch(() => this.detailCache.delete(key));
+    return value;
   }
 
   private async write(path: string, body: JsonObject) {
@@ -631,8 +738,7 @@ export class EstoqueNowClient {
   }
 
   async inspectLogisticDetail(id: string) {
-    if (!isValidExternalId(id)) throw new Error("ESTOQUENOW_INVALID_LOGISTIC_ID");
-    const payload = await this.request(`/v1/logistic/${encodeURIComponent(id.trim())}`);
+    const payload = await this.logisticDetail(id);
     const fields = contractFrom(payload, SAFE_DETAIL_KEYS);
     return {
       contract: {
@@ -650,9 +756,10 @@ export class EstoqueNowClient {
   }
 
   async listLogisticItems(id: string): Promise<EstoqueNowItem[]> {
-    if (!isValidExternalId(id)) throw new Error("ESTOQUENOW_INVALID_LOGISTIC_ID");
-    return itemsFromDetail(
-      await this.request(`/v1/logistic/${encodeURIComponent(id.trim())}`),
-    );
+    return itemsFromDetail(await this.logisticDetail(id));
+  }
+
+  async getLogisticItemPhoto(id: string, item: EstoqueNowItem) {
+    return itemPhotoFromDetail(await this.logisticDetail(id, true), item);
   }
 }

@@ -103,3 +103,15 @@ test("manifesto de carga expõe progresso e checkbox acessível", async () => {
   assert.match(manifest, /Foto não disponível/);
   assert.match(route, /rpc\("set_operation_item_checked"/);
 });
+
+test("fotos de itens passam por proxy autenticado e limitado", async () => {
+  const route = await readFile(
+    new URL("../../api/imperio/item-photo/route.ts", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(route, /auth\.getUser/);
+  assert.match(route, /fetchEstoqueNowItemPhoto/);
+  assert.match(route, /data\.imported_at !== version/);
+  assert.match(route, /x-content-type-options/);
+});

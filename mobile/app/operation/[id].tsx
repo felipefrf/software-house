@@ -1,7 +1,7 @@
 import * as Linking from "expo-linking";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { BrandHeader, Button, Card, Screen, StatusStrip } from "@/components/Ui";
 import { useApp } from "@/context/AppContext";
@@ -13,17 +13,19 @@ const formatDate = (value: string) =>
   new Intl.DateTimeFormat("pt-BR", { dateStyle: "medium", timeStyle: "short" }).format(
     new Date(value),
   );
+const itemPhotoApi = process.env.EXPO_PUBLIC_IMPERIO_API_URL ?? "https://imperio-logistica.vercel.app";
 
 export default function OperationScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ id: string }>();
-  const { work, outbox, online, busy, setItemChecked, setMessage } = useApp();
+  const { work, outbox, online, busy, session, setItemChecked, setMessage } = useApp();
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const operation = work?.operations.find((item) => item.id === id);
   const pending = outbox.filter((item) => item.state !== "confirmed").length;
   const currentIndex = operation ? operationStages.indexOf(operation.stage) : 0;
   const rail = useRef<ScrollView>(null);
   const [railWidth, setRailWidth] = useState(0);
+  const [failedPhotos, setFailedPhotos] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!railWidth) return;
@@ -124,6 +126,7 @@ export default function OperationScreen() {
               const check = checkedItems.get(item.id);
               const marked = Boolean(check);
               const disabled = busy || !online || operation.status !== "active";
+              const photoKey = `${operation.imported_at ?? "unversioned"}:${item.id}`;
               return (
                 <Pressable
                   key={item.id}
@@ -146,6 +149,25 @@ export default function OperationScreen() {
                   <View style={styles.photoPlaceholder}>
                     <Text style={styles.photoIcon}>▧</Text>
                     <Text style={styles.photoLabel}>Foto não disponível</Text>
+                    {session && online && !failedPhotos.has(photoKey) ? (
+                      <Image
+                        source={{
+                          uri: `${itemPhotoApi}/api/imperio/item-photo?operationId=${encodeURIComponent(operation.id)}&itemId=${encodeURIComponent(item.id)}&version=${encodeURIComponent(operation.imported_at ?? "unversioned")}`,
+                          headers: { Authorization: `Bearer ${session.access_token}` },
+                        }}
+                        accessibilityLabel={`Foto de ${item.name}`}
+                        resizeMode="cover"
+                        style={styles.photoImage}
+                        onError={() => {
+                          setFailedPhotos((current) => new Set(current).add(photoKey));
+                          setTimeout(() => setFailedPhotos((current) => {
+                            const next = new Set(current);
+                            next.delete(photoKey);
+                            return next;
+                          }), 30_000);
+                        }}
+                      />
+                    ) : null}
                   </View>
                   <View style={styles.itemBody}>
                     <Text numberOfLines={2} style={styles.itemName}>{item.name}</Text>
@@ -325,6 +347,7 @@ const styles = StyleSheet.create({
   itemCardDisabled: { opacity: 0.65 },
   itemCardPressed: { transform: [{ scale: 0.99 }] },
   photoPlaceholder: { width: 96, minHeight: 112, alignItems: "center", justifyContent: "center", gap: 6, padding: 8, borderRightWidth: 1, borderRightColor: colors.line, backgroundColor: "#edf1ee" },
+  photoImage: { position: "absolute", inset: 0, width: 96, height: 112 },
   photoIcon: { color: colors.muted, fontSize: 25 },
   photoLabel: { color: colors.muted, fontSize: 10, lineHeight: 13, textAlign: "center" },
   itemBody: { flex: 1, minWidth: 0, justifyContent: "space-between", gap: 8, padding: 12 },

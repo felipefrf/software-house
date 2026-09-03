@@ -4,6 +4,8 @@ import test from "node:test";
 import {
   canonicalItems,
   EstoqueNowClient,
+  fetchEstoqueNowItemPhoto,
+  itemPhotoFromDetail,
   isValidExternalId,
   isValidIsoDate,
   normalizeLogistics,
@@ -284,6 +286,107 @@ test("rejeita item duplicado conflitante no detalhe", async () => {
         });
   const client = new EstoqueNowClient({ clientId: "id", clientSecret: "secret", fetchImpl });
   await assert.rejects(() => client.inspectLogisticDetail("123"), /ORDER_ITEM_CONFLICT/);
+});
+
+test("resolve foto somente quando o item ainda corresponde ao snapshot", () => {
+  const payload = {
+    order_items: [{
+      id: "row-1",
+      item_id: "item-1",
+      order_id: "order-1",
+      item_name: "Mesa",
+      item_url_image: "https://media.estoquenow.com.br/mesa.jpg?signature=redacted",
+    }],
+  };
+  const expected = { id: "row-1", itemId: "item-1", orderId: "order-1", name: "Mesa" };
+  assert.equal(itemPhotoFromDetail(payload, expected).url.startsWith("https://"), true);
+  assert.throws(
+    () => itemPhotoFromDetail(payload, { ...expected, name: "Mesa antiga" }),
+    /SOURCE_ITEM_CHANGED/,
+  );
+});
+
+test("reutiliza detalhe somente entre fotos e mantém a confirmação fresca", async () => {
+  let reads = 0;
+  const fetchImpl: typeof fetch = async (input) => {
+    if (String(input).endsWith("/oauth2/token")) return Response.json({ token: "redacted" });
+    reads += 1;
+    return Response.json({
+      order_items: [{
+        id: "row-1",
+        item_id: "item-1",
+        order_id: "order-1",
+        item_name: "Mesa",
+        item_url_image: "https://media.estoquenow.com.br/mesa.jpg?signature=redacted",
+      }],
+    });
+  };
+  const client = new EstoqueNowClient({ clientId: "id", clientSecret: "secret", fetchImpl });
+  const item = { id: "row-1", itemId: "item-1", orderId: "order-1", name: "Mesa" };
+  await Promise.all([
+    client.getLogisticItemPhoto("123", item),
+    client.getLogisticItemPhoto("123", item),
+  ]);
+  assert.equal(reads, 1);
+  await client.listLogisticItems("123");
+  assert.equal(reads, 2);
+  await client.getLogisticItemPhoto("123", item);
+  assert.equal(reads, 3);
+});
+
+test("proxy de foto bloqueia hosts, redirects, tipos e tamanhos inseguros", async () => {
+  const noFetch: typeof fetch = async () => {
+    assert.fail("não deveria buscar URL rejeitada");
+  };
+  for (const url of [
+    "http://media.estoquenow.com.br/item.jpg",
+    "https://evilestoquenow.com.br/item.jpg",
+    "https://estoquenow.com.br.evil.test/item.jpg",
+    "https://user:pass@estoquenow.com.br/item.jpg",
+    "https://estoquenow.com.br:8443/item.jpg",
+  ]) await assert.rejects(() => fetchEstoqueNowItemPhoto(url, noFetch));
+
+  let redirects = 0;
+  const badRedirect: typeof fetch = async () => {
+    redirects += 1;
+    return new Response(null, { status: 302, headers: { location: "https://evil.test/item.jpg" } });
+  };
+  await assert.rejects(
+    () => fetchEstoqueNowItemPhoto("https://media.estoquenow.com.br/item.jpg", badRedirect),
+    /MEDIA_HOST_NOT_ALLOWED/,
+  );
+  assert.equal(redirects, 1);
+
+  const response = (body: BodyInit, headers: HeadersInit) =>
+    async () => new Response(body, { headers });
+  await assert.rejects(
+    () => fetchEstoqueNowItemPhoto(
+      "https://media.estoquenow.com.br/item.jpg",
+      response("html", { "content-type": "text/html" }),
+    ),
+    /MEDIA_TYPE_INVALID/,
+  );
+  await assert.rejects(
+    () => fetchEstoqueNowItemPhoto(
+      "https://media.estoquenow.com.br/item.jpg",
+      response("x", { "content-type": "image/jpeg", "content-length": "6000001" }),
+    ),
+    /MEDIA_TOO_LARGE/,
+  );
+  await assert.rejects(
+    () => fetchEstoqueNowItemPhoto(
+      "https://media.estoquenow.com.br/item.jpg",
+      response(new Uint8Array(6_000_001), { "content-type": "image/jpeg" }),
+    ),
+    /MEDIA_TOO_LARGE/,
+  );
+
+  const image = await fetchEstoqueNowItemPhoto(
+    "https://media.estoquenow.com.br/item.jpg?signature=secret",
+    response("ok", { "content-type": "image/webp" }),
+  );
+  assert.equal(image.contentType, "image/webp");
+  assert.equal(image.bytes.byteLength, 2);
 });
 
 test("pagina a listagem sem duplicar IDs", async () => {

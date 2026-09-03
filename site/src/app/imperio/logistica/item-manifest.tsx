@@ -1,6 +1,8 @@
 "use client";
 
 import { Check, ImageOff } from "lucide-react";
+import Image from "next/image";
+import { useState } from "react";
 
 import type { Operation } from "./types";
 import { formatDate, postJson, type Run } from "./workspace";
@@ -20,8 +22,10 @@ export function ItemManifest({
   refresh: () => Promise<void>;
   run: Run;
 }) {
+  const [failedPhotos, setFailedPhotos] = useState<Set<string>>(new Set());
   const items = operation.estoquenow_context?.items ?? [];
   if (!items.length) return null;
+  const photoVersion = operation.imported_at ?? "unversioned";
 
   const checks = new Map(
     operation.item_checks.map((item) => [item.source_item_id, item]),
@@ -65,6 +69,7 @@ export function ItemManifest({
         {items.map((item) => {
           const check = checks.get(item.id);
           const isChecked = Boolean(check);
+          const photoKey = `${photoVersion}:${item.id}`;
           return (
             <li key={item.id}>
               <label
@@ -74,9 +79,27 @@ export function ItemManifest({
                     : "border-[#d7dfd9] bg-white hover:border-[#aec2b8]"
                 } ${!editable || busy ? "cursor-not-allowed opacity-70" : ""}`}
               >
-                <span className="flex min-h-28 flex-col items-center justify-center gap-2 border-r border-[#d7dfd9] bg-[#edf1ee] px-2 text-center text-[#687970]">
+                <span className="relative flex min-h-28 flex-col items-center justify-center gap-2 overflow-hidden border-r border-[#d7dfd9] bg-[#edf1ee] px-2 text-center text-[#687970]">
                   <ImageOff size={22} aria-hidden="true" />
                   <small className="text-[11px] leading-tight">Foto não disponível</small>
+                  {online && !failedPhotos.has(photoKey) && (
+                    <Image
+                      unoptimized
+                      fill
+                      sizes="96px"
+                      src={`/api/imperio/item-photo?operationId=${encodeURIComponent(operation.id)}&itemId=${encodeURIComponent(item.id)}&version=${encodeURIComponent(photoVersion)}`}
+                      alt={`Foto de ${item.name}`}
+                      className="object-cover"
+                      onError={() => {
+                        setFailedPhotos((current) => new Set(current).add(photoKey));
+                        window.setTimeout(() => setFailedPhotos((current) => {
+                          const next = new Set(current);
+                          next.delete(photoKey);
+                          return next;
+                        }), 30_000);
+                      }}
+                    />
+                  )}
                 </span>
                 <span className="flex min-w-0 flex-col justify-between gap-3 p-3">
                   <span>
