@@ -117,11 +117,11 @@ test("apply exige gestor explícito; observe não exige", () => {
   );
 });
 
-test("drena lotes adiados somente em apply bem-sucedido e dentro do limite", () => {
+test("drena lotes com progresso em apply e para sem progresso ou fora do limite", () => {
   const result = {
     status: "succeeded",
     mode: "apply",
-    counts: { eligible: 6, attempted: 5 },
+    counts: { eligible: 6, attempted: 5, imported: 5, updated: 0, reconciled: 0 },
   } as EstoqueNowPullResult;
   assert.equal(shouldContinueEstoqueNowDrain(result, 1, 1_000), true);
   assert.equal(shouldContinueEstoqueNowDrain(result, 6, 1_000), false);
@@ -132,6 +132,18 @@ test("drena lotes adiados somente em apply bem-sucedido e dentro do limite", () 
   );
   assert.equal(
     shouldContinueEstoqueNowDrain({ ...result, status: "partial" }, 1, 1_000),
+    true,
+  );
+  assert.equal(
+    shouldContinueEstoqueNowDrain(
+      {
+        ...result,
+        status: "partial",
+        counts: { ...result.counts, imported: 0 },
+      },
+      1,
+      1_000,
+    ),
     false,
   );
   assert.equal(

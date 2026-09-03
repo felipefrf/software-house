@@ -250,7 +250,9 @@ export const shouldContinueEstoqueNowDrain = (
   elapsedMs: number,
 ) =>
   result.mode === "apply" &&
-  result.status === "succeeded" &&
+  (result.status === "succeeded" ||
+    (result.status === "partial" &&
+      result.counts.imported + result.counts.updated + result.counts.reconciled > 0)) &&
   result.counts.eligible > result.counts.attempted &&
   completedRuns < MAX_DRAIN_RUNS &&
   elapsedMs < DRAIN_START_DEADLINE_MS;
