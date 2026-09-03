@@ -13,12 +13,15 @@ import {
   loadExistingEstoqueNowOperationsForPull,
   readEstoqueNowPullConfig,
   runEstoqueNowPull,
+  shouldContinueEstoqueNowDrain,
+  type EstoqueNowPullResult,
   type EstoqueNowSyncDatabase,
 } from "@/app/imperio/logistica/estoquenow-sync";
 import { createSupabaseAdminClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+export const maxDuration = 300;
 
 export async function GET(request: Request) {
   if (!isAuthorizedEstoqueNowPull(
@@ -57,27 +60,47 @@ export async function GET(request: Request) {
 
   let claimedRunId: string | null = null;
   try {
-    const claim = await beginEstoqueNowSyncRun(database, config);
-    if (!claim.started)
-      return NextResponse.json({
-        ok: true,
-        status: claim.status,
-        mode: config.applyEnabled ? "apply" : "observe",
-        startDate: config.startDate,
-        endDate: config.endDate,
-        batchSize: claim.batchLimit,
+    const startedAt = Date.now();
+    let completedRuns = 0;
+    let imported = 0;
+    let updated = 0;
+    let reconciled = 0;
+    let failed = 0;
+    let result: EstoqueNowPullResult | undefined;
+
+    do {
+      const claim = await beginEstoqueNowSyncRun(database, config);
+      if (!claim.started) {
+        if (result) break;
+        return NextResponse.json({
+          ok: true,
+          status: claim.status,
+          mode: config.applyEnabled ? "apply" : "observe",
+          startDate: config.startDate,
+          endDate: config.endDate,
+          batchSize: claim.batchLimit,
+        });
+      }
+      if (!claim.runId) throw new Error("ESTOQUENOW_SYNC_BEGIN_CONTRACT_INVALID");
+      claimedRunId = claim.runId;
+      result = await runEstoqueNowPull(config, {
+        inspectOperations: inspectEstoqueNowOperations,
+        loadExisting: (externalIds) =>
+          loadExistingEstoqueNowOperationsForPull(database, externalIds),
+        readItems: readEstoqueNowItems,
+        confirm: (input) =>
+          confirmEstoqueNowCandidate(database, { ...input, runId: claim.runId! }),
       });
-    if (!claim.runId) throw new Error("ESTOQUENOW_SYNC_BEGIN_CONTRACT_INVALID");
-    claimedRunId = claim.runId;
-    const result = await runEstoqueNowPull(config, {
-      inspectOperations: inspectEstoqueNowOperations,
-      loadExisting: (externalIds) =>
-        loadExistingEstoqueNowOperationsForPull(database, externalIds),
-      readItems: readEstoqueNowItems,
-      confirm: (input) =>
-        confirmEstoqueNowCandidate(database, { ...input, runId: claim.runId! }),
-    });
-    await finishEstoqueNowSyncRun(database, claim.runId, result);
+      await finishEstoqueNowSyncRun(database, claim.runId, result);
+      claimedRunId = null;
+      completedRuns += 1;
+      imported += result.counts.imported;
+      updated += result.counts.updated;
+      reconciled += result.counts.reconciled;
+      failed += result.counts.failed;
+    } while (shouldContinueEstoqueNowDrain(result, completedRuns, Date.now() - startedAt));
+
+    if (!result) throw new Error("ESTOQUENOW_SYNC_RESULT_MISSING");
     return NextResponse.json(
       {
         ok: result.status !== "failed",
@@ -87,6 +110,7 @@ export async function GET(request: Request) {
         endDate: result.endDate,
         batchSize: result.batchSize,
         counts: result.counts,
+        drain: { runs: completedRuns, imported, updated, reconciled, failed },
       },
       { status: result.status === "failed" ? 502 : 200 },
     );

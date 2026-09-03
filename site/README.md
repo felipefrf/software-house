@@ -60,27 +60,35 @@ EstoqueNOW.
 
 ### Pull incremental
 
-`GET /api/imperio/estoquenow-pull` é exclusivo do Vercel Cron e exige
+`GET /api/imperio/estoquenow-pull` é exclusivo de schedulers autenticados e exige
 `Authorization: Bearer $CRON_SECRET`. O cron consulta uma janela móvel com
 sobreposição porque a API homologada não oferece cursor de atualização confiável.
-No plano Hobby, o agendamento padrão é diário às 09:00 UTC. Para operação a cada
-15 minutos, altere a expressão para `*/15 * * * *` somente depois de migrar o
-projeto para um plano Vercel que aceite essa frequência.
+O Vercel Hobby mantém uma execução diária às 09:00 UTC como contingência. A
+migration `20260903182419_imperio_estoquenow_continuous_cron.sql` agenda o pull
+principal no Supabase Cron a cada 15 minutos. Cada invocação aplica
+até seis lotes consecutivos de no máximo cinco operações, interrompendo ao esvaziar
+a fila, encontrar uma execução parcial/falha ou atingir o orçamento seguro de tempo.
 
 Ativação segura:
 
 1. Defina `CRON_SECRET` e `ESTOQUENOW_PULL_MANAGER_ID` somente na Vercel.
-2. Mantenha `ESTOQUENOW_INCREMENTAL_PULL_ENABLED=false` até aplicar a migration e
+2. Antes de aplicar a migration do cron, crie no Vault do Supabase os segredos
+   `imperio_estoquenow_pull_url`, com o endpoint de produção acima, e
+   `imperio_estoquenow_cron_secret`, com exatamente o mesmo `CRON_SECRET` da
+   Vercel. Não registre os valores em SQL versionado, terminal compartilhado ou chat.
+3. Mantenha `ESTOQUENOW_INCREMENTAL_PULL_ENABLED=false` até aplicar as migrations e
    validar o endpoint em modo desabilitado.
-3. Habilite `ESTOQUENOW_INCREMENTAL_PULL_ENABLED=true` com
+4. Habilite `ESTOQUENOW_INCREMENTAL_PULL_ENABLED=true` com
    `ESTOQUENOW_PULL_APPLY_ENABLED=false`. Esse modo lê e registra somente métricas
    sanitizadas; não cria nem altera operações.
-4. Para um lote autorizado, habilite `ESTOQUENOW_PULL_APPLY_ENABLED=true` com
+5. Para o pull contínuo autorizado, habilite `ESTOQUENOW_PULL_APPLY_ENABLED=true` com
    `ESTOQUENOW_PULL_BATCH_SIZE` entre 1 e 5. Somente operações novas e atualizações
    mutáveis são elegíveis; divergências canônicas e histórico protegido continuam
    na fila manual.
-5. Depois do lote, reconcilie contagens e volte a flag de aplicação para `false`
-   antes de ampliar o limite operacional.
+6. Depois da primeira execução intradiária, reconcilie operações criadas,
+   atualizadas, ignoradas, divergentes e falhas. Para pausar sem alterar o banco,
+   desative `ESTOQUENOW_INCREMENTAL_PULL_ENABLED` na Vercel. O limite por lote
+   continua sendo cinco e não deve ser ampliado sem nova validação operacional.
 
 Nenhum run armazena payload bruto, nome de cliente, endereço, token, URL assinada
 ou mensagem livre do provedor. `ESTOQUENOW_WRITE_ENABLED=false` permanece um gate
@@ -92,12 +100,12 @@ independente e obrigatório.
 | --- | --- | --- | --- |
 | Listar logística por período | Torre web | GET real em produção; paginação e contrato sanitizados | Nenhuma |
 | Pré-visualizar candidatos | Torre web | Fluxo real, manager-only, sem persistência | Nenhuma |
-| Detalhe e itens logísticos | Torre, app de campo e harness | GET real; 22 linhas importadas e reconciliadas na operação piloto | Nenhuma |
+| Detalhe e itens logísticos | Torre, app de campo e harness | GET real; itens importados e reconciliados por operação | Nenhuma |
 | Fotos dos itens | Torre e app de campo | `item_url_image` real; proxy autenticado, origem exata, MIME e tamanho limitados | Nenhuma |
 | Checklist dos itens | Torre e app de campo | Estado interno protegido por RLS/RPC; não altera o snapshot externo | Nenhuma |
 | Confirmar entrega ou retorno | Cliente server-only | Schema e contrato cobertos por mock | Bloqueada por padrão; não homologada no EstoqueNOW |
 | Importar uma operação no Postgres da Império | Torre web | Confirmação individual, idempotente por ID externo e protegida por ambiente | Não escreve no EstoqueNOW |
-| Pull incremental | Vercel Cron + torre | Janela móvel, ledger sanitizado e single-flight; aplicação começa desabilitada | Não escreve no EstoqueNOW |
+| Pull incremental | Supabase Cron + Vercel + torre | A cada 15 minutos, janela móvel, ledger sanitizado e single-flight; Vercel diário como contingência | Não escreve no EstoqueNOW |
 | Lote controlado | Scheduler | Máximo de cinco por run, somente após flag específica e reconciliação | Não escreve no EstoqueNOW |
 | Locação, inventário e financeiro | Nenhum | Não implementado sem evidência do contrato real | Nenhuma |
 

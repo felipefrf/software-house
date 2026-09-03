@@ -12,7 +12,9 @@ import {
   readEstoqueNowPullConfig,
   runEstoqueNowPull,
   selectAutomaticCandidates,
+  shouldContinueEstoqueNowDrain,
   type EstoqueNowExistingOperation,
+  type EstoqueNowPullResult,
   type EstoqueNowSyncDatabase,
 } from "./estoquenow-sync.ts";
 
@@ -112,6 +114,33 @@ test("apply exige gestor explícito; observe não exige", () => {
   assert.throws(
     () => readEstoqueNowPullConfig({ ESTOQUENOW_PULL_APPLY_ENABLED: "true" }),
     /ESTOQUENOW_PULL_MANAGER_ID_INVALID/,
+  );
+});
+
+test("drena lotes adiados somente em apply bem-sucedido e dentro do limite", () => {
+  const result = {
+    status: "succeeded",
+    mode: "apply",
+    counts: { eligible: 6, attempted: 5 },
+  } as EstoqueNowPullResult;
+  assert.equal(shouldContinueEstoqueNowDrain(result, 1, 1_000), true);
+  assert.equal(shouldContinueEstoqueNowDrain(result, 6, 1_000), false);
+  assert.equal(shouldContinueEstoqueNowDrain(result, 1, 180_000), false);
+  assert.equal(
+    shouldContinueEstoqueNowDrain({ ...result, mode: "observe" }, 1, 1_000),
+    false,
+  );
+  assert.equal(
+    shouldContinueEstoqueNowDrain({ ...result, status: "partial" }, 1, 1_000),
+    false,
+  );
+  assert.equal(
+    shouldContinueEstoqueNowDrain(
+      { ...result, counts: { ...result.counts, eligible: 5 } },
+      1,
+      1_000,
+    ),
+    false,
   );
 });
 

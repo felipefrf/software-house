@@ -16,6 +16,8 @@ const DEFAULT_LOOKAHEAD_DAYS = 30;
 const MAX_LOOKBACK_DAYS = 7;
 const MAX_LOOKAHEAD_DAYS = 90;
 const MAX_BATCH_SIZE = 5;
+const MAX_DRAIN_RUNS = 6;
+const DRAIN_START_DEADLINE_MS = 180_000;
 
 export type EstoqueNowSourceContext = {
   order_id: string | null;
@@ -241,6 +243,17 @@ export type EstoqueNowPullResult = {
     errorCode: "source_item_changed" | "stale_source" | "historic_divergence" | "confirmation_failed" | null;
   }>;
 };
+
+export const shouldContinueEstoqueNowDrain = (
+  result: EstoqueNowPullResult,
+  completedRuns: number,
+  elapsedMs: number,
+) =>
+  result.mode === "apply" &&
+  result.status === "succeeded" &&
+  result.counts.eligible > result.counts.attempted &&
+  completedRuns < MAX_DRAIN_RUNS &&
+  elapsedMs < DRAIN_START_DEADLINE_MS;
 
 const isUuid = (value: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
