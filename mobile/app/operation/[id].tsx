@@ -27,6 +27,8 @@ export default function OperationScreen() {
   const rail = useRef<ScrollView>(null);
   const [railWidth, setRailWidth] = useState(0);
   const [failedPhotos, setFailedPhotos] = useState<Set<string>>(new Set());
+  const [loadedPhotos, setLoadedPhotos] = useState<Set<string>>(new Set());
+  const settledPhotos = useRef(new Set<string>());
   const sourceItems = operation?.estoquenow_context?.items ?? [];
   const manifestPhotoKey = `${operation?.id ?? "unavailable"}:${operation?.imported_at ?? "unversioned"}`;
   const [photoQueue, setPhotoQueue] = useState({
@@ -86,6 +88,13 @@ export default function OperationScreen() {
       (current.key === manifestPhotoKey ? current.limit : PHOTO_LOAD_CONCURRENCY) + 1,
     ),
   }));
+  const settlePhoto = (photoKey: string, loaded: boolean) => {
+    if (settledPhotos.current.has(photoKey)) return;
+    settledPhotos.current.add(photoKey);
+    if (loaded) setLoadedPhotos((current) => new Set(current).add(photoKey));
+    else setFailedPhotos((current) => new Set(current).add(photoKey));
+    advancePhotoQueue();
+  };
 
   return (
     <Screen>
@@ -143,6 +152,7 @@ export default function OperationScreen() {
               const marked = Boolean(check);
               const disabled = busy || !online || operation.status !== "active";
               const photoKey = `${operation.id}:${operation.imported_at ?? "unversioned"}:${item.id}`;
+              const photoLoaded = loadedPhotos.has(photoKey);
               return (
                 <Pressable
                   key={item.id}
@@ -163,16 +173,20 @@ export default function OperationScreen() {
                   ]}
                 >
                   <View style={styles.photoPlaceholder}>
-                    <Text style={styles.photoIcon}>▧</Text>
-                    <Text style={styles.photoLabel}>
-                      {!online
-                        ? "Foto exige conexão"
-                        : failedPhotos.has(photoKey)
-                          ? "Foto não disponível"
-                          : itemIndex < photoLoadLimit
-                            ? "Carregando foto"
-                            : "Foto aguardando carregamento"}
-                    </Text>
+                    {!photoLoaded ? (
+                      <>
+                        <Text style={styles.photoIcon}>▧</Text>
+                        <Text style={styles.photoLabel}>
+                          {!online
+                            ? "Foto exige conexão"
+                            : failedPhotos.has(photoKey)
+                              ? "Foto não disponível"
+                              : itemIndex < photoLoadLimit
+                                ? "Carregando foto"
+                                : "Foto aguardando carregamento"}
+                        </Text>
+                      </>
+                    ) : null}
                     {session && online && itemIndex < photoLoadLimit && !failedPhotos.has(photoKey) ? (
                       <Image
                         source={{
@@ -182,11 +196,8 @@ export default function OperationScreen() {
                         accessibilityLabel={`Foto de ${item.name}`}
                         resizeMode="cover"
                         style={styles.photoImage}
-                        onLoad={advancePhotoQueue}
-                        onError={() => {
-                          advancePhotoQueue();
-                          setFailedPhotos((current) => new Set(current).add(photoKey));
-                        }}
+                        onLoad={() => settlePhoto(photoKey, true)}
+                        onError={() => settlePhoto(photoKey, false)}
                       />
                     ) : null}
                   </View>

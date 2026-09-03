@@ -103,7 +103,9 @@ test("manifesto de carga expõe progresso e checkbox acessível", async () => {
   assert.match(manifest, /Foto não disponível/);
   assert.match(manifest, /PHOTO_LOAD_CONCURRENCY = 4/);
   assert.match(manifest, /itemIndex < photoLoadLimit/);
-  assert.match(manifest, /onLoad=\{advancePhotoQueue\}/);
+  assert.match(manifest, /const photoLoaded = loadedPhotos\.has\(photoKey\)/);
+  assert.match(manifest, /\{!photoLoaded && \(/);
+  assert.match(manifest, /if \(settledPhotos\.current\.has\(photoKey\)\) return/);
   assert.match(route, /rpc\("set_operation_item_checked"/);
 });
 

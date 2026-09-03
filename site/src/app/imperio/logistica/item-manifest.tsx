@@ -2,7 +2,7 @@
 
 import { Check, ImageOff } from "lucide-react";
 import Image from "next/image";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import type { Operation } from "./types";
 import { formatDate, postJson, type Run } from "./workspace";
@@ -25,6 +25,8 @@ export function ItemManifest({
   run: Run;
 }) {
   const [failedPhotos, setFailedPhotos] = useState<Set<string>>(new Set());
+  const [loadedPhotos, setLoadedPhotos] = useState<Set<string>>(new Set());
+  const settledPhotos = useRef(new Set<string>());
   const items = operation.estoquenow_context?.items ?? [];
   const photoVersion = operation.imported_at ?? "unversioned";
   const manifestPhotoKey = `${operation.id}:${photoVersion}`;
@@ -43,6 +45,13 @@ export function ItemManifest({
       (current.key === manifestPhotoKey ? current.limit : PHOTO_LOAD_CONCURRENCY) + 1,
     ),
   }));
+  const settlePhoto = (photoKey: string, loaded: boolean) => {
+    if (settledPhotos.current.has(photoKey)) return;
+    settledPhotos.current.add(photoKey);
+    if (loaded) setLoadedPhotos((current) => new Set(current).add(photoKey));
+    else setFailedPhotos((current) => new Set(current).add(photoKey));
+    advancePhotoQueue();
+  };
 
   const checks = new Map(
     operation.item_checks.map((item) => [item.source_item_id, item]),
@@ -87,6 +96,7 @@ export function ItemManifest({
           const check = checks.get(item.id);
           const isChecked = Boolean(check);
           const photoKey = `${operation.id}:${photoVersion}:${item.id}`;
+          const photoLoaded = loadedPhotos.has(photoKey);
           return (
             <li key={item.id}>
               <label
@@ -97,16 +107,20 @@ export function ItemManifest({
                 } ${!editable || busy ? "cursor-not-allowed opacity-70" : ""}`}
               >
                 <span className="relative flex min-h-28 flex-col items-center justify-center gap-2 overflow-hidden border-r border-[#d7dfd9] bg-[#edf1ee] px-2 text-center text-[#687970]">
-                  <ImageOff size={22} aria-hidden="true" />
-                  <small className="text-[11px] leading-tight">
-                    {!online
-                      ? "Foto exige conexão"
-                      : failedPhotos.has(photoKey)
-                        ? "Foto não disponível"
-                        : itemIndex < photoLoadLimit
-                          ? "Carregando foto"
-                          : "Foto aguardando carregamento"}
-                  </small>
+                  {!photoLoaded && (
+                    <>
+                      <ImageOff size={22} aria-hidden="true" />
+                      <small className="text-[11px] leading-tight">
+                        {!online
+                          ? "Foto exige conexão"
+                          : failedPhotos.has(photoKey)
+                            ? "Foto não disponível"
+                            : itemIndex < photoLoadLimit
+                              ? "Carregando foto"
+                              : "Foto aguardando carregamento"}
+                      </small>
+                    </>
+                  )}
                   {online && itemIndex < photoLoadLimit && !failedPhotos.has(photoKey) && (
                     <Image
                       unoptimized
@@ -115,11 +129,8 @@ export function ItemManifest({
                       src={`/api/imperio/item-photo?operationId=${encodeURIComponent(operation.id)}&itemId=${encodeURIComponent(item.id)}&version=${encodeURIComponent(photoVersion)}`}
                       alt={`Foto de ${item.name}`}
                       className="object-cover"
-                      onLoad={advancePhotoQueue}
-                      onError={() => {
-                        advancePhotoQueue();
-                        setFailedPhotos((current) => new Set(current).add(photoKey));
-                      }}
+                      onLoad={() => settlePhoto(photoKey, true)}
+                      onError={() => settlePhoto(photoKey, false)}
                     />
                   )}
                 </span>

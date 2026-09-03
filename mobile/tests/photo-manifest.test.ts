@@ -10,7 +10,9 @@ test("manifesto limita a quatro fotos simultâneas e avança após cada resposta
 
   assert.match(screen, /PHOTO_LOAD_CONCURRENCY = 4/);
   assert.match(screen, /itemIndex < photoLoadLimit/);
-  assert.match(screen, /onLoad=\{advancePhotoQueue\}/);
+  assert.match(screen, /const photoLoaded = loadedPhotos\.has\(photoKey\)/);
+  assert.match(screen, /\{!photoLoaded \? \(/);
+  assert.match(screen, /if \(settledPhotos\.current\.has\(photoKey\)\) return/);
   assert.match(screen, /operation\.id}:\$\{operation\.imported_at/);
   assert.doesNotMatch(screen, /setTimeout/);
 });
