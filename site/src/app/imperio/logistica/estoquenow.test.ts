@@ -266,7 +266,7 @@ test("inspeciona detalhe por GET e normaliza somente os itens permitidos", async
     { id: "row-2", itemId: "item-2", orderId: "order-1", name: "Cadeira" },
   ]);
   assert.deepEqual(inspection.contract.mediaFields, [
-    { path: "order_items.[].product_image", signatures: ["https-url", "null"], occurrences: 2 },
+    { path: "order_items.[].product_image", signatures: ["https-url-with-query", "null"], occurrences: 2 },
   ]);
   assert.equal(/Alice|alice|valor privado|media\.example|secret/.test(JSON.stringify(inspection)), false);
   await assert.rejects(() => client.inspectLogisticDetail(""), /INVALID_LOGISTIC_ID/);

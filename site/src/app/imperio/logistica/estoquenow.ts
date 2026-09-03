@@ -147,8 +147,20 @@ const mediaSignature = (value: unknown) => {
   if (typeof value !== "string") return typeof value;
   if (!value.length) return "empty-string";
   if (/^data:image\//i.test(value)) return "data-url";
-  if (/^https:\/\//i.test(value)) return "https-url";
-  if (/^http:\/\//i.test(value)) return "http-url";
+  if (/^https:\/\//i.test(value)) {
+    const credentials = /https:\/\/[^/]*@/i.test(value);
+    const query = /[?#]/.test(value);
+    return credentials
+      ? query ? "https-url-with-credentials-and-query" : "https-url-with-credentials"
+      : query ? "https-url-with-query" : "https-url";
+  }
+  if (/^http:\/\//i.test(value)) {
+    const credentials = /http:\/\/[^/]*@/i.test(value);
+    const query = /[?#]/.test(value);
+    return credentials
+      ? query ? "http-url-with-credentials-and-query" : "http-url-with-credentials"
+      : query ? "http-url-with-query" : "http-url";
+  }
   if (/\.(jpe?g|png|webp)(?:[?#].*)?$/i.test(value)) return "image-path";
   if (/^[./]/.test(value)) return "relative-path";
   return "string";
