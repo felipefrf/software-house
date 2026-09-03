@@ -472,6 +472,23 @@ test("proxy limita concorrência de mídia e repete somente falhas transitórias
   );
   assert.equal(reads, 1);
 
+  reads = 0;
+  const streamed = await fetchEstoqueNowItemPhoto(
+    "https://thumb110.estoquenow.com.br:8443/stalled.jpg",
+    async () => {
+      reads += 1;
+      return reads < 3
+        ? new Response(new ReadableStream({ pull() {} }), {
+            headers: { "content-type": "image/jpeg" },
+          })
+        : new Response("ok", { headers: { "content-type": "image/jpeg" } });
+    },
+    async () => undefined,
+    1,
+  );
+  assert.equal(reads, 3);
+  assert.equal(streamed.bytes.byteLength, 2);
+
   const holders: Array<() => void> = [];
   const activeHolders = Array.from({ length: 4 }, () =>
     withEstoqueNowMediaSlot(

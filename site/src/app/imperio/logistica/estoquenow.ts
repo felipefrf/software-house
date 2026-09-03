@@ -441,6 +441,7 @@ export const fetchEstoqueNowItemPhoto = async (
   fetchImpl: typeof fetch = fetch,
   sleep: (milliseconds: number) => Promise<void> = (milliseconds) =>
     new Promise((resolve) => setTimeout(resolve, milliseconds)),
+  bodyReadTimeoutMs = 8_000,
 ) => {
   for (let attempt = 0; attempt < MAX_MEDIA_ATTEMPTS; attempt += 1) {
     let url = allowedMediaUrl(initialUrl);
@@ -487,15 +488,36 @@ export const fetchEstoqueNowItemPhoto = async (
       const reader = response.body.getReader();
       const chunks: Uint8Array[] = [];
       let size = 0;
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        size += value.byteLength;
-        if (size > 6_000_000) {
-          await reader.cancel();
-          throw new Error("MEDIA_TOO_LARGE");
+      try {
+        while (true) {
+          let readTimeout: ReturnType<typeof setTimeout> | undefined;
+          const { done, value } = await Promise.race([
+            reader.read(),
+            new Promise<never>((_, reject) => {
+              readTimeout = setTimeout(
+                () => reject(new Error("MEDIA_FETCH_FAILED")),
+                bodyReadTimeoutMs,
+              );
+            }),
+          ]).finally(() => {
+            if (readTimeout) clearTimeout(readTimeout);
+          });
+          if (done) break;
+          size += value.byteLength;
+          if (size > 6_000_000) throw new Error("MEDIA_TOO_LARGE");
+          chunks.push(value);
         }
-        chunks.push(value);
+      } catch (error) {
+        void reader.cancel().catch(() => undefined);
+        if (
+          error instanceof Error &&
+          error.message === "MEDIA_FETCH_FAILED" &&
+          attempt + 1 < MAX_MEDIA_ATTEMPTS
+        ) {
+          await sleep(250 * 2 ** attempt);
+          break;
+        }
+        throw error;
       }
       const bytes = new Uint8Array(size);
       let offset = 0;
