@@ -113,5 +113,7 @@ test("fotos de itens passam por proxy autenticado e limitado", async () => {
   assert.match(route, /auth\.getUser/);
   assert.match(route, /fetchEstoqueNowItemPhoto/);
   assert.match(route, /data\.imported_at !== version/);
+  assert.match(route, /sourceHost/);
+  assert.doesNotMatch(route, /pathname|searchParams\.toString/);
   assert.match(route, /x-content-type-options/);
 });

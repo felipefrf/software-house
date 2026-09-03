@@ -12,6 +12,17 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 const isUuid = (value: string) =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 
+const SAFE_PHOTO_ERRORS = new Set([
+  "MEDIA_HOST_NOT_ALLOWED",
+  "MEDIA_REDIRECT_INVALID",
+  "MEDIA_FETCH_FAILED",
+  "MEDIA_TYPE_INVALID",
+  "MEDIA_TOO_LARGE",
+  "ESTOQUENOW_SOURCE_ITEM_CHANGED",
+  "ESTOQUENOW_ITEM_PHOTO_UNAVAILABLE",
+  "ESTOQUENOW_INVALID_ITEM_PHOTO",
+]);
+
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
   const operationId = requestUrl.searchParams.get("operationId")?.trim() ?? "";
@@ -54,8 +65,10 @@ export async function GET(request: Request) {
   if (!data.external_id || !item || data.imported_at !== version)
     return NextResponse.json({ error: "Foto indisponível." }, { status: 404 });
 
+  let sourceHost = "";
   try {
     const photo = await readEstoqueNowItemPhoto(data.external_id, item);
+    sourceHost = new URL(photo.url).hostname.toLowerCase();
     const image = await fetchEstoqueNowItemPhoto(photo.url);
     return new NextResponse(image.bytes, {
       headers: {
@@ -65,7 +78,13 @@ export async function GET(request: Request) {
         vary: "Authorization, Cookie",
       },
     });
-  } catch {
-    return NextResponse.json({ error: "Foto indisponível." }, { status: 404 });
+  } catch (error) {
+    const reason = error instanceof Error && SAFE_PHOTO_ERRORS.has(error.message)
+      ? error.message
+      : "PHOTO_UNAVAILABLE";
+    return NextResponse.json(
+      { error: "Foto indisponível.", reason, ...(sourceHost ? { sourceHost } : {}) },
+      { status: 404 },
+    );
   }
 }
