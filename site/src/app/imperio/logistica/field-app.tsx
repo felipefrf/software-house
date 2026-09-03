@@ -190,8 +190,8 @@ function OperationRow({
           emphasis ? "border-imp-line/70" : "border-imp-line/70"
         }`}
       >
-        <span className="flex items-baseline justify-between gap-3">
-          <span className={`font-imp-display font-semibold tabular-nums ${emphasis ? "text-[26px] leading-7" : "text-[18px] leading-6"}`}>
+        <span className="flex items-center justify-between gap-3">
+          <span className="text-[14px] font-semibold tabular-nums text-imp-green">
             {formatWhen(operation.scheduled_at)}
           </span>
           {operation.status !== "active" && (
@@ -200,7 +200,7 @@ function OperationRow({
             </Pill>
           )}
         </span>
-        <span className={`mt-1 block break-words font-semibold ${emphasis ? "text-[19px] leading-6" : "text-[16px] leading-5"}`}>
+        <span className={`mt-1 block break-words font-imp-display font-semibold ${emphasis ? "text-[22px] leading-7" : "text-[19px] leading-6"}`}>
           {operation.event_name}
         </span>
         <span className="mt-0.5 line-clamp-2 block text-[14px] leading-5 text-imp-muted">{place.address}</span>
@@ -208,10 +208,8 @@ function OperationRow({
           <span className="mt-3 flex items-end justify-between gap-3 border-t border-imp-line pt-3">
             <span className="text-[14px]">
               <RouteDots operation={operation} className="mb-1.5" />
-              <span className="block">
-                <strong>{stageLabels[operation.stage]}</strong>
-                <span className="text-imp-muted"> · etapa {stageIndex} de {operationStages.length}</span>
-              </span>
+              <strong className="block text-[15px]">{stageLabels[operation.stage]}</strong>
+              <span className="block text-[13px] text-imp-muted">Etapa {stageIndex} de {operationStages.length}</span>
             </span>
             <span className="text-[15px] font-semibold text-imp-green">{isOperationalToday(operation) ? "Continuar" : "Abrir"}</span>
           </span>
@@ -945,23 +943,19 @@ export function FieldApp(props: Props) {
                         <li key={item.id} className="flex items-start gap-3 py-3">
                           <Check size={18} className="mt-0.5 shrink-0 text-imp-green" aria-hidden="true" />
                           <div className="min-w-0 flex-1">
-                            <p className="text-[16px] font-semibold">
-                              {stageLabels[item.stage]} <span className="font-normal text-imp-muted">· {formatWhen(item.server_received_at)}</span>
-                            </p>
-                            <p className="text-[14px] text-imp-muted">
-                              {item.actor_name} ·{" "}
+                            <p className="text-[16px] font-semibold">{stageLabels[item.stage]}</p>
+                            <p className="mt-0.5 text-[13px] tabular-nums text-imp-muted">{formatWhen(item.server_received_at)}</p>
+                            <p className="mt-1 text-[14px] text-imp-muted">Confirmado por {item.actor_name}</p>
+                            <div className="mt-1 flex flex-wrap gap-x-4">
                               <a href={mapsPointUrl(item.latitude, item.longitude)} target="_blank" rel="noreferrer" className={linkClass}>
                                 Ver no mapa
                               </a>
                               {item.photo_url && (
-                                <>
-                                  {" · "}
-                                  <a href={item.photo_url} target="_blank" rel="noreferrer" className={linkClass}>
-                                    Abrir foto
-                                  </a>
-                                </>
+                                <a href={item.photo_url} target="_blank" rel="noreferrer" className={linkClass}>
+                                  Abrir foto
+                                </a>
                               )}
-                            </p>
+                            </div>
                           </div>
                         </li>
                       ))}
@@ -986,9 +980,8 @@ export function FieldApp(props: Props) {
                   <strong className="block text-[16px]">
                     {props.snapshot.operations.find((operation) => operation.id === pending.operationId)?.event_name ?? "Operação"}
                   </strong>
-                  <p className="text-[14px] text-imp-amber">
-                    {stageLabels[pending.stage]} · concluída {formatDate(pending.deviceCapturedAt)}
-                  </p>
+                  <p className="mt-1 text-[14px] font-semibold text-imp-amber">{stageLabels[pending.stage]}</p>
+                  <p className="text-[13px] tabular-nums text-imp-muted">Concluída {formatDate(pending.deviceCapturedAt)}</p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Button
                       variant="primary"

@@ -129,9 +129,9 @@ export function ItemManifest({
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="line-clamp-2 block text-[15px] font-medium leading-5">{item.name}</span>
-                  <span className="mt-0.5 block text-[13px] text-imp-muted">
-                    Item {item.itemId}
-                    {check && ` · conferido ${formatShortDate(check.checked_at)} ${formatTime(check.checked_at)}`}
+                  <span className="mt-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 text-[13px] text-imp-muted">
+                    <span>Item {item.itemId}</span>
+                    {check && <span className="text-imp-green">Conferido {formatShortDate(check.checked_at)} às {formatTime(check.checked_at)}</span>}
                   </span>
                 </span>
                 <input

@@ -87,7 +87,7 @@ export function Notice({
       <span aria-hidden="true" className={`w-1.5 shrink-0 ${band}`} />
       <div className="min-w-0 flex-1 px-4 py-3">
         <p className="font-semibold text-imp-ink">{title}</p>
-        {children && <div className="mt-0.5 text-[15px] leading-6 text-imp-ink/85">{children}</div>}
+        {children && <div className="mt-1 text-[14px] leading-5 text-imp-muted">{children}</div>}
         {action && <div className="mt-3">{action}</div>}
       </div>
     </div>
@@ -136,9 +136,9 @@ export function SectionTitle({
 }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-2">
-      <Tag className="flex items-baseline gap-2 text-[17px] font-semibold leading-6">
+      <Tag className="flex items-center gap-2.5 text-[17px] font-semibold leading-6">
         {children}
-        {count !== undefined && <span className="text-[15px] font-medium text-imp-muted">{count}</span>}
+        {count !== undefined && <span className="rounded-full bg-imp-ground px-2 py-0.5 text-[12px] font-semibold tabular-nums text-imp-muted">{count}</span>}
       </Tag>
       {action}
     </div>
@@ -171,7 +171,7 @@ export function Disclosure({
           </span>
           {summary}
         </span>
-        {meta && <span className="shrink-0 whitespace-nowrap text-[14px] font-medium text-imp-muted">{meta}</span>}
+        {meta && <span className="shrink-0 whitespace-nowrap text-[13px] font-medium text-imp-muted">{meta}</span>}
       </summary>
       <div className="pb-4 pl-7">{children}</div>
     </details>
