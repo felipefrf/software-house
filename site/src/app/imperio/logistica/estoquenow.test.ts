@@ -306,6 +306,33 @@ test("resolve foto somente quando o item ainda corresponde ao snapshot", () => {
   );
 });
 
+test("prova a mídia sem retornar URL assinada", async () => {
+  const fetchImpl: typeof fetch = async (input) => {
+    const url = String(input);
+    if (url.endsWith("/oauth2/token")) return Response.json({ token: "redacted" });
+    if (url.startsWith("https://media.estoquenow.com.br/"))
+      return new Response("image", { headers: { "content-type": "image/jpeg" } });
+    return Response.json({
+      order_items: [{
+        id: "row-1",
+        item_id: "item-1",
+        order_id: "order-1",
+        item_name: "Mesa",
+        item_url_image: "https://media.estoquenow.com.br/item.jpg?signature=redacted",
+      }],
+    });
+  };
+  const client = new EstoqueNowClient({ clientId: "id", clientSecret: "secret", fetchImpl });
+  const detail = await client.inspectLogisticDetail("123", true);
+  assert.deepEqual(detail.mediaProbe, {
+    available: true,
+    sourceHost: "media.estoquenow.com.br",
+    contentType: "image/jpeg",
+    reason: null,
+  });
+  assert.equal(JSON.stringify(detail).includes("signature=redacted"), false);
+});
+
 test("reutiliza detalhe somente entre fotos e mantém a confirmação fresca", async () => {
   let reads = 0;
   const fetchImpl: typeof fetch = async (input) => {

@@ -134,6 +134,12 @@ type EstoqueNowDetailPreview = {
   itemsBlocked: boolean;
   checksReset: number;
   items: Array<{ id: string; itemId: string; orderId: string; name: string }>;
+  mediaProbe: {
+    available: boolean;
+    sourceHost: string | null;
+    contentType: string | null;
+    reason: string | null;
+  } | null;
   contract: {
     fields: Array<{ path: string; signatures: string[]; occurrences: number }>;
     mediaFields: Array<{ path: string; signatures: string[]; occurrences: number }>;
@@ -1631,6 +1637,7 @@ function IntegrationsView(props: Props) {
                     {detailPreview.contract.mediaFields.map((field) => <p key={field.path} className="grid gap-1 py-2 sm:grid-cols-[minmax(0,1fr)_auto]"><code className="break-all">{field.path}</code><span className="text-[#5f7067]">{field.signatures.join(" | ")} · {field.occurrences}x</span></p>)}
                   </div>
                 ) : <p className="mt-2 text-xs text-[#5f7067]">Nenhum campo estável de foto foi confirmado neste detalhe.</p>}
+                {detailPreview.mediaProbe && <p className="mt-2 text-xs text-[#5f7067]">Teste da mídia · {detailPreview.mediaProbe.available ? `${detailPreview.mediaProbe.contentType} disponível` : detailPreview.mediaProbe.reason} · {detailPreview.mediaProbe.sourceHost ?? "origem indisponível"}</p>}
                 <p className="mt-4 text-sm font-semibold">Linhas de item · {detailPreview.items.length}</p>
                 <ul className="mt-2 max-h-64 divide-y divide-[#e1e7e3] overflow-auto text-sm">
                   {detailPreview.items.map((item) => <li key={item.id} className="py-2"><strong>{item.name}</strong><span className="ml-2 font-mono text-xs text-[#5f7067]">item {item.itemId}</span></li>)}

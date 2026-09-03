@@ -66,6 +66,13 @@ export type EstoqueNowItemPhoto = {
   url: string;
 };
 
+export type EstoqueNowItemPhotoProbe = {
+  available: boolean;
+  sourceHost: string | null;
+  contentType: string | null;
+  reason: string | null;
+};
+
 export const canonicalItems = (items: EstoqueNowItem[]) =>
   items
     .map(({ id, itemId, orderId, name }) => ({ id, itemId, orderId, name }))
@@ -744,9 +751,29 @@ export class EstoqueNowClient {
     return (await this.listLogisticsWithContract(startDate, endDate)).operations;
   }
 
-  async inspectLogisticDetail(id: string) {
+  async inspectLogisticDetail(id: string, probeMedia = false) {
     const payload = await this.logisticDetail(id);
     const fields = contractFrom(payload, SAFE_DETAIL_KEYS);
+    const items = itemsFromDetail(payload);
+    let mediaProbe: EstoqueNowItemPhotoProbe | null = null;
+    if (probeMedia && items[0]) {
+      let sourceHost: string | null = null;
+      try {
+        const photo = itemPhotoFromDetail(payload, items[0]);
+        sourceHost = new URL(photo.url).hostname.toLowerCase();
+        const image = await fetchEstoqueNowItemPhoto(photo.url, this.config.fetchImpl ?? fetch);
+        mediaProbe = { available: true, sourceHost, contentType: image.contentType, reason: null };
+      } catch (error) {
+        mediaProbe = {
+          available: false,
+          sourceHost,
+          contentType: null,
+          reason: error instanceof Error && /^(MEDIA_|ESTOQUENOW_(SOURCE_ITEM_CHANGED|ITEM_PHOTO_UNAVAILABLE|INVALID_ITEM_PHOTO))/.test(error.message)
+            ? error.message
+            : "PHOTO_UNAVAILABLE",
+        };
+      }
+    }
     return {
       contract: {
         fields: [...fields.entries()]
@@ -758,7 +785,8 @@ export class EstoqueNowClient {
           .sort((left, right) => left.path.localeCompare(right.path)),
         mediaFields: mediaContractFromDetail(payload),
       } satisfies EstoqueNowDetailContract,
-      items: itemsFromDetail(payload),
+      items,
+      mediaProbe,
     };
   }
 

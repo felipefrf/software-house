@@ -68,7 +68,7 @@ export async function inspectEstoqueNowDetail(externalId: string) {
     baseUrl: process.env.ESTOQUENOW_API_URL,
     writeEnabled: process.env.ESTOQUENOW_WRITE_ENABLED === "true",
   });
-  return liveClient.inspectLogisticDetail(externalId);
+  return liveClient.inspectLogisticDetail(externalId, true);
 }
 
 export async function readEstoqueNowItems(externalId: string) {
