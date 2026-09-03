@@ -442,12 +442,15 @@ test("proxy limita concorrência de mídia e repete somente falhas transitórias
 
   let reads = 0;
   const delays: number[] = [];
+  const retrySignals: AbortSignal[] = [];
   const image = await fetchEstoqueNowItemPhoto(
     "https://thumb110.estoquenow.com.br:8443/item.jpg",
-    async () => {
+    async (_input, init) => {
       reads += 1;
+      if (reads > 1) assert.equal(retrySignals[reads - 2]?.aborted, true);
+      if (init?.signal) retrySignals.push(init.signal);
       return reads < 3
-        ? new Response(null, { status: 503 })
+        ? new Response(new ReadableStream({ pull() {} }), { status: 503 })
         : new Response("ok", { headers: { "content-type": "image/jpeg" } });
     },
     async (milliseconds) => {
@@ -456,6 +459,7 @@ test("proxy limita concorrência de mídia e repete somente falhas transitórias
   );
   assert.equal(reads, 3);
   assert.deepEqual(delays, [250, 500]);
+  assert.ok(retrySignals.every((signal) => signal.aborted));
   assert.equal(image.bytes.byteLength, 2);
 
   reads = 0;
@@ -473,20 +477,34 @@ test("proxy limita concorrência de mídia e repete somente falhas transitórias
   assert.equal(reads, 1);
 
   reads = 0;
+  const signals: AbortSignal[] = [];
   const streamed = await fetchEstoqueNowItemPhoto(
     "https://thumb110.estoquenow.com.br:8443/stalled.jpg",
-    async () => {
+    async (_input, init) => {
       reads += 1;
-      return reads < 3
-        ? new Response(new ReadableStream({ pull() {} }), {
-            headers: { "content-type": "image/jpeg" },
-          })
-        : new Response("ok", { headers: { "content-type": "image/jpeg" } });
+      const signal = init?.signal;
+      if (signal) signals.push(signal);
+      if (reads === 3)
+        return new Response("ok", { headers: { "content-type": "image/jpeg" } });
+      let interval: ReturnType<typeof setInterval> | undefined;
+      return new Response(new ReadableStream({
+        start(controller) {
+          interval = setInterval(() => controller.enqueue(Uint8Array.of(1)), 1);
+          signal?.addEventListener("abort", () => {
+            if (interval) clearInterval(interval);
+            controller.error(new DOMException("Aborted", "AbortError"));
+          }, { once: true });
+        },
+        cancel() {
+          if (interval) clearInterval(interval);
+        },
+      }), { headers: { "content-type": "image/jpeg" } });
     },
     async () => undefined,
-    1,
+    5,
   );
   assert.equal(reads, 3);
+  assert.ok(signals.slice(0, 2).every((signal) => signal.aborted));
   assert.equal(streamed.bytes.byteLength, 2);
 
   const holders: Array<() => void> = [];

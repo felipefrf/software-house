@@ -441,91 +441,97 @@ export const fetchEstoqueNowItemPhoto = async (
   fetchImpl: typeof fetch = fetch,
   sleep: (milliseconds: number) => Promise<void> = (milliseconds) =>
     new Promise((resolve) => setTimeout(resolve, milliseconds)),
-  bodyReadTimeoutMs = 8_000,
+  attemptTimeoutMs = 8_000,
 ) => {
   for (let attempt = 0; attempt < MAX_MEDIA_ATTEMPTS; attempt += 1) {
-    let url = allowedMediaUrl(initialUrl);
-    for (let redirects = 0; redirects <= 2; redirects += 1) {
-      let response: Response;
-      try {
-        response = await fetchImpl(url, {
-          cache: "no-store",
-          redirect: "manual",
-          signal: AbortSignal.timeout(8_000),
-        });
-      } catch {
-        if (attempt + 1 < MAX_MEDIA_ATTEMPTS) {
-          await sleep(250 * 2 ** attempt);
-          break;
-        }
-        throw new Error("MEDIA_FETCH_FAILED");
-      }
-      if (response.status >= 300 && response.status < 400) {
-        const location = response.headers.get("location");
-        if (!location || redirects === 2) throw new Error("MEDIA_REDIRECT_INVALID");
-        url = allowedMediaUrl(new URL(location, url).toString());
-        continue;
-      }
-      if (!response.ok || !response.body) {
-        const transient = response.status === 429 || response.status >= 500;
-        if (transient && attempt + 1 < MAX_MEDIA_ATTEMPTS) {
-          const retryHeader = response.headers.get("retry-after");
-          const retryAfter = retryHeader === null ? Number.NaN : Number(retryHeader);
-          const delay = Number.isFinite(retryAfter)
-            ? Math.min(Math.max(retryAfter * 1_000, 250), 2_000)
-            : 250 * 2 ** attempt;
-          await sleep(delay);
-          break;
-        }
-        throw new Error("MEDIA_FETCH_FAILED");
-      }
-      const contentType = response.headers.get("content-type")?.split(";")[0] ?? "";
-      if (!new Set(["image/jpeg", "image/png", "image/webp"]).has(contentType))
-        throw new Error("MEDIA_TYPE_INVALID");
-      const declaredSize = Number(response.headers.get("content-length"));
-      if (Number.isFinite(declaredSize) && declaredSize > 6_000_000)
-        throw new Error("MEDIA_TOO_LARGE");
-      const reader = response.body.getReader();
-      const chunks: Uint8Array[] = [];
-      let size = 0;
-      try {
-        while (true) {
-          let readTimeout: ReturnType<typeof setTimeout> | undefined;
-          const { done, value } = await Promise.race([
-            reader.read(),
-            new Promise<never>((_, reject) => {
-              readTimeout = setTimeout(
-                () => reject(new Error("MEDIA_FETCH_FAILED")),
-                bodyReadTimeoutMs,
-              );
-            }),
-          ]).finally(() => {
-            if (readTimeout) clearTimeout(readTimeout);
+    const controller = new AbortController();
+    const attemptTimeout = setTimeout(() => controller.abort(), attemptTimeoutMs);
+    try {
+      let url = allowedMediaUrl(initialUrl);
+      for (let redirects = 0; redirects <= 2; redirects += 1) {
+        let response: Response;
+        try {
+          response = await fetchImpl(url, {
+            cache: "no-store",
+            redirect: "manual",
+            signal: controller.signal,
           });
-          if (done) break;
-          size += value.byteLength;
-          if (size > 6_000_000) throw new Error("MEDIA_TOO_LARGE");
-          chunks.push(value);
+        } catch {
+          if (attempt + 1 < MAX_MEDIA_ATTEMPTS) {
+            await sleep(250 * 2 ** attempt);
+            break;
+          }
+          throw new Error("MEDIA_FETCH_FAILED");
         }
-      } catch (error) {
-        void reader.cancel().catch(() => undefined);
-        if (
-          error instanceof Error &&
-          error.message === "MEDIA_FETCH_FAILED" &&
-          attempt + 1 < MAX_MEDIA_ATTEMPTS
-        ) {
-          await sleep(250 * 2 ** attempt);
-          break;
+        if (response.status >= 300 && response.status < 400) {
+          const location = response.headers.get("location");
+          if (!location || redirects === 2) throw new Error("MEDIA_REDIRECT_INVALID");
+          url = allowedMediaUrl(new URL(location, url).toString());
+          continue;
         }
-        throw error;
+        if (!response.ok || !response.body) {
+          const transient = response.status === 429 || response.status >= 500;
+          if (transient && attempt + 1 < MAX_MEDIA_ATTEMPTS) {
+            const retryHeader = response.headers.get("retry-after");
+            const retryAfter = retryHeader === null ? Number.NaN : Number(retryHeader);
+            const delay = Number.isFinite(retryAfter)
+              ? Math.min(Math.max(retryAfter * 1_000, 250), 2_000)
+              : 250 * 2 ** attempt;
+            await sleep(delay);
+            break;
+          }
+          throw new Error("MEDIA_FETCH_FAILED");
+        }
+        const contentType = response.headers.get("content-type")?.split(";")[0] ?? "";
+        if (!new Set(["image/jpeg", "image/png", "image/webp"]).has(contentType))
+          throw new Error("MEDIA_TYPE_INVALID");
+        const declaredSize = Number(response.headers.get("content-length"));
+        if (Number.isFinite(declaredSize) && declaredSize > 6_000_000)
+          throw new Error("MEDIA_TOO_LARGE");
+        const reader = response.body.getReader();
+        const chunks: Uint8Array[] = [];
+        let size = 0;
+        try {
+          while (true) {
+            let readTimeout: ReturnType<typeof setTimeout> | undefined;
+            const { done, value } = await Promise.race([
+              reader.read(),
+              new Promise<never>((_, reject) => {
+                readTimeout = setTimeout(() => {
+                  controller.abort();
+                  reject(new Error("MEDIA_FETCH_FAILED"));
+                }, attemptTimeoutMs);
+              }),
+            ]).finally(() => {
+              if (readTimeout) clearTimeout(readTimeout);
+            });
+            if (done) break;
+            size += value.byteLength;
+            if (size > 6_000_000) throw new Error("MEDIA_TOO_LARGE");
+            chunks.push(value);
+          }
+        } catch (error) {
+          void reader.cancel().catch(() => undefined);
+          const timedOut = controller.signal.aborted ||
+            (error instanceof Error && error.message === "MEDIA_FETCH_FAILED");
+          if (timedOut && attempt + 1 < MAX_MEDIA_ATTEMPTS) {
+            await sleep(250 * 2 ** attempt);
+            break;
+          }
+          if (timedOut) throw new Error("MEDIA_FETCH_FAILED");
+          throw error;
+        }
+        const bytes = new Uint8Array(size);
+        let offset = 0;
+        for (const chunk of chunks) {
+          bytes.set(chunk, offset);
+          offset += chunk.byteLength;
+        }
+        return { bytes, contentType };
       }
-      const bytes = new Uint8Array(size);
-      let offset = 0;
-      for (const chunk of chunks) {
-        bytes.set(chunk, offset);
-        offset += chunk.byteLength;
-      }
-      return { bytes, contentType };
+    } finally {
+      controller.abort();
+      clearTimeout(attemptTimeout);
     }
   }
   throw new Error("MEDIA_FETCH_FAILED");
