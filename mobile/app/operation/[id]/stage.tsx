@@ -2,7 +2,7 @@ import * as Crypto from "expo-crypto";
 import * as Linking from "expo-linking";
 import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -23,6 +23,7 @@ import {
   stageRequirementProgress,
   stageLabels,
 } from "@/lib/checklist";
+import { ROUTE_TRACKING_TERMS_TEXT } from "@/lib/route-tracking-policy";
 import { colors } from "@/lib/theme";
 import type { LocationEvidence, OutboxAction } from "@/lib/types";
 
@@ -44,7 +45,33 @@ export default function StageScreen() {
   const [arrivalAccess, setArrivalAccess] = useState<"released" | "blocked" | "">("");
   const [arrivalReason, setArrivalReason] = useState("");
   const [acceptanceName, setAcceptanceName] = useState("");
+  const [trackingTermsAccepted, setTrackingTermsAccepted] = useState(false);
   const [error, setError] = useState("");
+
+  const captureLocation = useCallback(async () => {
+    setError("");
+    setLocationDenied(false);
+    setLocationBusy(true);
+    try {
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (!permission.granted) {
+        setLocationDenied(true);
+        throw new Error("Libere a localização durante o uso para registrar a ação.");
+      }
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+      setLocation({
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+        accuracy: position.coords.accuracy ?? 0,
+      });
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "GPS indisponível.");
+    } finally {
+      setLocationBusy(false);
+    }
+  }, []);
 
   const responsiblePeople = useMemo(() => {
     if (!operation || !work) return [];
@@ -57,6 +84,12 @@ export default function StageScreen() {
     ]);
     return work.people.filter((person) => allowed.has(person.id));
   }, [operation, work]);
+
+  useEffect(() => {
+    if (!operation || operation.stage === "preparation") return;
+    if (operation.stage === "departure" && !trackingTermsAccepted) return;
+    void captureLocation();
+  }, [captureLocation, operation, trackingTermsAccepted]);
 
   if (!operation || !work)
     return (
@@ -126,33 +159,17 @@ export default function StageScreen() {
     arrivalValid,
     acceptanceValid,
   });
-  const complete = progress.missing.length === 0;
+  const trackingConsentRequired = operation.stage === "departure";
+  const trackingConsentValid = !trackingConsentRequired || trackingTermsAccepted;
+  const missingRequirements = [
+    ...progress.missing,
+    ...(trackingConsentValid ? [] : ["Aceite dos termos de rastreamento"]),
+  ];
+  const completedRequirements =
+    progress.completed + (trackingConsentRequired && trackingTermsAccepted ? 1 : 0);
+  const totalRequirements = progress.total + (trackingConsentRequired ? 1 : 0);
+  const complete = missingRequirements.length === 0;
   const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(operation.destination)}`;
-
-  const captureLocation = async () => {
-    setError("");
-    setLocationDenied(false);
-    setLocationBusy(true);
-    try {
-      const permission = await Location.requestForegroundPermissionsAsync();
-      if (!permission.granted) {
-        setLocationDenied(true);
-        throw new Error("Libere a localização durante o uso para registrar a ação.");
-      }
-      const position = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
-      });
-      setLocation({
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
-        accuracy: position.coords.accuracy ?? 0,
-      });
-    } catch (failure) {
-      setError(failure instanceof Error ? failure.message : "GPS indisponível.");
-    } finally {
-      setLocationBusy(false);
-    }
-  };
 
   const submit = async () => {
     if (!complete || !photoUri || !location || duplicate || submitting) return;
@@ -174,6 +191,7 @@ export default function StageScreen() {
       arrivalAccess,
       arrivalReason: arrivalReason.trim(),
       acceptanceName: acceptanceName.trim(),
+      trackingTermsAccepted,
       attempts: 0,
       lastError: null,
       updatedAt: new Date().toISOString(),
@@ -272,16 +290,24 @@ export default function StageScreen() {
 
           <Card style={styles.sectionCard}>
             <Text style={styles.sectionEyebrow}>3 · Local e horário</Text>
-            <Text style={styles.sectionTitle}>Capture o GPS neste momento</Text>
+            <Text style={styles.sectionTitle}>
+              {operation.stage === "preparation" ? "Registre o ponto inicial" : "GPS automático"}
+            </Text>
             <Text style={styles.sectionCopy}>
-              Somente a localização em primeiro plano é registrada. O app não rastreia em background.
+              {operation.stage === "departure"
+                ? "Ao aceitar os termos, o app captura este ponto e continua em segundo plano até o retorno."
+                : operation.stage === "preparation"
+                  ? "Este ponto comprova o local e a precisão da preparação."
+                  : "O app captura o local desta etapa sem exigir uma ação manual."}
             </Text>
             <View style={styles.captureGap}>
               <Button
                 label={
                   location
                     ? `GPS capturado · precisão ${Math.round(location.accuracy)} m`
-                    : "Registrar GPS"
+                    : operation.stage === "preparation"
+                      ? "Registrar GPS"
+                      : "Atualizar GPS"
                 }
                 variant="secondary"
                 busy={locationBusy}
@@ -298,6 +324,39 @@ export default function StageScreen() {
               </View>
             ) : null}
           </Card>
+
+          {trackingConsentRequired ? (
+            <Card style={styles.sectionCard}>
+              <Text style={styles.sectionEyebrow}>Termos de uso do rastreamento</Text>
+              <Text style={styles.sectionTitle}>Autorize somente para esta rota</Text>
+              <Text style={styles.sectionCopy}>{ROUTE_TRACKING_TERMS_TEXT}</Text>
+              <Pressable
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: trackingTermsAccepted }}
+                accessibilityLabel="Aceito os termos de uso do rastreamento desta operação"
+                style={styles.trackingConsent}
+                onPress={() => setTrackingTermsAccepted((accepted) => !accepted)}
+              >
+                <View style={[styles.check, trackingTermsAccepted && styles.checkDone]}>
+                  <Text
+                    style={[
+                      styles.checkMark,
+                      trackingTermsAccepted && styles.checkMarkDone,
+                    ]}
+                  >
+                    {trackingTermsAccepted ? "OK" : ""}
+                  </Text>
+                </View>
+                <Text style={styles.checkLabel}>
+                  Li e aceito os termos de uso do rastreamento desta operação.
+                </Text>
+              </Pressable>
+              <Text style={styles.termsNotice}>
+                O aceite será registrado com usuário, operação, versão e horário antes de a
+                permissão do aparelho ser usada.
+              </Text>
+            </Card>
+          ) : null}
 
           <Card style={styles.sectionCard}>
             <Text style={styles.sectionEyebrow}>4 · Responsável</Text>
@@ -414,11 +473,11 @@ export default function StageScreen() {
         </ScrollView>
         <View style={styles.submitCard}>
           <Text style={styles.requirementCount}>
-            {progress.completed} de {progress.total} requisitos
+            {completedRequirements} de {totalRequirements} requisitos
           </Text>
-          {progress.missing.length ? (
+          {missingRequirements.length ? (
             <Text style={styles.missingRequirements}>
-              Falta: {progress.missing.join(" · ")}
+              Falta: {missingRequirements.join(" · ")}
             </Text>
           ) : null}
           <Text style={styles.submitHint}>
@@ -461,6 +520,8 @@ const styles = StyleSheet.create({
   sectionTitle: { color: colors.ink, fontSize: 20, fontWeight: "900", marginTop: 5 },
   sectionCopy: { color: colors.muted, fontSize: 12, lineHeight: 18, marginTop: 5 },
   checklist: { marginTop: 13, borderTopColor: colors.line, borderTopWidth: StyleSheet.hairlineWidth },
+  trackingConsent: { minHeight: 66, flexDirection: "row", alignItems: "center", gap: 12, marginTop: 14, borderTopColor: colors.line, borderTopWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line, borderBottomWidth: StyleSheet.hairlineWidth },
+  termsNotice: { color: colors.muted, fontSize: 11, lineHeight: 16, marginTop: 10 },
   checkRow: { minHeight: 66, flexDirection: "row", alignItems: "center", gap: 12, borderBottomColor: colors.line, borderBottomWidth: StyleSheet.hairlineWidth },
   check: { width: 30, height: 30, borderColor: colors.amber, borderWidth: 2, alignItems: "center", justifyContent: "center" },
   checkDone: { borderColor: colors.green, backgroundColor: colors.green },

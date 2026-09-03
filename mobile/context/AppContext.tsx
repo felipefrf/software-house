@@ -28,6 +28,14 @@ import {
   saveCachedWork,
 } from "@/lib/database";
 import { loadRemoteWork } from "@/lib/repository";
+import {
+  reconcileOperationRouteTracking,
+  startOperationRouteTracking,
+  stopOperationRouteTracking,
+  stopRouteTrackingForSignOut,
+  syncRouteTracking,
+} from "@/lib/route-tracking";
+import { endsRouteTracking, startsRouteTracking } from "@/lib/route-tracking-policy";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase";
 import {
   cleanupDiscardedLocalEvidence,
@@ -152,6 +160,7 @@ export function AppProvider({ children }: PropsWithChildren) {
       const request = (async () => {
         try {
           await syncPending(userId, manual);
+          await syncRouteTracking(userId).catch(() => false);
           await reloadOutbox(userId);
           if (onlineRef.current && isCurrent(snapshot)) {
             const remote = await loadRemoteWork(userId);
@@ -267,6 +276,12 @@ export function AppProvider({ children }: PropsWithChildren) {
     return () => subscription.remove();
   }, [online, session?.user.id, syncNow]);
 
+  useEffect(() => {
+    const userId = session?.user.id;
+    if (!userId || !work) return;
+    void reconcileOperationRouteTracking(userId, work.operations).catch(() => undefined);
+  }, [session?.user.id, work]);
+
   const withBusy = async (task: () => Promise<void>) => {
     setBusy(true);
     try {
@@ -307,6 +322,7 @@ export function AppProvider({ children }: PropsWithChildren) {
             ? syncInFlight.current.promise
             : null;
         await activeSync?.catch(() => undefined);
+        await stopRouteTrackingForSignOut(currentSession.user.id).catch(() => undefined);
         const result = await client.auth.signOut({ scope: "local" });
         const reconciled = await client.auth.getSession();
         adoptSession(reconciled.data.session);
@@ -329,7 +345,37 @@ export function AppProvider({ children }: PropsWithChildren) {
     enqueue: async (action) => {
       if (!session) throw new Error("Sessão encerrada.");
       const userId = session.user.id;
-      await persistAction(userId, action);
+      let trackingStarted = false;
+      if (startsRouteTracking(action.stage)) {
+        if (!onlineRef.current)
+          throw new Error(
+            "Conecte o aparelho para registrar o aceite dos termos e iniciar o rastreamento.",
+          );
+        await startOperationRouteTracking({
+          userId,
+          operationId: action.operationId,
+          initialLocation: action.location,
+          termsAccepted: action.trackingTermsAccepted === true,
+        });
+        trackingStarted = true;
+      }
+      try {
+        await persistAction(userId, action);
+      } catch (failure) {
+        if (trackingStarted)
+          await stopOperationRouteTracking(
+            userId,
+            action.operationId,
+            "departure_failed",
+          ).catch(() => undefined);
+        throw failure;
+      }
+      if (endsRouteTracking(action.stage))
+        await stopOperationRouteTracking(
+          userId,
+          action.operationId,
+          action.stage === "return" ? "returned" : "completed",
+        );
       await reloadOutbox(userId);
       if (onlineRef.current) {
         await syncNow(userId).catch(() =>

@@ -4,7 +4,25 @@ set local role postgres;
 create extension if not exists pgtap with schema extensions;
 set local search_path = extensions, public;
 
-select plan(149);
+select plan(167);
+
+select ok(
+  to_regprocedure('private.invoke_imperio_estoquenow_pull()') is not null,
+  'invocador privado do pull contínuo existe'
+);
+select ok(
+  not has_function_privilege(
+    'authenticated',
+    'private.invoke_imperio_estoquenow_pull()',
+    'EXECUTE'
+  ),
+  'cliente autenticado não pode disparar o scheduler privado'
+);
+select is(
+  (select schedule from cron.job where jobname = 'imperio-estoquenow-pull-15min'),
+  '*/15 * * * *',
+  'pull contínuo é agendado a cada quinze minutos'
+);
 
 select has_table(
   'public',
@@ -28,6 +46,45 @@ select ok(
     and not has_table_privilege('service_role', 'public.estoquenow_operation_contexts', 'UPDATE')
     and not has_table_privilege('service_role', 'public.estoquenow_operation_contexts', 'DELETE'),
   'service_role grava contexto somente pelo RPC estreito'
+);
+
+select has_table('public', 'operation_tracking_sessions', 'sessões de tracking existem');
+select has_table('public', 'operation_route_points', 'pontos de rota existem');
+select is(
+  (select relrowsecurity from pg_catalog.pg_class where oid = 'public.operation_tracking_sessions'::regclass),
+  true,
+  'sessões de tracking usam RLS'
+);
+select is(
+  (select relrowsecurity from pg_catalog.pg_class where oid = 'public.operation_route_points'::regclass),
+  true,
+  'pontos de rota usam RLS'
+);
+select ok(
+  has_table_privilege('authenticated', 'public.operation_tracking_sessions', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.operation_tracking_sessions', 'INSERT')
+    and not has_table_privilege('authenticated', 'public.operation_tracking_sessions', 'UPDATE')
+    and not has_table_privilege('authenticated', 'public.operation_tracking_sessions', 'DELETE'),
+  'authenticated lê sessões autorizadas, mas não grava diretamente'
+);
+select ok(
+  has_table_privilege('authenticated', 'public.operation_route_points', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.operation_route_points', 'INSERT')
+    and not has_table_privilege('authenticated', 'public.operation_route_points', 'UPDATE')
+    and not has_table_privilege('authenticated', 'public.operation_route_points', 'DELETE'),
+  'authenticated lê pontos autorizados, mas não grava diretamente'
+);
+select ok(
+  not has_function_privilege('anon', 'public.start_operation_tracking(uuid,uuid,text,timestamptz)', 'EXECUTE')
+    and not has_function_privilege('anon', 'public.append_operation_route_points(uuid,jsonb)', 'EXECUTE')
+    and not has_function_privilege('anon', 'public.stop_operation_tracking(uuid,timestamptz,text)', 'EXECUTE'),
+  'anon não executa RPCs de tracking'
+);
+select ok(
+  has_function_privilege('authenticated', 'public.start_operation_tracking(uuid,uuid,text,timestamptz)', 'EXECUTE')
+    and has_function_privilege('authenticated', 'public.append_operation_route_points(uuid,jsonb)', 'EXECUTE')
+    and has_function_privilege('authenticated', 'public.stop_operation_tracking(uuid,timestamptz,text)', 'EXECUTE'),
+  'authenticated usa somente os RPCs estreitos de tracking'
 );
 
 insert into auth.users (id, email, raw_user_meta_data)
@@ -227,6 +284,96 @@ select is(
   ),
   1::bigint,
   'reenvio idempotente não duplica evento'
+);
+select throws_ok(
+  $$
+    insert into public.operation_tracking_sessions (
+      id, operation_id, actor_id, terms_version, device_consented_at
+    ) values (
+      '70000000-0000-4000-8000-000000000099',
+      '40000000-0000-4000-8000-000000000001',
+      '10000000-0000-4000-8000-000000000002',
+      'imperio-route-tracking-v1', now()
+    )
+  $$,
+  '42501',
+  'permission denied for table operation_tracking_sessions',
+  'funcionário não cria sessão de tracking diretamente'
+);
+select lives_ok(
+  $$
+    select public.start_operation_tracking(
+      '70000000-0000-4000-8000-000000000001',
+      '40000000-0000-4000-8000-000000000001',
+      'imperio-route-tracking-v1', now()
+    )
+  $$,
+  'RPC registra consentimento e inicia tracking na saída'
+);
+select lives_ok(
+  $$
+    select public.append_operation_route_points(
+      '70000000-0000-4000-8000-000000000001',
+      jsonb_build_array(jsonb_build_object(
+        'id', '80000000-0000-4000-8000-000000000001',
+        'captured_at', now(),
+        'latitude', -23.5,
+        'longitude', -46.6,
+        'accuracy', 12,
+        'speed', 8,
+        'heading', 90,
+        'mocked', false
+      ))
+    )
+  $$,
+  'RPC aceita ponto de rota válido'
+);
+select lives_ok(
+  $$
+    select public.append_operation_route_points(
+      '70000000-0000-4000-8000-000000000001',
+      jsonb_build_array(jsonb_build_object(
+        'id', '80000000-0000-4000-8000-000000000001',
+        'captured_at', (select device_captured_at from public.operation_route_points
+          where id = '80000000-0000-4000-8000-000000000001'),
+        'latitude', -23.5,
+        'longitude', -46.6,
+        'accuracy', 12,
+        'speed', 8,
+        'heading', 90,
+        'mocked', false
+      ))
+    )
+  $$,
+  'reenvio idempotente aceita o mesmo ponto'
+);
+select is(
+  (select count(*) from public.operation_route_points
+    where id = '80000000-0000-4000-8000-000000000001'),
+  1::bigint,
+  'reenvio idempotente não duplica ponto de rota'
+);
+set local "request.jwt.claim.sub" = '10000000-0000-4000-8000-000000000003';
+select throws_ok(
+  $$
+    select public.start_operation_tracking(
+      '70000000-0000-4000-8000-000000000002',
+      '40000000-0000-4000-8000-000000000001',
+      'imperio-route-tracking-v1', now()
+    )
+  $$,
+  'P0001',
+  'forbidden',
+  'usuário fora da escala não inicia tracking'
+);
+set local "request.jwt.claim.sub" = '10000000-0000-4000-8000-000000000002';
+select lives_ok(
+  $$
+    select public.stop_operation_tracking(
+      '70000000-0000-4000-8000-000000000001', now(), 'returned'
+    )
+  $$,
+  'RPC encerra tracking do próprio usuário'
 );
 set local "request.jwt.claim.sub" = '10000000-0000-4000-8000-000000000004';
 select throws_ok(

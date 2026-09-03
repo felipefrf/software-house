@@ -9,7 +9,10 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.imperioeventos.logistica"
+      "bundleIdentifier": "com.imperioeventos.logistica",
+      "config": {
+        "usesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.imperioeventos.logistica",
@@ -22,7 +25,13 @@
     "web": { "favicon": "./assets/favicon.png" },
     "plugins": [
       "expo-router",
-      "expo-sqlite",
+      [
+        "expo-sqlite",
+        {
+          "useSQLCipher": true
+        }
+      ],
+      "expo-secure-store",
       [
         "expo-camera",
         {
@@ -33,7 +42,11 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Permita que a Império registre o local e a precisão desta ação operacional."
+          "locationWhenInUsePermission": "Permita que a Império registre o local e a precisão desta ação operacional.",
+          "locationAlwaysAndWhenInUsePermission": "Permita que a Império registre a rota desta operação, inclusive em segundo plano, desde a saída até o retorno.",
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
         }
       ]
     ],

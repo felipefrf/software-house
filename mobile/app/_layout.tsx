@@ -6,6 +6,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { BottomNavigation } from "@/components/Ui";
 import { AppProvider } from "@/context/AppContext";
 import { useApp } from "@/context/AppContext";
+import "@/lib/route-tracking";
 import { colors } from "@/lib/theme";
 
 function AuthenticatedRoutes() {

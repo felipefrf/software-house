@@ -134,6 +134,39 @@ export type LocationEvidence = {
   accuracy: number;
 };
 
+export type RouteTrackingStopReason =
+  | "returned"
+  | "completed"
+  | "cancelled"
+  | "sign_out"
+  | "departure_failed"
+  | "operation_ended";
+
+export type RouteTrackingSession = {
+  sessionId: string;
+  userId: string;
+  operationId: string;
+  termsVersion: string;
+  consentedAt: string;
+  startedAt: string;
+  stoppedAt: string | null;
+  stopReason: RouteTrackingStopReason | null;
+  stopSynced: boolean;
+  lastError: string | null;
+};
+
+export type RouteTrackingPoint = {
+  id: string;
+  sessionId: string;
+  capturedAt: string;
+  latitude: number;
+  longitude: number;
+  accuracy: number;
+  speed: number | null;
+  heading: number | null;
+  mocked: boolean;
+};
+
 export type OutboxAction = {
   deviceActionId: string;
   operationId: string;
@@ -150,6 +183,7 @@ export type OutboxAction = {
   arrivalAccess: "released" | "blocked" | "";
   arrivalReason: string;
   acceptanceName: string;
+  trackingTermsAccepted?: boolean;
   attempts: number;
   lastError: string | null;
   updatedAt: string;
