@@ -500,6 +500,8 @@ const parseSyncRun = (value: unknown): EstoqueNowSyncRun | null => {
     applied: count(run.applied),
     unchanged: count(run.unchanged),
     blocked: count(run.blocked),
+    quarantined: count(run.quarantined),
+    detailFailed: count(run.detailFailed),
     deferred: count(run.deferred),
     failed: count(run.failed),
     errorCode:
@@ -525,6 +527,7 @@ const readEstoqueNowSyncHealth = async (
       lastSuccessfulScheduledRun: parseSyncRun(
         health.lastSuccessfulScheduledRun,
       ),
+      lastAppliedScheduledRun: parseSyncRun(health.lastAppliedScheduledRun),
       recentRuns: Array.isArray(health.recentRuns)
         ? health.recentRuns
             .map(parseSyncRun)

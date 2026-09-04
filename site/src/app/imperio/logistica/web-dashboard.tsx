@@ -130,6 +130,7 @@ type EstoqueNowPreview = {
   skippedReasons: {
     missing_external_id: number;
     invalid_external_id: number;
+    duplicate_external_id: number;
     missing_event_name: number;
     invalid_event_name: number;
     missing_destination: number;
@@ -1580,7 +1581,7 @@ function IntegrationsView(props: Props) {
     ? [syncHealth.lastRun, ...syncHealth.recentRuns].filter((run): run is EstoqueNowSyncRun => run?.trigger === "scheduled")
     : [];
   const latestAutomaticRun = automaticRuns[0] ?? null;
-  const latestAutomaticSuccess = syncHealth?.lastSuccessfulScheduledRun ?? null;
+  const latestAutomaticApplication = syncHealth?.lastAppliedScheduledRun ?? null;
   const automaticStatus = syncHealth
     ? automaticRunStatus(latestAutomaticRun, isAutomaticRunStale(latestAutomaticRun))
     : { label: "Indisponível", tone: "neutral" as const };
@@ -1596,7 +1597,6 @@ function IntegrationsView(props: Props) {
           : automaticStatus.tone === "red"
             ? { label: "Conectado, automação com falha", tone: "red" }
             : { label: `Conectado, automação ${automaticStatus.label.toLowerCase()}`, tone: automaticStatus.tone };
-  const automaticReviewCount = latestAutomaticRun ? latestAutomaticRun.blocked + latestAutomaticRun.deferred + latestAutomaticRun.failed : 0;
   const previewReviewCount = preview ? preview.counts.new + preview.counts.update + preview.counts.diverged + preview.counts.blocked + preview.counts.skipped : 0;
   const sync = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -1701,17 +1701,19 @@ function IntegrationsView(props: Props) {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h3 id="automatic-read-title" className="text-[20px] font-semibold">Último lote automático</h3>
-              <p className="mt-1 text-[15px] text-imp-muted">O pull foi preparado para ciclos de 15 minutos e pode encadear até seis lotes. O histórico abaixo mostra o que realmente executou, sem payload externo.</p>
+              <p className="mt-1 text-[15px] text-imp-muted">O pull consulta o EstoqueNOW a cada 15 minutos, sem enviar alterações para o sistema externo.</p>
             </div>
             <Pill tone={automaticStatus.tone}>{automaticStatus.label}</Pill>
           </div>
           {syncHealth ? (
             <>
-              <div className="mt-4 grid grid-cols-2 gap-3">
-                <Stat label="Último sucesso" value={latestAutomaticSuccess?.finishedAt ? formatDate(latestAutomaticSuccess.finishedAt) : "Nunca"} />
+              <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-3">
+                <Stat label="Última aplicação" value={latestAutomaticApplication?.finishedAt ? formatDate(latestAutomaticApplication.finishedAt) : "Nunca"} />
                 <Stat label="Janela consultada" value={latestAutomaticRun ? `${formatSyncWindowDate(latestAutomaticRun.windowStart)} a ${formatSyncWindowDate(latestAutomaticRun.windowEnd)}` : "Ainda não"} />
                 <Stat label="Logísticas lidas" value={latestAutomaticRun?.fetched ?? 0} />
-                <Stat label="A revisar" value={automaticReviewCount} />
+                <Stat label="Na próxima rodada" value={latestAutomaticRun?.deferred ?? 0} />
+                <Stat label="Em quarentena" value={latestAutomaticRun?.quarantined ?? 0} />
+                <Stat label="Falhas técnicas" value={(latestAutomaticRun?.detailFailed ?? 0) + (latestAutomaticRun?.failed ?? 0)} />
               </div>
               {latestAutomaticRun && (
                 <p className="mt-3 text-[13px] text-imp-muted">
@@ -1720,7 +1722,12 @@ function IntegrationsView(props: Props) {
               )}
               {latestAutomaticRun && ["failed", "partial", "abandoned"].includes(latestAutomaticRun.status) && (
                 <div className="mt-3">
-                  <Notice tone="red" title="A última leitura automática não terminou com sucesso">
+                  <Notice
+                    tone={latestAutomaticRun.status === "partial" ? "amber" : "red"}
+                    title={latestAutomaticRun.status === "partial" ? "Importação parcial" : "A última leitura automática falhou"}
+                  >
+                    {latestAutomaticRun.applied > 0 ? `${latestAutomaticRun.applied} operação(ões) aplicada(s). ` : null}
+                    {latestAutomaticRun.quarantined > 0 ? `${latestAutomaticRun.quarantined} registro(s) aguardam nova versão ou nova tentativa. ` : null}
                     {latestAutomaticRun.errorCode ? `Código ${latestAutomaticRun.errorCode}.` : null}
                   </Notice>
                 </div>
@@ -1787,6 +1794,7 @@ function IntegrationsView(props: Props) {
                     [
                       ["sem ID", preview.skippedReasons.missing_external_id],
                       ["ID inválido", preview.skippedReasons.invalid_external_id],
+                      ["ID duplicado", preview.skippedReasons.duplicate_external_id],
                       ["sem nome", preview.skippedReasons.missing_event_name],
                       ["nome inválido", preview.skippedReasons.invalid_event_name],
                       ["sem destino", preview.skippedReasons.missing_destination],

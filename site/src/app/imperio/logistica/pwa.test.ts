@@ -197,7 +197,7 @@ test("cache de fotos evita nova leitura da origem e salva misses", async () => {
   assert.equal(writes, 1);
 });
 
-test("integrações expõem saúde sanitizada do pull e fila de revisão", async () => {
+test("integrações separam aplicação, quarentena, falha e fila", async () => {
   const [dashboard, server, data, types, cron] = await Promise.all([
     readFile(new URL("./web-dashboard.tsx", import.meta.url), "utf8"),
     readFile(new URL("./server.ts", import.meta.url), "utf8"),
@@ -215,6 +215,10 @@ test("integrações expõem saúde sanitizada do pull e fila de revisão", async
   assert.match(dashboard, /Conectado, automação com falha/);
   assert.match(dashboard, /aplicação interna desabilitada/);
   assert.match(dashboard, /Último lote automático/);
+  assert.match(dashboard, /Última aplicação/);
+  assert.match(dashboard, /Na próxima rodada/);
+  assert.match(dashboard, /Em quarentena/);
+  assert.match(dashboard, /Falhas técnicas/);
   assert.match(dashboard, /45 \* 60 \* 1000/);
   assert.doesNotMatch(server, /demo-item-/);
   assert.match(dashboard, /Buscar alterações sem importar/);

@@ -169,6 +169,8 @@ export type EstoqueNowSyncRun = {
   applied: number;
   unchanged: number;
   blocked: number;
+  quarantined: number;
+  detailFailed: number;
   deferred: number;
   failed: number;
   errorCode: string | null;
@@ -177,6 +179,7 @@ export type EstoqueNowSyncRun = {
 export type EstoqueNowSyncHealth = {
   lastRun: EstoqueNowSyncRun | null;
   lastSuccessfulScheduledRun: EstoqueNowSyncRun | null;
+  lastAppliedScheduledRun: EstoqueNowSyncRun | null;
   recentRuns: EstoqueNowSyncRun[];
 };
 
