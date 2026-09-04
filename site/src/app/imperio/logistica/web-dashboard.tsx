@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import Image from "next/image";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import {
@@ -316,11 +317,9 @@ function OperationRow({
         type="button"
         onClick={onOpen}
         aria-current={selected ? "true" : undefined}
-        className={`grid w-full gap-x-4 gap-y-2 px-4 py-3 text-left hover:bg-imp-ground/70 ${
+        className={`grid w-full gap-x-4 gap-y-2 border-l-4 px-4 py-3 text-left hover:bg-imp-ground/70 ${
           compact ? "grid-cols-[minmax(0,1fr)_auto]" : "@3xl:grid-cols-[88px_minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)_20px] @3xl:items-center"
-        } ${
-          selected ? "bg-imp-green-tint/50" : ""
-        }`}
+        } ${risk === "critical" ? "border-l-imp-red" : risk === "attention" ? "border-l-imp-amber" : "border-l-transparent"} ${selected ? "bg-imp-green-tint/50" : ""}`}
       >
         <span className={`${compact ? "col-span-2 text-[13px] font-semibold text-imp-green" : "text-[14px] font-semibold leading-5 text-imp-green"} tabular-nums`}>
           {showDate ? formatWhen(operation.scheduled_at) : formatTime(operation.scheduled_at)}
@@ -329,7 +328,6 @@ function OperationRow({
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <strong className="break-words font-imp-display text-[18px] leading-5">{operation.event_name}</strong>
             {risk === "critical" && <Pill tone="red">Crítica</Pill>}
-            {risk === "attention" && <Pill tone="amber">Atenção</Pill>}
             {operation.status !== "active" && <Pill tone={operation.status === "completed" ? "green" : "red"}>{statusLabel[operation.status]}</Pill>}
           </span>
           <span className="mt-0.5 line-clamp-1 block text-[14px] text-imp-muted">{place.address}</span>
@@ -756,7 +754,7 @@ function TodayView(props: Props & { onOpenOperation: (id: string) => void; onOpe
         </SectionTitle>
         <div className="mt-3">
           {decisions.length ? (
-            <ul className="space-y-2">
+            <ul className="overflow-hidden rounded-2xl border border-imp-line/70 bg-imp-surface shadow-imp-card divide-y divide-imp-line">
               {decisions.map((operation) => {
                 const signals = operationSignals(operation, snapshot.incidents);
                 const topIncident = [...signals.unresolved].sort(
@@ -765,47 +763,32 @@ function TodayView(props: Props & { onOpenOperation: (id: string) => void; onOpe
                 const leader = snapshot.people.find((person) => person.id === operation.driver_id);
                 const goesToIncidents = signals.unresolved.length > 0;
                 return (
-                  <li key={operation.id}>
-                    <Notice
-                      tone={signals.criticalIncident ? "red" : "amber"}
-                      title={`${formatTime(operation.scheduled_at)}, ${operation.event_name}`}
-                      action={
-                        <span className="flex flex-wrap gap-2">
-                          <Button
-                            variant="primary"
-                            onClick={() => (goesToIncidents ? props.onOpenIncidents(operation.id) : props.onOpenOperation(operation.id))}
-                          >
-                            {nextActionText(operation, snapshot.incidents)}
-                          </Button>
-                          {goesToIncidents && (
-                            <Button variant="secondary" onClick={() => props.onOpenOperation(operation.id)}>
-                              Abrir operação
-                            </Button>
-                          )}
-                        </span>
-                      }
-                    >
-                      {topIncident && (
-                        <span className="block">
-                          {incidentTypeLabel[topIncident.type]}, gravidade {severityLabel[topIncident.severity]}: {topIncident.description}
-                        </span>
-                      )}
-                      {signals.delayed && (
-                        <span className="block">
-                          {operation.waiting_since
-                            ? `Equipe em espera desde ${formatTime(operation.waiting_since)}. Só o campo libera a espera.`
-                            : "O horário previsto passou e a etapa não avançou."}
-                          {leader?.phone && (
-                            <>
-                              {" "}Fale com {leader.full_name.split(" ")[0]}:{" "}
-                              <a href={`tel:${leader.phone.replace(/\D/g, "")}`} className="font-semibold text-imp-ink underline">{leader.phone}</a>.
-                            </>
-                          )}
-                        </span>
-                      )}
-                      {signals.incompleteScale && <span className="block">Sem equipe, veículo ou motorista definidos.</span>}
-                      <span className="text-imp-muted">{stageLabels[operation.stage]}, etapa {operationStages.indexOf(operation.stage) + 1} de 9.</span>
-                    </Notice>
+                  <li
+                    key={operation.id}
+                    className={`grid min-h-[76px] gap-3 border-l-4 px-4 py-3 lg:grid-cols-[72px_minmax(0,1fr)_auto] lg:items-center ${
+                      signals.criticalIncident ? "border-l-imp-red" : "border-l-imp-amber"
+                    }`}
+                  >
+                    <time className="text-[14px] font-semibold tabular-nums text-imp-green">{formatTime(operation.scheduled_at)}</time>
+                    <div className="min-w-0">
+                      <h3 className="truncate font-imp-display text-[18px] font-semibold leading-5">{operation.event_name}</h3>
+                      <p className="mt-1 line-clamp-1 text-[14px] text-imp-muted">
+                        {topIncident
+                          ? `${incidentTypeLabel[topIncident.type]}, gravidade ${severityLabel[topIncident.severity]}: ${topIncident.description}`
+                          : signals.delayed
+                            ? operation.waiting_since
+                              ? `Equipe em espera desde ${formatTime(operation.waiting_since)}.`
+                              : "Horário previsto passou sem avanço de etapa."
+                            : "Sem equipe, veículo ou motorista definidos."}
+                        {leader?.phone && signals.delayed ? ` Fale com ${leader.full_name.split(" ")[0]}: ${leader.phone}.` : ""}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2 lg:justify-end">
+                      <Button variant="primary" onClick={() => (goesToIncidents ? props.onOpenIncidents(operation.id) : props.onOpenOperation(operation.id))}>
+                        {nextActionText(operation, snapshot.incidents)}
+                      </Button>
+                      {goesToIncidents && <Button variant="secondary" onClick={() => props.onOpenOperation(operation.id)}>Abrir</Button>}
+                    </div>
                   </li>
                 );
               })}
@@ -876,10 +859,12 @@ function OperationsView(
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [detailOpen, setDetailOpen] = useState(Boolean(props.openSelected));
+  const [filtersOpen, setFiltersOpen] = useState(!props.openSelected);
   const detailRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const closeDetail = () => {
     setDetailOpen(false);
+    setFiltersOpen(true);
     requestAnimationFrame(() => {
       const row = listRef.current?.querySelector<HTMLElement>('[aria-current="true"], button');
       row?.focus();
@@ -949,8 +934,17 @@ function OperationsView(
 
   return (
     <div>
-      <PageTitle title="Operações" lead={`${filtered.length} de ${plural(props.snapshot.operations.length, "operação", "operações")}.`} />
-      <Card className={`mt-5 p-4 ${detailOpen ? "hidden xl:block" : ""}`} aria-label="Filtros">
+      <PageTitle
+        title="Operações"
+        lead={`${filtered.length} de ${plural(props.snapshot.operations.length, "operação", "operações")}.`}
+        aside={detailOpen && (
+          <Button variant="secondary" aria-controls="operation-filters" aria-expanded={filtersOpen} onClick={() => setFiltersOpen((open) => !open)}>
+            Filtros{hasFilters ? " ativos" : ""}
+          </Button>
+        )}
+      />
+      <div id="operation-filters" className={detailOpen && !filtersOpen ? "hidden" : ""} aria-label="Filtros">
+      <Card className="mt-5 p-4">
         <div className="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
           <label className="text-[13px] font-semibold text-imp-muted">
             Buscar operação
@@ -1014,6 +1008,7 @@ function OperationsView(
           <Button variant="ghost" onClick={resetFilters} className="mt-2">Limpar filtros</Button>
         )}
       </Card>
+      </div>
 
       <div className={`mt-5 grid items-start gap-5 ${detailOpen ? "xl:grid-cols-[minmax(280px,340px)_minmax(0,1fr)]" : ""}`}>
         <div ref={listRef} className={`min-w-0 space-y-5 ${detailOpen ? "hidden xl:block" : ""}`}>
@@ -1024,6 +1019,7 @@ function OperationsView(
             onOpen={(id) => {
               props.setSelectedId(id);
               setDetailOpen(true);
+              setFiltersOpen(false);
             }}
             emptyText={hasFilters ? "Nenhuma operação corresponde aos filtros." : "Nenhuma operação cadastrada ou importada."}
             compact={detailOpen}
@@ -1094,7 +1090,6 @@ function CalendarView({ snapshot, onOpenOperation }: Props & { onOpenOperation: 
     date.setDate(monday.getDate() + index);
     return date;
   });
-  const slots = [0, 6, 12, 18];
   const dayKeys = new Set(days.map(operationDateInput));
   const todayKey = operationDateInput(new Date());
   const visibleOperations = snapshot.operations.filter(
@@ -1105,8 +1100,6 @@ function CalendarView({ snapshot, onOpenOperation }: Props & { onOpenOperation: 
     next.setDate(next.getDate() + daysToAdd);
     setReference(operationDateInput(next));
   };
-  const hourOf = (value: string) =>
-    Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/Sao_Paulo", hour: "2-digit", hourCycle: "h23" }).format(new Date(value)));
   return (
     <div>
       <PageTitle
@@ -1126,61 +1119,51 @@ function CalendarView({ snapshot, onOpenOperation }: Props & { onOpenOperation: 
         }
       />
       <Card className="imp-scroll-x mt-5 overflow-x-auto">
-        <div className="grid min-w-[980px] grid-cols-[64px_repeat(7,minmax(128px,1fr))]">
-          <div className="border-b border-r border-imp-line" />
+        <div className="grid min-w-[980px] grid-cols-7 divide-x divide-imp-line">
           {days.map((day) => {
             const key = operationDateInput(day);
             const weekend = day.getDay() === 0 || day.getDay() === 6;
+            const operations = visibleOperations
+              .filter((operation) => operationDateInput(new Date(operation.scheduled_at)) === key)
+              .sort((a, b) => Date.parse(a.scheduled_at) - Date.parse(b.scheduled_at));
             return (
-              <h3
+              <section
                 key={key}
-                className={`border-b border-r border-imp-line px-3 py-2.5 text-[14px] font-semibold last:border-r-0 ${
-                  key === todayKey ? "bg-imp-green-tint text-imp-green" : weekend ? "bg-imp-ground text-imp-muted" : "text-imp-muted"
-                }`}
+                aria-labelledby={`agenda-${key}`}
+                className={weekend ? "bg-imp-ground/60" : ""}
               >
-                {new Intl.DateTimeFormat("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit" }).format(day).replace(".", "")}
-              </h3>
+                <h2
+                  id={`agenda-${key}`}
+                  className={`border-b border-imp-line px-3 py-2.5 text-[14px] font-semibold ${
+                    key === todayKey ? "bg-imp-green-tint text-imp-green" : "text-imp-muted"
+                  }`}
+                >
+                  {new Intl.DateTimeFormat("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit" }).format(day).replace(".", "")}
+                </h2>
+                <ol className="min-h-48 space-y-2 p-2">
+                  {operations.map((operation) => {
+                    const risk = operationSignals(operation, snapshot.incidents).risk;
+                    return (
+                      <li key={operation.id}>
+                        <button
+                          type="button"
+                          onClick={() => onOpenOperation(operation.id)}
+                          className={`min-h-11 w-full rounded border-l-4 bg-imp-surface p-2 text-left text-[13px] leading-4 shadow-[0_1px_2px_rgba(22,33,28,.08)] hover:bg-imp-ground ${
+                            risk === "critical" ? "border-imp-red" : risk === "attention" ? "border-imp-amber" : operation.status === "active" ? "border-imp-green" : "border-imp-line-strong"
+                          }`}
+                        >
+                          <time className="font-semibold tabular-nums text-imp-green">{formatTime(operation.scheduled_at)}</time>
+                          <span className="mt-0.5 block font-semibold">{operation.event_name}</span>
+                          <span className="text-imp-muted">{stageLabels[operation.stage]}</span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                  {!operations.length && <li className="px-1 py-2 text-[13px] text-imp-muted">Sem operação</li>}
+                </ol>
+              </section>
             );
           })}
-          {slots.map((slot) => (
-            <div className="contents" key={slot}>
-              <time className="border-b border-r border-imp-line px-3 py-3 text-[13px] tabular-nums text-imp-muted">{String(slot).padStart(2, "0")}h</time>
-              {days.map((day) => {
-                const key = operationDateInput(day);
-                const operations = visibleOperations
-                  .filter((operation) => {
-                    if (operationDateInput(new Date(operation.scheduled_at)) !== key) return false;
-                    const hour = hourOf(operation.scheduled_at);
-                    return hour >= slot && hour < slot + 6;
-                  })
-                  .sort((a, b) => Date.parse(a.scheduled_at) - Date.parse(b.scheduled_at));
-                const weekend = day.getDay() === 0 || day.getDay() === 6;
-                return (
-                  <section key={`${key}-${slot}`} aria-label={`${key}, ${slot}h`} className={`min-h-24 border-b border-r border-imp-line p-1.5 last:border-r-0 ${weekend ? "bg-imp-ground/60" : ""}`}>
-                    <div className="space-y-1.5">
-                      {operations.map((operation) => {
-                        const risk = operationSignals(operation, snapshot.incidents).risk;
-                        return (
-                          <button
-                            key={operation.id}
-                            type="button"
-                            onClick={() => onOpenOperation(operation.id)}
-                            className={`min-h-11 w-full rounded border-l-4 bg-imp-surface p-2 text-left text-[13px] leading-4 shadow-[0_1px_2px_rgba(22,33,28,.08)] hover:bg-imp-ground ${
-                              risk === "critical" ? "border-imp-red" : risk === "attention" ? "border-imp-amber" : operation.status === "active" ? "border-imp-green" : "border-imp-line-strong"
-                            }`}
-                          >
-                            <strong className="tabular-nums">{formatTime(operation.scheduled_at)}</strong>
-                            <span className="mt-0.5 block font-semibold">{operation.event_name}</span>
-                            <span className="text-imp-muted">{stageLabels[operation.stage]}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </section>
-                );
-              })}
-            </div>
-          ))}
         </div>
       </Card>
       {!visibleOperations.length && (
@@ -1367,6 +1350,28 @@ function FleetView(props: Props) {
   );
 }
 
+function EvidencePhoto({ url }: { url: string }) {
+  const [state, setState] = useState<"loading" | "loaded" | "error">("loading");
+  return (
+    <a href={url} target="_blank" rel="noreferrer" className="relative grid h-44 place-items-end overflow-hidden bg-imp-ground p-3 text-[14px] font-semibold text-white">
+      <Image
+        unoptimized
+        fill
+        src={url}
+        alt=""
+        sizes="(min-width: 1280px) 33vw, (min-width: 640px) 50vw, 100vw"
+        onLoad={() => setState("loaded")}
+        onError={() => setState("error")}
+        className={`object-cover transition-opacity ${state === "loaded" ? "opacity-100" : "opacity-0"}`}
+      />
+      {state === "loading" && <span role="status" className="absolute inset-0 grid place-items-center text-imp-muted">Carregando foto</span>}
+      {state === "error" && <span className="absolute inset-0 grid place-items-center text-imp-muted">Foto indisponível</span>}
+      {state === "loaded" && <span className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-imp-ink/85 to-transparent" aria-hidden="true" />}
+      <span className={`relative flex items-center gap-2 ${state === "loaded" ? "opacity-100" : "sr-only"}`}><Camera size={16} aria-hidden="true" />Abrir foto</span>
+    </a>
+  );
+}
+
 function EvidenceView({
   snapshot,
   onOpenOperation,
@@ -1389,25 +1394,15 @@ function EvidenceView({
         {evidence.map(({ operation, event }) => (
           <li key={event.id} className="overflow-hidden rounded-2xl border border-imp-line/70 bg-imp-surface shadow-imp-card">
             {event.photo_url ? (
-              <a
-                href={event.photo_url}
-                target="_blank"
-                rel="noreferrer"
-                className="grid h-44 place-items-end bg-imp-ground bg-cover bg-center p-3 text-[14px] font-semibold text-white"
-                style={{ backgroundImage: `linear-gradient(180deg, transparent 45%, rgba(22,33,28,.85)), url(${JSON.stringify(event.photo_url)})` }}
-              >
-                <span className="flex items-center gap-2"><Camera size={16} aria-hidden="true" />Abrir foto</span>
-              </a>
+              <EvidencePhoto key={event.photo_url} url={event.photo_url} />
             ) : (
               <div className="grid h-44 place-items-center bg-imp-ground text-[13px] text-imp-muted">Sem foto nesta etapa</div>
             )}
             <div className="p-4">
-              <p className="text-[14px] font-semibold text-imp-green">
-                {stageLabels[event.stage]} · {formatWhen(event.server_received_at)}
-              </p>
+              <p className="flex flex-wrap gap-x-2 text-[14px] font-semibold text-imp-green"><span>{stageLabels[event.stage]}</span><time>{formatWhen(event.server_received_at)}</time></p>
               <h3 className="mt-1 text-[16px] font-semibold leading-5">{operation.event_name}</h3>
-              <p className="mt-1 text-[14px] text-imp-muted">
-                {event.actor_name} ·{" "}
+              <p className="mt-1 flex flex-wrap gap-x-2 text-[14px] text-imp-muted">
+                <span>{event.actor_name}</span>
                 <a href={mapsPointUrl(event.latitude, event.longitude)} target="_blank" rel="noreferrer" className={linkClass}>
                   Ver no mapa
                 </a>
@@ -1520,6 +1515,18 @@ function IntegrationsView(props: Props) {
   const automaticStatus = syncHealth
     ? automaticRunStatus(latestAutomaticRun, isAutomaticRunStale(latestAutomaticRun))
     : { label: "Indisponível", tone: "neutral" as const };
+  const est = props.snapshot.estoquenow;
+  const connectorStatus: { label: string; tone: Tone } = !est.configured
+    ? { label: "Sem credenciais", tone: "amber" }
+    : est.source !== "estoquenow"
+      ? { label: "Credenciais no servidor", tone: "amber" }
+      : !est.pull_apply_enabled
+        ? { label: "Conectado, aplicação automática desativada", tone: "amber" }
+        : automaticStatus.tone === "green"
+          ? { label: "Conectado, automação saudável", tone: "green" }
+          : automaticStatus.tone === "red"
+            ? { label: "Conectado, automação com falha", tone: "red" }
+            : { label: `Conectado, automação ${automaticStatus.label.toLowerCase()}`, tone: automaticStatus.tone };
   const automaticReviewCount = latestAutomaticRun ? latestAutomaticRun.blocked + latestAutomaticRun.deferred + latestAutomaticRun.failed : 0;
   const previewReviewCount = preview ? preview.counts.new + preview.counts.update + preview.counts.diverged + preview.counts.blocked + preview.counts.skipped : 0;
   const sync = (event: FormEvent<HTMLFormElement>) => {
@@ -1598,8 +1605,6 @@ function IntegrationsView(props: Props) {
       <span className="text-imp-muted">{field.signatures.join(" | ")} · {field.occurrences}x</span>
     </p>
   );
-  const est = props.snapshot.estoquenow;
-
   return (
     <div>
       <PageTitle title="Integrações" lead="De onde cada dado vem e o que a Império pode gravar. Nenhum segredo chega ao navegador." />
@@ -1607,7 +1612,7 @@ function IntegrationsView(props: Props) {
         <Card className="p-5">
           <div className="flex items-start justify-between gap-4">
             <h3 className="flex items-center gap-2 text-[20px] font-semibold"><Link2 size={20} className="text-imp-green" aria-hidden="true" /> EstoqueNOW</h3>
-            <Pill tone={est.source === "estoquenow" ? "green" : "amber"}>{est.source === "estoquenow" ? "Leitura conectada" : est.configured ? "Credenciais no servidor" : "Sem credenciais"}</Pill>
+            <Pill tone={connectorStatus.tone}>{connectorStatus.label}</Pill>
           </div>
           <p className="mt-3 text-[15px] leading-6 text-imp-muted">{est.notice}</p>
           <div className="mt-4 grid grid-cols-2 gap-3">
@@ -1615,7 +1620,7 @@ function IntegrationsView(props: Props) {
             <Stat label="Última importação" value={est.last_sync_at ? formatDate(est.last_sync_at) : "Nunca"} />
           </div>
           <ul className="mt-4 space-y-1.5 text-[14px] leading-5 text-imp-muted">
-            <li>Consulta somente leitura, executada no servidor. Cada confirmação importa uma operação por vez.</li>
+            <li>Consulta executada no servidor. A busca manual não grava; a importação interna respeita ID externo e conciliação.</li>
             <li>
               Importação individual {est.import_enabled ? "habilitada" : "bloqueada"} por ambiente. Pull automático {est.pull_apply_enabled ? "com aplicação interna habilitada" : "em observação; aplicação interna desabilitada"}; cada lote processa até cinco e cada chamada pode drenar até seis lotes.
             </li>
@@ -1627,7 +1632,7 @@ function IntegrationsView(props: Props) {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h3 id="automatic-read-title" className="text-[20px] font-semibold">Último lote automático</h3>
-              <p className="mt-1 text-[15px] text-imp-muted">O pull roda a cada 15 minutos e pode encadear até seis lotes. Aqui aparece o lote mais recente, sem payload externo.</p>
+              <p className="mt-1 text-[15px] text-imp-muted">O pull foi preparado para ciclos de 15 minutos e pode encadear até seis lotes. O histórico abaixo mostra o que realmente executou, sem payload externo.</p>
             </div>
             <Pill tone={automaticStatus.tone}>{automaticStatus.label}</Pill>
           </div>
@@ -1932,18 +1937,20 @@ export function WebDashboard(props: Props) {
   return (
     <div className={`mx-auto w-full max-w-[1720px] lg:grid ${props.navigationCollapsed ? "lg:grid-cols-[72px_minmax(0,1fr)]" : "lg:grid-cols-[220px_minmax(0,1fr)]"}`}>
       <aside className="border-b border-imp-line bg-imp-surface lg:sticky lg:top-[calc(3.5rem+1px+env(safe-area-inset-top))] lg:h-[calc(100dvh-3.5rem-1px-env(safe-area-inset-top))] lg:overflow-y-auto lg:border-b-0 lg:border-r">
-        <button
-          type="button"
-          className="mx-auto mt-3 hidden min-h-11 min-w-11 place-items-center rounded-xl text-imp-muted hover:bg-imp-ground hover:text-imp-ink lg:grid"
-          aria-controls="tower-navigation"
-          aria-expanded={!props.navigationCollapsed}
-          aria-label={props.navigationCollapsed ? "Expandir navegação" : "Recolher navegação"}
-          title={props.navigationCollapsed ? "Expandir navegação" : "Recolher navegação"}
-          onClick={() => props.onNavigationCollapsedChange(!props.navigationCollapsed)}
-        >
-          {props.navigationCollapsed ? <PanelLeftOpen size={19} aria-hidden="true" /> : <PanelLeftClose size={19} aria-hidden="true" />}
-        </button>
-        <nav id="tower-navigation" className={`grid grid-cols-4 gap-1 px-2 py-2 lg:block lg:py-4 ${props.navigationCollapsed ? "lg:px-2" : "lg:px-3"}`} aria-label="Torre de controle">
+        <div className={`hidden min-h-14 items-center border-b border-imp-line px-3 lg:flex ${props.navigationCollapsed ? "justify-center" : "justify-end"}`}>
+          <button
+            type="button"
+            className="grid min-h-11 min-w-11 place-items-center rounded-xl text-imp-muted hover:bg-imp-ground hover:text-imp-ink"
+            aria-controls="tower-navigation"
+            aria-expanded={!props.navigationCollapsed}
+            aria-label={props.navigationCollapsed ? "Expandir navegação" : "Recolher navegação"}
+            title={props.navigationCollapsed ? "Expandir navegação" : "Recolher navegação"}
+            onClick={() => props.onNavigationCollapsedChange(!props.navigationCollapsed)}
+          >
+            {props.navigationCollapsed ? <PanelLeftOpen size={19} aria-hidden="true" /> : <PanelLeftClose size={19} aria-hidden="true" />}
+          </button>
+        </div>
+        <nav id="tower-navigation" className={`flex gap-1 overflow-x-auto px-2 py-2 lg:block lg:overflow-visible lg:py-4 ${props.navigationCollapsed ? "lg:px-2" : "lg:px-3"}`} aria-label="Torre de controle">
           {groups.map(([group, items], groupIndex) => (
             <div key={group} className={`contents lg:block ${groupIndex > 0 ? "lg:mt-5" : ""}`}>
               <p className={`hidden px-3 pb-1 text-[13px] font-semibold text-imp-muted ${props.navigationCollapsed ? "" : "lg:block"}`}>{group}</p>
@@ -1954,7 +1961,7 @@ export function WebDashboard(props: Props) {
                   onClick={() => select(id)}
                   aria-current={view === id ? "page" : undefined}
                   title={props.navigationCollapsed ? label : undefined}
-                  className={`relative flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl px-1 text-center text-[13px] font-medium lg:min-h-11 lg:w-full lg:text-[15px] ${props.navigationCollapsed ? "lg:px-0" : "lg:flex-row lg:justify-start lg:gap-2.5 lg:px-3 lg:text-left"} ${
+                  className={`relative flex min-h-14 min-w-[82px] shrink-0 flex-col items-center justify-center gap-1 rounded-xl px-2 text-center text-[13px] font-medium lg:min-h-11 lg:w-full lg:min-w-0 lg:text-[15px] ${props.navigationCollapsed ? "lg:px-0" : "lg:flex-row lg:justify-start lg:gap-2.5 lg:px-3 lg:text-left"} ${
                     view === id ? "bg-imp-green-tint text-imp-green shadow-imp-soft" : "text-imp-ink/80 hover:bg-imp-ground"
                   }`}
                 >
@@ -1968,7 +1975,7 @@ export function WebDashboard(props: Props) {
           ))}
         </nav>
       </aside>
-      <section className="min-w-0 p-4 md:p-6 xl:px-8 xl:py-7">
+      <main className="min-w-0 p-4 md:p-6 xl:px-8 xl:py-7">
         {props.snapshot.configured && props.refreshState.failed && (
           <div className="mb-5">
             <Notice
@@ -1985,7 +1992,7 @@ export function WebDashboard(props: Props) {
           </div>
         )}
         <div key={view} className="imp-rise">{content[view]}</div>
-      </section>
+      </main>
     </div>
   );
 }

@@ -47,13 +47,13 @@ export async function postJson<T = { ok: boolean }>(action: string, body: object
 }
 
 function Brand({
-  surface,
   inverted = false,
   compact = false,
+  mobileCompact = false,
 }: {
-  surface?: "web" | "field";
   inverted?: boolean;
   compact?: boolean;
+  mobileCompact?: boolean;
 }) {
   return (
     <div className="flex min-w-0 items-center gap-3" aria-label={compact ? "Império Logística" : undefined}>
@@ -63,13 +63,8 @@ function Brand({
           <path d="M8 14v-3h4v3" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
         </svg>
       </span>
-      <span className={compact ? "sr-only" : "min-w-0 leading-tight"}>
+      <span className={compact ? "sr-only" : `min-w-0 leading-tight ${mobileCompact ? "max-[479px]:sr-only" : ""}`}>
         <span className={`block font-imp-display text-[22px] font-semibold tracking-tight ${inverted ? "text-white" : "text-imp-ink"}`}>Império Logística</span>
-        {surface && (
-          <span className={`block text-[13px] ${inverted ? "text-white/70" : "text-imp-muted"}`}>
-            {surface === "field" ? "App de campo" : "Torre de controle"}
-          </span>
-        )}
       </span>
     </div>
   );
@@ -320,9 +315,9 @@ export function LogisticsWorkspace({
       >
         <div className="mx-auto flex min-h-14 max-w-[1720px] items-center justify-between gap-3">
           <Brand
-            surface={surface === "field" && isManager ? "field" : undefined}
             inverted={fieldChrome}
             compact={surface === "web" && isManager && navigationCollapsed}
+            mobileCompact={isManager}
           />
           <div className="flex items-center gap-2 md:gap-3">
             <span className={`hidden items-center gap-2 text-[13px] md:flex ${fieldChrome ? "text-white/70" : "text-imp-muted"}`} title="Ambiente atual">

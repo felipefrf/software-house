@@ -118,7 +118,7 @@ export function PageTitle({
         <h1 className="font-imp-display text-[30px] font-semibold leading-[1.1] tracking-tight text-imp-ink md:text-[36px]">{title}</h1>
         {lead && <p className="mt-1 max-w-[70ch] text-[15px] leading-6 text-imp-muted">{lead}</p>}
       </div>
-      {aside && <div className="flex shrink-0 flex-wrap items-center gap-2">{aside}</div>}
+      {aside && <div className="flex w-full max-w-full flex-wrap items-center gap-2 sm:w-auto sm:shrink-0">{aside}</div>}
     </div>
   );
 }

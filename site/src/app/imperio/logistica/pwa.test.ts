@@ -24,15 +24,34 @@ test("o manifesto abre o app de campo em modo standalone", async () => {
   );
 });
 
-test("a agenda mantém sábado e domingo na grade principal", async () => {
+test("a agenda mantém sete dias e mostra cada operação no horário real", async () => {
   const dashboard = await readFile(
     new URL("./web-dashboard.tsx", import.meta.url),
     "utf8",
   );
 
   assert.match(dashboard, /Array\.from\(\{ length: 7 \}/);
-  assert.match(dashboard, /repeat\(7,minmax\(\d+px,1fr\)\)/);
+  assert.match(dashboard, /grid-cols-7/);
+  assert.match(dashboard, /Date\.parse\(a\.scheduled_at\) - Date\.parse\(b\.scheduled_at\)/);
+  assert.doesNotMatch(dashboard, /const slots = \[0, 6, 12, 18\]/);
+  assert.doesNotMatch(dashboard, /hour < slot \+ 6/);
   assert.doesNotMatch(dashboard, /weekendOperations/);
+});
+
+test("estados dinâmicos de filtros, fotos e abas têm saída explícita", async () => {
+  const [dashboard, field] = await Promise.all([
+    readFile(new URL("./web-dashboard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("./field-app.tsx", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(dashboard, /const \[filtersOpen, setFiltersOpen\]/);
+  assert.match(dashboard, /detailOpen && !filtersOpen \? "hidden"/);
+  assert.match(dashboard, /onLoad=\{\(\) => setState\("loaded"\)\}/);
+  assert.match(dashboard, /onError=\{\(\) => setState\("error"\)\}/);
+  assert.match(dashboard, /state === "loading" &&/);
+  assert.match(dashboard, /state === "error" &&/);
+  assert.match(field, /window\.scrollTo\(\{ top: 0 \}\)/);
+  assert.match(field, /tabHeadingRef\.current\?\.focus/);
 });
 
 test("a torre distingue quem executou de quem ficou responsável", async () => {
@@ -192,7 +211,8 @@ test("integrações expõem saúde sanitizada do pull e fila de revisão", async
   assert.match(types, /sync_health\?: EstoqueNowSyncHealth \| null/);
   assert.match(types, /pull_apply_enabled: boolean/);
   assert.match(data, /pull_apply_enabled: pullApplyEnabled/);
-  assert.match(dashboard, /Leitura conectada/);
+  assert.match(dashboard, /Conectado, automação saudável/);
+  assert.match(dashboard, /Conectado, automação com falha/);
   assert.match(dashboard, /aplicação interna desabilitada/);
   assert.match(dashboard, /Último lote automático/);
   assert.match(dashboard, /45 \* 60 \* 1000/);

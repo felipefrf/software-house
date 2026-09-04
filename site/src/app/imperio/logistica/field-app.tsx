@@ -14,7 +14,7 @@ import {
   WifiOff,
 } from "lucide-react";
 import Image from "next/image";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
 import {
   checklistForStage,
@@ -221,6 +221,7 @@ function OperationRow({
 
 export function FieldApp(props: Props) {
   const [tab, setTab] = useState<"today" | "evidence" | "queue">("today");
+  const tabHeadingRef = useRef<HTMLHeadingElement>(null);
   const [stageOpen, setStageOpen] = useState(false);
   const [outbox, setOutbox] = useState<PendingAction[]>([]);
   const [checks, setChecks] = useState<Record<string, boolean>>({});
@@ -439,6 +440,15 @@ export function FieldApp(props: Props) {
     }))
     .sort((a, b) => Date.parse(b.items[0].server_received_at) - Date.parse(a.items[0].server_received_at));
 
+  const selectTab = (nextTab: "today" | "evidence" | "queue") => {
+    setTab(nextTab);
+    if (nextTab === "today") setStageOpen(false);
+    requestAnimationFrame(() => {
+      tabHeadingRef.current?.focus({ preventScroll: true });
+      window.scrollTo({ top: 0 });
+    });
+  };
+
   const connectionNotice =
     !online ? (
       <Notice tone="amber" title="Sem conexão">
@@ -450,7 +460,7 @@ export function FieldApp(props: Props) {
         tone="amber"
         title={`${plural(outbox.length, "registro aguarda", "registros aguardam")} envio`}
         action={
-          <Button variant="secondary" onClick={() => setTab("queue")}>
+          <Button variant="secondary" onClick={() => selectTab("queue")}>
             Ver envios pendentes
           </Button>
         }
@@ -476,10 +486,7 @@ export function FieldApp(props: Props) {
             key={id}
             type="button"
             aria-current={tab === id ? "page" : undefined}
-            onClick={() => {
-              setTab(id);
-              if (id === "today") setStageOpen(false);
-            }}
+            onClick={() => selectTab(id)}
             className={`flex min-h-16 flex-col items-center justify-center gap-1 px-2 text-[13px] font-semibold ${
               tab === id ? "text-imp-green" : "text-imp-muted"
             }`}
@@ -495,14 +502,14 @@ export function FieldApp(props: Props) {
   if (!selected)
     return (
       <>
-        <section className={`mx-auto max-w-[480px] px-4 py-6 ${navPadding}`}>
+        <main className={`mx-auto max-w-[480px] px-4 py-6 ${navPadding}`}>
           {connectionNotice}
-          <h1 className="mt-4 font-imp-display text-[30px] font-semibold leading-tight">Hoje</h1>
+          <h1 ref={tabHeadingRef} tabIndex={-1} className="mt-4 font-imp-display text-[30px] font-semibold leading-tight outline-none">Hoje</h1>
           <p className="text-[15px] text-imp-muted">{dateFormatter.format(new Date())}</p>
           <div className="mt-5">
             <Empty>Nenhuma operação escalada para você. A coordenação precisa associar você ou sua equipe a uma operação.</Empty>
           </div>
-        </section>
+        </main>
         {bottomNav}
       </>
     );
@@ -567,7 +574,7 @@ export function FieldApp(props: Props) {
 
   return (
     <>
-      <section
+      <main
         className={`mx-auto max-w-[480px] px-4 pt-4 ${
           tab === "today" && stageOpen && selected.status === "active" ? actionPadding : navPadding
         }`}
@@ -578,7 +585,7 @@ export function FieldApp(props: Props) {
             <div className={`flex items-end justify-between gap-3 ${connectionNotice ? "mt-4" : ""}`}>
               <div>
                 <p className="text-[15px] text-imp-muted">{firstName ? `Olá, ${firstName}. ` : ""}{capitalize(dateFormatter.format(new Date()))}</p>
-                <h1 className="font-imp-display text-[32px] font-semibold leading-tight">
+                <h1 ref={tabHeadingRef} tabIndex={-1} className="font-imp-display text-[32px] font-semibold leading-tight outline-none">
                   {today.length ? `${plural(today.length, "operação", "operações")} hoje` : "Nada escalado para hoje"}
                 </h1>
               </div>
@@ -661,7 +668,7 @@ export function FieldApp(props: Props) {
 
             <div className="mt-2">
               <p className="text-[15px] font-medium tabular-nums text-imp-muted">{formatWhen(selected.scheduled_at)}</p>
-              <h1 className="mt-0.5 break-words font-imp-display text-[28px] font-semibold leading-tight">
+              <h1 ref={tabHeadingRef} tabIndex={-1} className="mt-0.5 break-words font-imp-display text-[28px] font-semibold leading-tight outline-none">
                 {selected.event_name}
               </h1>
               <p className="mt-1 text-[15px] leading-5 text-imp-muted">{place.address}</p>
@@ -927,7 +934,7 @@ export function FieldApp(props: Props) {
 
         {tab === "evidence" && (
           <div>
-            <h1 className="font-imp-display text-[30px] font-semibold leading-tight">Evidências</h1>
+            <h1 ref={tabHeadingRef} tabIndex={-1} className="font-imp-display text-[30px] font-semibold leading-tight outline-none">Evidências</h1>
             <p className="text-[15px] text-imp-muted">Etapas já recebidas pela torre, por operação.</p>
             <div className="mt-4 space-y-3">
               {evidenceByOperation.map(({ operation, items }) => (
@@ -970,7 +977,7 @@ export function FieldApp(props: Props) {
 
         {tab === "queue" && (
           <div>
-            <h1 className="font-imp-display text-[30px] font-semibold leading-tight">Envios pendentes</h1>
+            <h1 ref={tabHeadingRef} tabIndex={-1} className="font-imp-display text-[30px] font-semibold leading-tight outline-none">Envios pendentes</h1>
             <p className="text-[15px] leading-6 text-imp-muted">
               Etapas concluídas sem sinal ficam aqui até chegarem à torre. Abrir ou recarregar o app exige internet.
             </p>
@@ -1016,7 +1023,7 @@ export function FieldApp(props: Props) {
             )}
           </div>
         )}
-      </section>
+      </main>
       {bottomNav}
     </>
   );
