@@ -4,7 +4,7 @@ set local role postgres;
 create extension if not exists pgtap with schema extensions;
 set local search_path = extensions, public;
 
-select plan(167);
+select plan(177);
 
 select ok(
   to_regprocedure('private.invoke_imperio_estoquenow_pull()') is not null,
@@ -1459,7 +1459,9 @@ select ok(
     where namespace.nspname = 'public'
       and procedure.proname in (
         'begin_estoquenow_sync', 'record_estoquenow_sync_item',
-        'finish_estoquenow_sync', 'get_estoquenow_sync_health'
+        'record_estoquenow_sync_detail_failure', 'get_estoquenow_sync_quarantine',
+        'finish_estoquenow_sync', 'finish_estoquenow_sync_v2',
+        'get_estoquenow_sync_health'
       )
       and (
         not procedure.prosecdef
@@ -1473,7 +1475,10 @@ select ok(
     select 1
     from information_schema.columns
     where table_schema = 'private'
-      and table_name in ('estoquenow_sync_runs', 'estoquenow_sync_items')
+      and table_name in (
+        'estoquenow_sync_runs', 'estoquenow_sync_items',
+        'estoquenow_sync_detail_failures'
+      )
       and column_name in (
         'payload', 'response', 'error_message', 'event_name', 'destination', 'notes'
       )
@@ -1877,7 +1882,8 @@ set local "request.jwt.claim.sub" = '10000000-0000-4000-8000-000000000001';
 select ok(
   pg_catalog.jsonb_typeof(public.get_estoquenow_sync_health(10)->'recentRuns') = 'array'
     and public.get_estoquenow_sync_health(10) ? 'lastRun'
-    and public.get_estoquenow_sync_health(10) ? 'lastSuccessfulScheduledRun',
+    and public.get_estoquenow_sync_health(10) ? 'lastSuccessfulScheduledRun'
+    and public.get_estoquenow_sync_health(10) ? 'lastAppliedScheduledRun',
   'gestor recebe health agregado com histórico recente e último sucesso agendado'
 );
 select ok(
@@ -1975,6 +1981,122 @@ select is(
   public.get_estoquenow_sync_existing(array['external-manual-sync-read']),
   '[]'::jsonb,
   'RPC nunca mistura operação manual com leitura do EstoqueNOW'
+);
+
+set local role postgres;
+select has_table(
+  'private',
+  'estoquenow_sync_detail_failures',
+  'falhas de detalhe usam ledger privado separado'
+);
+select is(
+  (select relrowsecurity from pg_catalog.pg_class
+    where oid = 'private.estoquenow_sync_detail_failures'::regclass),
+  true,
+  'ledger de falhas de detalhe usa RLS'
+);
+select ok(
+  not has_table_privilege(
+    'service_role', 'private.estoquenow_sync_detail_failures', 'SELECT'
+  )
+    and not has_table_privilege(
+      'authenticated', 'private.estoquenow_sync_detail_failures', 'SELECT'
+    )
+    and not has_table_privilege(
+      'anon', 'private.estoquenow_sync_detail_failures', 'SELECT'
+    ),
+  'falhas de detalhe são acessíveis somente por RPC estreito'
+);
+select ok(
+  has_function_privilege(
+    'service_role',
+    'public.record_estoquenow_sync_detail_failure(uuid,text,text,text,text)',
+    'EXECUTE'
+  )
+    and has_function_privilege(
+      'service_role', 'public.get_estoquenow_sync_quarantine(jsonb)', 'EXECUTE'
+    )
+    and has_function_privilege(
+      'service_role',
+      'public.finish_estoquenow_sync_v2(uuid,integer,integer,integer,integer,integer,integer,text,text)',
+      'EXECUTE'
+    )
+    and not has_function_privilege(
+      'authenticated',
+      'public.record_estoquenow_sync_detail_failure(uuid,text,text,text,text)',
+      'EXECUTE'
+    ),
+  'somente service_role registra, consulta e finaliza falhas de detalhe'
+);
+
+set local role service_role;
+insert into sync_test_runs (label, run_id)
+select 'detail-failed', (result->>'runId')::uuid
+from (
+  select public.begin_estoquenow_sync(
+    'scheduled', 'apply', '2026-09-01', '2026-09-03', 5
+  ) result
+) started;
+select throws_ok(
+  $$
+    select public.record_estoquenow_sync_detail_failure(
+      (select run_id from sync_test_runs where label = 'detail-failed'),
+      'external-detail-invalid', '1', repeat('7', 64), 'erro livre'
+    )
+  $$,
+  'P0001',
+  'invalid sync detail failure',
+  'ledger rejeita código de erro não sanitizado'
+);
+select is(
+  public.record_estoquenow_sync_detail_failure(
+    (select run_id from sync_test_runs where label = 'detail-failed'),
+    'external-detail-invalid', '1', repeat('7', 64), 'detail_invalid'
+  )->>'quarantined',
+  'true',
+  'detalhe deterministicamente inválido entra em quarentena temporária'
+);
+select is(
+  public.record_estoquenow_sync_detail_failure(
+    (select run_id from sync_test_runs where label = 'detail-failed'),
+    'external-detail-invalid', '1', repeat('7', 64), 'detail_invalid'
+  )->>'quarantined',
+  'true',
+  'retry idempotente retorna a mesma quarentena'
+);
+set local role postgres;
+select is(
+  (select count(*) from private.estoquenow_sync_detail_failures
+    where run_id = (select run_id from sync_test_runs where label = 'detail-failed')
+      and external_id = 'external-detail-invalid'),
+  1::bigint,
+  'retry idempotente não duplica falha de detalhe'
+);
+set local role service_role;
+select ok(
+  pg_catalog.jsonb_array_length(
+    public.get_estoquenow_sync_quarantine(
+      '[{"externalId":"external-detail-invalid","sourceVersion":"1","sourceHash":"7777777777777777777777777777777777777777777777777777777777777777"}]'::jsonb
+    )
+  ) = 1
+    and pg_catalog.jsonb_array_length(
+      public.get_estoquenow_sync_quarantine(
+        '[{"externalId":"external-detail-invalid","sourceVersion":"1","sourceHash":"8888888888888888888888888888888888888888888888888888888888888888"}]'::jsonb
+      )
+    ) = 0,
+  'quarentena exige a mesma versão e o mesmo hash da fonte'
+);
+select ok(
+  (select result->>'status' = 'failed'
+      and result->>'detailFailed' = '1'
+      and result->>'quarantined' = '1'
+    from (
+      select public.finish_estoquenow_sync_v2(
+        (select run_id from sync_test_runs where label = 'detail-failed'),
+        1, 1, 1, 0, 1, 0, null, 'invalid_source'
+      ) result
+    ) finished),
+  'finish v2 separa falha de detalhe, quarentena e fila adiada'
 );
 
 set local role postgres;

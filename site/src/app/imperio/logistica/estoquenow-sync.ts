@@ -17,6 +17,7 @@ const MAX_LOOKBACK_DAYS = 7;
 const MAX_LOOKAHEAD_DAYS = 90;
 const MAX_BATCH_SIZE = 5;
 const MAX_DRAIN_RUNS = 6;
+const MAX_DETAIL_READS = MAX_BATCH_SIZE * 2;
 const DRAIN_START_DEADLINE_MS = 180_000;
 
 export type EstoqueNowSourceContext = {
@@ -72,6 +73,7 @@ export type EstoqueNowExistingOperation = {
 export type EstoqueNowSkipReason =
   | "missing_external_id"
   | "invalid_external_id"
+  | "duplicate_external_id"
   | "missing_event_name"
   | "invalid_event_name"
   | "missing_destination"
@@ -106,13 +108,23 @@ export type EstoqueNowPullConfig = {
 
 export type EstoqueNowConfirmationResult = "new" | "updated" | "unchanged" | "backfilled";
 
+export type EstoqueNowDetailFailureCode =
+  | "source_item_changed"
+  | "detail_invalid"
+  | "detail_unavailable";
+
 export type EstoqueNowPullDependencies = {
   inspectOperations: (
     start: Date,
     end: Date,
   ) => Promise<{ operations: EstoqueNowOperation[]; contract?: unknown }>;
   loadExisting: (externalIds: string[]) => Promise<EstoqueNowExistingOperation[]>;
+  loadQuarantined: (candidates: EstoqueNowCandidate[]) => Promise<Set<string>>;
   readItems: (externalId: string) => Promise<EstoqueNowItem[]>;
+  recordDetailFailure: (input: {
+    candidate: EstoqueNowCandidate;
+    errorCode: EstoqueNowDetailFailureCode;
+  }) => Promise<{ quarantined: boolean }>;
   confirm: (input: {
     candidate: EstoqueNowCandidate;
     items: EstoqueNowItem[];
@@ -185,13 +197,15 @@ export async function finishEstoqueNowSyncRun(
     result.counts.unchanged +
     result.counts.diverged +
     result.counts.blocked;
-  const finished = await database.rpc("finish_estoquenow_sync", {
+  const finished = await database.rpc("finish_estoquenow_sync_v2", {
     p_run_id: runId,
     p_fetched_count: validCount + result.counts.skipped,
     p_valid_count: validCount,
     p_eligible_count: result.counts.eligible,
     p_blocked_count: result.counts.manualReview,
-    p_deferred_count: result.counts.eligible - result.counts.attempted,
+    p_quarantined_count: result.counts.quarantined,
+    p_deferred_count:
+      result.counts.eligible - result.counts.attempted - result.counts.detailFailed,
     p_contract_hash: result.contractHash,
     p_error_code:
       errorCode ?? (result.counts.detailFailed > 0 ? "invalid_source" : null),
@@ -205,12 +219,13 @@ export async function failEstoqueNowSyncRun(
   runId: string,
   errorCode: "internal",
 ) {
-  const finished = await database.rpc("finish_estoquenow_sync", {
+  const finished = await database.rpc("finish_estoquenow_sync_v2", {
     p_run_id: runId,
     p_fetched_count: 0,
     p_valid_count: 0,
     p_eligible_count: 0,
     p_blocked_count: 0,
+    p_quarantined_count: 0,
     p_deferred_count: 0,
     p_contract_hash: null,
     p_error_code: errorCode,
@@ -229,6 +244,7 @@ export type EstoqueNowPullResult = {
   counts: EstoqueNowSyncPlan["counts"] & {
     eligible: number;
     manualReview: number;
+    quarantined: number;
     selected: number;
     attempted: number;
     detailFailed: number;
@@ -240,7 +256,7 @@ export type EstoqueNowPullResult = {
   outcomes: Array<{
     externalId: string;
     result: EstoqueNowConfirmationResult | "failed";
-    errorCode: "source_item_changed" | "stale_source" | "historic_divergence" | "confirmation_failed" | null;
+    errorCode: EstoqueNowDetailFailureCode | "stale_source" | "historic_divergence" | "confirmation_failed" | null;
   }>;
 };
 
@@ -253,7 +269,8 @@ export const shouldContinueEstoqueNowDrain = (
   (result.status === "succeeded" ||
     (result.status === "partial" &&
       result.counts.imported + result.counts.updated + result.counts.reconciled > 0)) &&
-  result.counts.eligible > result.counts.attempted &&
+  result.counts.eligible >
+    result.counts.attempted + (result.counts.detailFailed ?? 0) &&
   completedRuns < MAX_DRAIN_RUNS &&
   elapsedMs < DRAIN_START_DEADLINE_MS;
 
@@ -476,6 +493,7 @@ export function buildEstoqueNowSyncPlan(
   const skippedReasons: Record<EstoqueNowSkipReason, number> = {
     missing_external_id: 0,
     invalid_external_id: 0,
+    duplicate_external_id: 0,
     missing_event_name: 0,
     invalid_event_name: 0,
     missing_destination: 0,
@@ -483,9 +501,15 @@ export function buildEstoqueNowSyncPlan(
     invalid_scheduled_date_or_time: 0,
   };
   const rows: EstoqueNowImportRow[] = [];
+  const seenExternalIds = new Set<string>();
   for (const operation of operations) {
     const candidate = estoqueNowImportRow(operation, importedAt);
-    if (candidate.row) rows.push(candidate.row);
+    if (candidate.row && seenExternalIds.has(candidate.row.external_id))
+      skippedReasons.duplicate_external_id += 1;
+    else if (candidate.row) {
+      seenExternalIds.add(candidate.row.external_id);
+      rows.push(candidate.row);
+    }
     else if (candidate.reason) skippedReasons[candidate.reason] += 1;
   }
   const existingById = new Map(
@@ -651,6 +675,66 @@ export async function loadExistingEstoqueNowOperationsForPull(
   return loaded;
 }
 
+export const estoqueNowCandidateSourceHash = (candidate: EstoqueNowCandidate) =>
+  createHash("sha256")
+    .update(JSON.stringify({
+      external_id: candidate.row.external_id,
+      event_name: candidate.row.event_name,
+      destination: candidate.row.destination,
+      scheduled_at: candidate.row.scheduled_at,
+      source_context: candidate.row.source_context,
+    }))
+    .digest("hex");
+
+export async function loadEstoqueNowQuarantine(
+  database: EstoqueNowSyncDatabase,
+  candidates: EstoqueNowCandidate[],
+): Promise<Set<string>> {
+  const quarantined = new Set<string>();
+  for (let index = 0; index < candidates.length; index += 100) {
+    const batch = candidates.slice(index, index + 100);
+    const result = await database.rpc("get_estoquenow_sync_quarantine", {
+      p_candidates: batch.map((candidate) => ({
+        externalId: candidate.externalId,
+        sourceVersion: candidate.row.source_context.source_version,
+        sourceHash: estoqueNowCandidateSourceHash(candidate),
+      })),
+    });
+    if (result.error) throw new Error("ESTOQUENOW_QUARANTINE_READ_FAILED");
+    if (!Array.isArray(result.data))
+      throw new Error("ESTOQUENOW_DATABASE_CONTRACT_INVALID");
+    for (const value of result.data) {
+      const row = objectFrom(value);
+      if (!row || typeof row.externalId !== "string")
+        throw new Error("ESTOQUENOW_DATABASE_CONTRACT_INVALID");
+      quarantined.add(row.externalId);
+    }
+  }
+  return quarantined;
+}
+
+export async function recordEstoqueNowDetailFailure(
+  database: EstoqueNowSyncDatabase,
+  input: {
+    runId: string;
+    candidate: EstoqueNowCandidate;
+    errorCode: EstoqueNowDetailFailureCode;
+  },
+): Promise<{ quarantined: boolean }> {
+  const recorded = await database.rpc("record_estoquenow_sync_detail_failure", {
+    p_run_id: input.runId,
+    p_external_id: input.candidate.externalId,
+    p_source_version: input.candidate.row.source_context.source_version,
+    p_source_hash: estoqueNowCandidateSourceHash(input.candidate),
+    p_error_code: input.errorCode,
+  });
+  if (recorded.error) throw new Error("ESTOQUENOW_DETAIL_FAILURE_RECORD_FAILED");
+  const value = objectFrom(recorded.data);
+  if (!value || typeof value.quarantined !== "boolean")
+    throw new Error("ESTOQUENOW_DATABASE_CONTRACT_INVALID");
+  return { quarantined: value.quarantined };
+}
+
 export async function confirmEstoqueNowCandidate(
   database: EstoqueNowSyncDatabase,
   input: {
@@ -661,15 +745,7 @@ export async function confirmEstoqueNowCandidate(
   },
 ): Promise<EstoqueNowConfirmationResult> {
   const { candidate, items, managerId } = input;
-  const sourceHash = createHash("sha256")
-    .update(JSON.stringify({
-      external_id: candidate.row.external_id,
-      event_name: candidate.row.event_name,
-      destination: candidate.row.destination,
-      scheduled_at: candidate.row.scheduled_at,
-      source_context: candidate.row.source_context,
-    }))
-    .digest("hex");
+  const sourceHash = estoqueNowCandidateSourceHash(candidate);
   const itemsHash = createHash("sha256")
     .update(JSON.stringify(canonicalItems(items)))
     .digest("hex");
@@ -712,13 +788,15 @@ export async function confirmEstoqueNowCandidate(
 
 export const selectAutomaticCandidates = (
   candidates: EstoqueNowCandidate[],
-  batchSize: number,
+  limit: number,
+  quarantined = new Set<string>(),
 ) =>
   candidates
     .filter(
       (candidate) =>
-        candidate.state === "new" ||
-        (candidate.state === "update" && candidate.updateKind === "mutable"),
+        !quarantined.has(candidate.externalId) &&
+        (candidate.state === "new" ||
+          (candidate.state === "update" && candidate.updateKind === "mutable")),
     )
     .sort((left, right) =>
       left.scheduledAt === right.scheduledAt
@@ -731,7 +809,15 @@ export const selectAutomaticCandidates = (
           ? -1
           : 1,
     )
-    .slice(0, Math.min(MAX_BATCH_SIZE, Math.max(0, batchSize)));
+    .slice(0, Math.min(MAX_DETAIL_READS, Math.max(0, limit)));
+
+const detailFailureCode = (error: unknown): EstoqueNowDetailFailureCode => {
+  const message = error instanceof Error ? error.message : "";
+  if (/ESTOQUENOW_SOURCE_ITEM_CHANGED|ESTOQUENOW_ORDER_ITEM_CONFLICT/.test(message))
+    return "source_item_changed";
+  if (/ESTOQUENOW_INVALID_ORDER_ITEMS/.test(message)) return "detail_invalid";
+  return "detail_unavailable";
+};
 
 const safeConfirmationError = (
   error: unknown,
@@ -757,6 +843,7 @@ export async function runEstoqueNowPull(
     skipped: 0,
     eligible: 0,
     manualReview: 0,
+    quarantined: 0,
     selected: 0,
     attempted: 0,
     detailFailed: 0,
@@ -786,21 +873,21 @@ export async function runEstoqueNowPull(
     .filter(isValidExternalId);
   const existing = await dependencies.loadExisting([...new Set(validExternalIds)]);
   const plan = buildEstoqueNowSyncPlan(inspected.operations, existing, now.toISOString());
-  const eligible = plan.candidates.filter(
+  const automaticCandidates = plan.candidates.filter(
     ({ state, updateKind }) => state === "new" || (state === "update" && updateKind === "mutable"),
-  ).length;
+  );
   const manualReview = plan.candidates.filter(
     ({ state, updateKind }) =>
       state === "blocked" ||
       state === "diverged" ||
       (state === "update" && updateKind === "legacy_backfill"),
   ).length;
-  const selected = selectAutomaticCandidates(plan.candidates, config.batchSize);
   const counts = {
     ...plan.counts,
-    eligible,
+    eligible: automaticCandidates.length,
     manualReview,
-    selected: selected.length,
+    quarantined: 0,
+    selected: 0,
     attempted: 0,
     detailFailed: 0,
     imported: 0,
@@ -808,7 +895,11 @@ export async function runEstoqueNowPull(
     reconciled: 0,
     failed: 0,
   };
-  if (!config.applyEnabled)
+  if (!config.applyEnabled) {
+    counts.selected = selectAutomaticCandidates(
+      automaticCandidates,
+      config.batchSize,
+    ).length;
     return {
       status: "observed",
       mode: "observe",
@@ -819,11 +910,22 @@ export async function runEstoqueNowPull(
       counts,
       outcomes: [],
     };
+  }
 
   if (!config.managerId) throw new Error("ESTOQUENOW_PULL_MANAGER_ID_INVALID");
+  const quarantined = await dependencies.loadQuarantined(automaticCandidates);
+  counts.quarantined = quarantined.size;
+  counts.eligible = automaticCandidates.length - quarantined.size;
+  const selected = selectAutomaticCandidates(
+    automaticCandidates,
+    MAX_DETAIL_READS,
+    quarantined,
+  );
   const outcomes: EstoqueNowPullResult["outcomes"] = [];
   const prepared: Array<{ candidate: EstoqueNowCandidate; items: EstoqueNowItem[] }> = [];
   for (const candidate of selected) {
+    if (prepared.length >= config.batchSize) break;
+    counts.selected += 1;
     try {
       const items = await dependencies.readItems(candidate.externalId);
       const orderId = candidate.row.source_context.order_id;
@@ -831,12 +933,15 @@ export async function runEstoqueNowPull(
         throw new Error("ESTOQUENOW_SOURCE_ITEM_CHANGED");
       prepared.push({ candidate, items });
     } catch (error) {
+      const errorCode = detailFailureCode(error);
+      const recorded = await dependencies.recordDetailFailure({ candidate, errorCode });
       counts.detailFailed += 1;
       counts.failed += 1;
+      if (recorded.quarantined) counts.quarantined += 1;
       outcomes.push({
         externalId: candidate.externalId,
         result: "failed",
-        errorCode: safeConfirmationError(error),
+        errorCode,
       });
     }
   }
@@ -855,7 +960,9 @@ export async function runEstoqueNowPull(
     }
   }
   const succeeded = counts.imported + counts.updated + counts.reconciled;
-  const status = counts.failed === 0 ? "succeeded" : succeeded === 0 ? "failed" : "partial";
+  const status = counts.failed === 0
+    ? counts.quarantined > 0 ? "partial" : "succeeded"
+    : succeeded === 0 ? "failed" : "partial";
   return {
     status,
     mode: "apply",

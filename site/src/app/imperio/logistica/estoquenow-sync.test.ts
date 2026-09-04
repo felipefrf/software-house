@@ -75,6 +75,11 @@ const existingFrom = (
   };
 };
 
+const detailTracking = {
+  loadQuarantined: async () => new Set<string>(),
+  recordDetailFailure: async () => ({ quarantined: true }),
+};
+
 test("autentica cron sem aceitar segredo ausente, curto ou diferente", () => {
   const secret = "0123456789abcdef0123456789abcdef";
   assert.equal(isAuthorizedEstoqueNowPull(`Bearer ${secret}`, secret), true);
@@ -220,6 +225,7 @@ test("observe contabiliza backfill legado como revisão manual, nunca como eleg�
       batchSize: 5,
     },
     {
+      ...detailTracking,
       inspectOperations: async () => ({ operations: [source] }),
       loadExisting: async () => [
         existingFrom(source, {
@@ -354,6 +360,7 @@ test("abre e finaliza run com reconciliação agregada", async () => {
       skipped: 2,
       eligible: 2,
       manualReview: 3,
+      quarantined: 0,
       selected: 2,
       attempted: 0,
       detailFailed: 0,
@@ -366,11 +373,12 @@ test("abre e finaliza run com reconciliação agregada", async () => {
   });
   assert.deepEqual(calls.map(({ name }) => name), [
     "begin_estoquenow_sync",
-    "finish_estoquenow_sync",
+    "finish_estoquenow_sync_v2",
   ]);
   assert.equal(calls[1]?.parameters.p_fetched_count, 10);
   assert.equal(calls[1]?.parameters.p_valid_count, 8);
   assert.equal(calls[1]?.parameters.p_blocked_count, 3);
+  assert.equal(calls[1]?.parameters.p_quarantined_count, 0);
   assert.equal(calls[1]?.parameters.p_deferred_count, 2);
 });
 
@@ -389,6 +397,7 @@ test("observe lê e classifica, mas não busca detalhe nem confirma", async () =
       batchSize: 5,
     },
     {
+      ...detailTracking,
       inspectOperations: async () => ({ operations: [operation("new")], contract: { fields: [] } }),
       loadExisting: async () => [],
       readItems: async () => {
@@ -428,6 +437,7 @@ test("apply confirma no máximo cinco novos e updates mutáveis", async () => {
       batchSize: 5,
     },
     {
+      ...detailTracking,
       inspectOperations: async () => ({ operations }),
       loadExisting: async () => [],
       readItems: async (externalId) => {
@@ -464,6 +474,7 @@ test("apply isola detalhe inválido sem confirmar o candidato", async () => {
       batchSize: 1,
     },
     {
+      ...detailTracking,
       inspectOperations: async () => ({ operations: [operation("changed")] }),
       loadExisting: async () => [],
       readItems: async () => [
@@ -496,6 +507,7 @@ test("detalhe inválido não impede outro candidato válido do mesmo lote", asyn
       batchSize: 2,
     },
     {
+      ...detailTracking,
       inspectOperations: async () => ({
         operations: [operation("invalid"), operation("valid")],
       }),
@@ -519,4 +531,129 @@ test("detalhe inválido não impede outro candidato válido do mesmo lote", asyn
   assert.equal(result.counts.attempted, 1);
   assert.equal(result.counts.detailFailed, 1);
   assert.deepEqual(confirmed, ["valid"]);
+});
+
+test("cinco detalhes inválidos não escondem o sexto candidato válido", async () => {
+  const operations = Array.from({ length: 6 }, (_, index) =>
+    operation(`candidate-${index}`),
+  );
+  const confirmed: string[] = [];
+  const failures: string[] = [];
+  const result = await runEstoqueNowPull(
+    {
+      enabled: true,
+      applyEnabled: true,
+      managerId: "00000000-0000-4000-8000-000000000001",
+      start: new Date("2026-09-01T03:00:00.000Z"),
+      end: new Date("2026-10-01T02:59:59.999Z"),
+      startDate: "2026-09-01",
+      endDate: "2026-09-30",
+      batchSize: 5,
+    },
+    {
+      loadQuarantined: async () => new Set(),
+      recordDetailFailure: async ({ candidate }) => {
+        failures.push(candidate.externalId);
+        return { quarantined: true };
+      },
+      inspectOperations: async () => ({ operations }),
+      loadExisting: async () => [],
+      readItems: async (externalId) => [
+        {
+          id: `row-${externalId}`,
+          itemId: "item",
+          orderId: externalId === "candidate-5" ? `order-${externalId}` : "outro-pedido",
+          name: "Mesa",
+        },
+      ],
+      confirm: async ({ candidate }) => {
+        confirmed.push(candidate.externalId);
+        return "new";
+      },
+    },
+  );
+  assert.equal(result.status, "partial");
+  assert.equal(result.counts.selected, 6);
+  assert.equal(result.counts.detailFailed, 5);
+  assert.equal(result.counts.attempted, 1);
+  assert.deepEqual(failures, operations.slice(0, 5).map(({ id }) => id));
+  assert.deepEqual(confirmed, ["candidate-5"]);
+});
+
+test("quarentena exata libera o próximo candidato sem reler os anteriores", async () => {
+  const operations = Array.from({ length: 6 }, (_, index) =>
+    operation(`candidate-${index}`),
+  );
+  const detailReads: string[] = [];
+  const result = await runEstoqueNowPull(
+    {
+      enabled: true,
+      applyEnabled: true,
+      managerId: "00000000-0000-4000-8000-000000000001",
+      start: new Date("2026-09-01T03:00:00.000Z"),
+      end: new Date("2026-10-01T02:59:59.999Z"),
+      startDate: "2026-09-01",
+      endDate: "2026-09-30",
+      batchSize: 5,
+    },
+    {
+      ...detailTracking,
+      loadQuarantined: async () =>
+        new Set(operations.slice(0, 5).map(({ id }) => id)),
+      inspectOperations: async () => ({ operations }),
+      loadExisting: async () => [],
+      readItems: async (externalId) => {
+        detailReads.push(externalId);
+        return [{ id: "row", itemId: "item", orderId: `order-${externalId}`, name: "Mesa" }];
+      },
+      confirm: async () => "new",
+    },
+  );
+  assert.equal(result.counts.quarantined, 5);
+  assert.equal(result.counts.eligible, 1);
+  assert.equal(result.counts.imported, 1);
+  assert.deepEqual(detailReads, ["candidate-5"]);
+});
+
+test("falha transitória é registrada sem quarentena", async () => {
+  let recordedCode = "";
+  const result = await runEstoqueNowPull(
+    {
+      enabled: true,
+      applyEnabled: true,
+      managerId: "00000000-0000-4000-8000-000000000001",
+      start: new Date("2026-09-01T03:00:00.000Z"),
+      end: new Date("2026-10-01T02:59:59.999Z"),
+      startDate: "2026-09-01",
+      endDate: "2026-09-30",
+      batchSize: 1,
+    },
+    {
+      loadQuarantined: async () => new Set(),
+      recordDetailFailure: async ({ errorCode }) => {
+        recordedCode = errorCode;
+        return { quarantined: false };
+      },
+      inspectOperations: async () => ({ operations: [operation("transient")] }),
+      loadExisting: async () => [],
+      readItems: async () => {
+        throw new Error("ESTOQUENOW_HTTP_503");
+      },
+      confirm: async () => "new",
+    },
+  );
+  assert.equal(recordedCode, "detail_unavailable");
+  assert.equal(result.counts.quarantined, 0);
+  assert.equal(result.counts.detailFailed, 1);
+});
+
+test("deduplica ID externo antes de planejar a importação", () => {
+  const plan = buildEstoqueNowSyncPlan(
+    [operation("same"), operation("same")],
+    [],
+    "2026-09-03T12:00:00.000Z",
+  );
+  assert.equal(plan.candidates.length, 1);
+  assert.equal(plan.counts.skipped, 1);
+  assert.equal(plan.skippedReasons.duplicate_external_id, 1);
 });

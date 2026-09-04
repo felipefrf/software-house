@@ -10,8 +10,10 @@ import {
   failEstoqueNowSyncRun,
   finishEstoqueNowSyncRun,
   isAuthorizedEstoqueNowPull,
+  loadEstoqueNowQuarantine,
   loadExistingEstoqueNowOperationsForPull,
   readEstoqueNowPullConfig,
+  recordEstoqueNowDetailFailure,
   runEstoqueNowPull,
   shouldContinueEstoqueNowDrain,
   type EstoqueNowPullResult,
@@ -87,7 +89,11 @@ export async function GET(request: Request) {
         inspectOperations: inspectEstoqueNowOperations,
         loadExisting: (externalIds) =>
           loadExistingEstoqueNowOperationsForPull(database, externalIds),
+        loadQuarantined: (candidates) =>
+          loadEstoqueNowQuarantine(database, candidates),
         readItems: readEstoqueNowItems,
+        recordDetailFailure: (input) =>
+          recordEstoqueNowDetailFailure(database, { ...input, runId: claim.runId! }),
         confirm: (input) =>
           confirmEstoqueNowCandidate(database, { ...input, runId: claim.runId! }),
       });
