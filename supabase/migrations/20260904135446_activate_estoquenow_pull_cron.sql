@@ -1,6 +1,18 @@
 create extension if not exists pg_cron with schema pg_catalog;
 create extension if not exists pg_net;
 
+do $$
+begin
+  if not exists (
+    select 1 from vault.secrets where name = 'imperio_estoquenow_pull_url'
+  ) or not exists (
+    select 1 from vault.secrets where name = 'imperio_estoquenow_cron_secret'
+  ) then
+    raise exception 'ESTOQUENOW_CRON_CONFIGURATION_MISSING';
+  end if;
+end
+$$;
+
 create or replace function private.invoke_imperio_estoquenow_pull()
 returns bigint
 language plpgsql
@@ -12,33 +24,29 @@ declare
   secret text;
   request_id bigint;
 begin
-  select decrypted_secret
-    into endpoint
+  select decrypted_secret into endpoint
   from vault.decrypted_secrets
   where name = 'imperio_estoquenow_pull_url';
 
-  select decrypted_secret
-    into secret
+  select decrypted_secret into secret
   from vault.decrypted_secrets
   where name = 'imperio_estoquenow_cron_secret';
 
   if nullif(endpoint, '') is null or nullif(secret, '') is null then
     raise exception 'ESTOQUENOW_CRON_CONFIGURATION_MISSING';
   end if;
-
   if endpoint <> 'https://imperio-logistica.vercel.app/api/imperio/estoquenow-pull' then
     raise exception 'ESTOQUENOW_CRON_ENDPOINT_INVALID';
   end if;
 
   select net.http_get(
     url := endpoint,
-    headers := jsonb_build_object('Authorization', 'Bearer ' || secret),
+    headers := pg_catalog.jsonb_build_object('Authorization', 'Bearer ' || secret),
     timeout_milliseconds := 300000
-  )
-  into request_id;
+  ) into request_id;
 
   return request_id;
-end;
+end
 $$;
 
 revoke all on function private.invoke_imperio_estoquenow_pull()

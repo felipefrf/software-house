@@ -64,10 +64,14 @@ EstoqueNOW.
 `Authorization: Bearer $CRON_SECRET`. O cron consulta uma janela móvel com
 sobreposição porque a API homologada não oferece cursor de atualização confiável.
 O Vercel Hobby mantém uma execução diária às 09:00 UTC como contingência. A
-migration `20260903182419_imperio_estoquenow_continuous_cron.sql` agenda o pull
+migration `20260904135446_activate_estoquenow_pull_cron.sql` agenda o pull
 principal no Supabase Cron a cada 15 minutos. Cada invocação aplica
 até seis lotes consecutivos de no máximo cinco operações, interrompendo ao esvaziar
 a fila, encontrar uma execução parcial/falha ou atingir o orçamento seguro de tempo.
+Cada run pode inspecionar até dez detalhes para que um registro inválido não esconda
+os candidatos seguintes. Falhas determinísticas ficam em quarentena por seis horas,
+vinculadas ao ID, versão e hash sanitizado da fonte; uma mudança na origem libera a
+tentativa imediatamente. Falhas transitórias são registradas, mas continuam elegíveis.
 
 Ativação segura:
 
