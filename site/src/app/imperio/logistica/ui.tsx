@@ -115,7 +115,7 @@ export function PageTitle({
   return (
     <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
       <div className="min-w-0">
-        <h1 className="font-imp-display text-[30px] font-semibold leading-[1.1] tracking-tight text-imp-ink md:text-[36px]">{title}</h1>
+        <h1 className="text-[26px] font-semibold leading-[1.15] tracking-[-0.01em] text-imp-ink md:text-[30px]">{title}</h1>
         {lead && <p className="mt-1 max-w-[70ch] text-[15px] leading-6 text-imp-muted">{lead}</p>}
       </div>
       {aside && <div className="flex w-full max-w-full flex-wrap items-center gap-2 sm:w-auto sm:shrink-0">{aside}</div>}
@@ -145,8 +145,12 @@ export function SectionTitle({
   );
 }
 
-export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <section className={`rounded-2xl border border-imp-line/70 bg-imp-surface shadow-imp-card ${className}`}>{children}</section>;
+export function Card({ children, className = "", id }: { children: ReactNode; className?: string; id?: string }) {
+  return (
+    <section id={id} className={`rounded-2xl border border-imp-line/70 bg-imp-surface shadow-imp-card ${className}`}>
+      {children}
+    </section>
+  );
 }
 
 export function Disclosure({

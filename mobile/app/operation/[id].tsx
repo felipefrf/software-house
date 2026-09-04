@@ -99,7 +99,7 @@ export default function OperationScreen() {
   return (
     <Screen>
       <BrandHeader
-        eyebrow={operation.source === "manual" ? "Manual interna · não originada do EstoqueNOW" : "Origem EstoqueNOW"}
+        eyebrow={operation.source === "manual" ? "Cadastro interno" : `EstoqueNOW · ${operation.external_id ?? "sem ID"}`}
         title="Detalhe da operação"
         action={
           <Pressable

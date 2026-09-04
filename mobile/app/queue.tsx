@@ -53,7 +53,7 @@ export default function QueueScreen() {
 
   return (
     <Screen>
-      <BrandHeader eyebrow="Envios deste aparelho" title="Fila local" />
+      <BrandHeader eyebrow="Deste aparelho" title="Envios pendentes" />
       <StatusStrip online={online} pending={pending} />
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.title}>Cada ação tem um estado claro.</Text>
@@ -147,7 +147,7 @@ export default function QueueScreen() {
           </View>
         ) : (
           <Card style={styles.empty}>
-            <Text style={styles.emptyTitle}>Fila local vazia</Text>
+            <Text style={styles.emptyTitle}>Nada para enviar</Text>
             <Text style={styles.emptyCopy}>
               As próximas ações feitas no campo aparecerão aqui antes e depois da confirmação.
             </Text>

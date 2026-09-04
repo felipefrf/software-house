@@ -64,7 +64,7 @@ function Brand({
         </svg>
       </span>
       <span className={compact ? "sr-only" : `min-w-0 leading-tight ${mobileCompact ? "max-[479px]:sr-only" : ""}`}>
-        <span className={`block font-imp-display text-[22px] font-semibold tracking-tight ${inverted ? "text-white" : "text-imp-ink"}`}>Império Logística</span>
+        <span className={`block text-[18px] font-semibold tracking-[-0.01em] ${inverted ? "text-white" : "text-imp-ink"}`}>Império Logística</span>
       </span>
     </div>
   );
@@ -95,7 +95,7 @@ function AccessCard({
         }}
       >
         <Brand />
-        <h1 className="mt-7 font-imp-display text-[32px] font-semibold leading-tight tracking-tight">{title}</h1>
+        <h1 className="mt-7 text-[26px] font-semibold leading-tight tracking-[-0.01em]">{title}</h1>
         <p className="mt-2 text-[15px] leading-6 text-imp-muted">{description}</p>
         {!changePassword && (
           <label className="mt-6 block text-sm font-medium">

@@ -191,7 +191,7 @@ function OperationRow({
         }`}
       >
         <span className="flex items-center justify-between gap-3">
-          <span className="text-[14px] font-semibold tabular-nums text-imp-green">
+          <span className="text-[15px] font-semibold tabular-nums text-imp-ink">
             {formatWhen(operation.scheduled_at)}
           </span>
           {operation.status !== "active" && (
@@ -200,7 +200,7 @@ function OperationRow({
             </Pill>
           )}
         </span>
-        <span className={`mt-1 block break-words font-imp-display font-semibold ${emphasis ? "text-[22px] leading-7" : "text-[19px] leading-6"}`}>
+        <span className={`mt-1 block break-words font-semibold tracking-[-0.01em] ${emphasis ? "text-[19px] leading-6" : "text-[16px] leading-5"}`}>
           {operation.event_name}
         </span>
         <span className="mt-0.5 line-clamp-2 block text-[14px] leading-5 text-imp-muted">{place.address}</span>
@@ -504,7 +504,7 @@ export function FieldApp(props: Props) {
       <>
         <main className={`mx-auto max-w-[480px] px-4 py-6 ${navPadding}`}>
           {connectionNotice}
-          <h1 ref={tabHeadingRef} tabIndex={-1} className="mt-4 font-imp-display text-[30px] font-semibold leading-tight outline-none">Hoje</h1>
+          <h1 ref={tabHeadingRef} tabIndex={-1} className="mt-4 text-[26px] font-semibold leading-tight tracking-[-0.01em] outline-none">Hoje</h1>
           <p className="text-[15px] text-imp-muted">{dateFormatter.format(new Date())}</p>
           <div className="mt-5">
             <Empty>Nenhuma operação escalada para você. A coordenação precisa associar você ou sua equipe a uma operação.</Empty>
@@ -585,7 +585,7 @@ export function FieldApp(props: Props) {
             <div className={`flex items-end justify-between gap-3 ${connectionNotice ? "mt-4" : ""}`}>
               <div>
                 <p className="text-[15px] text-imp-muted">{firstName ? `Olá, ${firstName}. ` : ""}{capitalize(dateFormatter.format(new Date()))}</p>
-                <h1 ref={tabHeadingRef} tabIndex={-1} className="font-imp-display text-[32px] font-semibold leading-tight outline-none">
+                <h1 ref={tabHeadingRef} tabIndex={-1} className="text-[28px] font-semibold leading-tight tracking-[-0.01em] outline-none">
                   {today.length ? `${plural(today.length, "operação", "operações")} hoje` : "Nada escalado para hoje"}
                 </h1>
               </div>
@@ -668,7 +668,7 @@ export function FieldApp(props: Props) {
 
             <div className="mt-2">
               <p className="text-[15px] font-medium tabular-nums text-imp-muted">{formatWhen(selected.scheduled_at)}</p>
-              <h1 ref={tabHeadingRef} tabIndex={-1} className="mt-0.5 break-words font-imp-display text-[28px] font-semibold leading-tight outline-none">
+              <h1 ref={tabHeadingRef} tabIndex={-1} className="mt-0.5 break-words text-[24px] font-semibold leading-tight tracking-[-0.01em] outline-none">
                 {selected.event_name}
               </h1>
               <p className="mt-1 text-[15px] leading-5 text-imp-muted">{place.address}</p>
@@ -718,7 +718,7 @@ export function FieldApp(props: Props) {
             ) : (
               <form id="stage-action" onSubmit={submitAction} className="mt-4 rounded-2xl border border-imp-line/70 bg-imp-surface shadow-imp-card p-4">
                 <p className="text-[14px] font-semibold text-imp-green">Próxima ação</p>
-                <h2 className="mt-0.5 font-imp-display text-[26px] font-semibold leading-tight">
+                <h2 className="mt-0.5 text-[22px] font-semibold leading-tight tracking-[-0.01em]">
                   {selected.stage === "arrival" && arrivalAccess === "blocked"
                     ? "Registrar bloqueio"
                     : `Concluir ${stageLabels[selected.stage].toLowerCase()}`}
@@ -934,7 +934,7 @@ export function FieldApp(props: Props) {
 
         {tab === "evidence" && (
           <div>
-            <h1 ref={tabHeadingRef} tabIndex={-1} className="font-imp-display text-[30px] font-semibold leading-tight outline-none">Evidências</h1>
+            <h1 ref={tabHeadingRef} tabIndex={-1} className="text-[26px] font-semibold leading-tight tracking-[-0.01em] outline-none">Evidências</h1>
             <p className="text-[15px] text-imp-muted">Etapas já recebidas pela torre, por operação.</p>
             <div className="mt-4 space-y-3">
               {evidenceByOperation.map(({ operation, items }) => (
@@ -977,7 +977,7 @@ export function FieldApp(props: Props) {
 
         {tab === "queue" && (
           <div>
-            <h1 ref={tabHeadingRef} tabIndex={-1} className="font-imp-display text-[30px] font-semibold leading-tight outline-none">Envios pendentes</h1>
+            <h1 ref={tabHeadingRef} tabIndex={-1} className="text-[26px] font-semibold leading-tight tracking-[-0.01em] outline-none">Envios pendentes</h1>
             <p className="text-[15px] leading-6 text-imp-muted">
               Etapas concluídas sem sinal ficam aqui até chegarem à torre. Abrir ou recarregar o app exige internet.
             </p>

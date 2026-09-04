@@ -1,6 +1,6 @@
 ---
 name: "Império Logística"
-description: "Prancheta de carga: torre de controle e app de campo com uma cor de ação, papel quente e serifa de display."
+description: "Prancheta de carga: torre de controle e app de campo com uma cor de ação, papel quente e uma só família tipográfica."
 colors:
   ground: "#f6f4ef"
   surface: "#ffffff"
@@ -16,13 +16,12 @@ colors:
   red: "#a63a30"
   red-tint: "#fae8e5"
 typography:
+  family: "IBM Plex Sans, Segoe UI, system-ui, sans-serif"
   display:
-    fontFamily: "Newsreader, Georgia, serif"
     fontWeight: 600
-    sizes: "26 / 30 / 36px, line-height 1.1, tracking -0.01em"
+    sizes: "22 / 26 / 30px, line-height 1.15, tracking -0.01em"
   body:
-    fontFamily: "Albert Sans, Segoe UI, system-ui, sans-serif"
-    sizes: "13 / 14 / 15 / 16 / 17 / 20px"
+    sizes: "13 / 14 / 15 / 16 / 17px"
     numerals: "tabular"
 rounded:
   control: "12px"
@@ -68,10 +67,13 @@ verde sobre suas tintas acima de 5,4:1. Estado desabilitado usa cor sólida
 
 ## Tipografia
 
-Newsreader (serifa, 500–600) para títulos de página, nome do evento, horários
-grandes e números de destaque. Albert Sans para todo o resto. Sem
-monoespaçada, sem caixa alta decorativa; o único rótulo em caixa alta foi
-removido. Horários e contagens usam numerais tabulares.
+Uma família só, IBM Plex Sans, em toda a torre e no campo. A hierarquia vem de
+peso (400/500/600), tamanho e cor, nunca de troca de família: serifa foi testada
+e descartada por destoar de um sistema operacional. Títulos de página 26–30px
+semibold com tracking levemente negativo; nome do evento 16px semibold em
+listas e 22–24px no detalhe; metadados 13–14px em texto atenuado. Sem
+monoespaçada e sem caixa alta decorativa. Horários e contagens usam numerais
+tabulares.
 
 ## Layout
 
@@ -83,10 +85,15 @@ removido. Horários e contagens usam numerais tabulares.
   operação com botão que leva ao controle real), quadro "Em andamento hoje"
   (hora, evento, rota em nove pontos, escala) e "Próximos 7 dias".
 - **Operações:** filtros, lista cronológica (ativas primeiro) e painel de
-  detalhe ao lado a partir de 1280px; abaixo disso o detalhe substitui a
-  lista com "Voltar à lista". Detalhe: cabeçalho, bloco "Agora", avisos,
-  rota com foco por etapa e seções recolhíveis (Escala, Itens da carga,
-  Dados do pedido, Linha do tempo, Cancelar).
+  detalhe ao lado a partir de 1280px, ambos começando na mesma linha; o botão
+  de fechar fica dentro do cabeçalho do detalhe. Abaixo de 1280px o detalhe
+  substitui a lista com "Voltar à lista". Detalhe: cabeçalho, bloco "Agora",
+  avisos, rota com foco por etapa e seções recolhíveis (Escala, Itens da
+  carga, Dados do pedido, Linha do tempo, Cancelar).
+- **Cadastros (Pessoas, Frota, operação interna):** lista em coluna única;
+  a ação de criar é um botão no cabeçalho da página que abre um formulário
+  em largura total acima da lista e fecha ao salvar. Nada de coluna lateral
+  com cartões de altura diferente.
 - **Campo:** cabeçalho verde-escuro, lista de hoje em cartões grandes,
   "Próximas" e "Encerradas" depois. Tela da operação: etapa com rota
   compacta, avisos, itens da carga abertos só nas etapas de carga, "Próxima
@@ -97,7 +104,9 @@ removido. Horários e contagens usam numerais tabulares.
 ## Componentes
 
 - **Card:** `rounded-2xl`, borda `line/70`, `shadow-card`. Sem mosaico de
-  cartões KPI.
+  cartões KPI. Linha de operação: nome + pílulas, endereço, e uma linha de
+  metadados com horário em negrito e rota em nove pontos; faixa lateral de
+  4px só quando há risco.
 - **Pill:** `rounded-full`, anel interno, tinta semântica. Só para estado.
 - **Notice:** faixa lateral de 6px na cor semântica, superfície tingida,
   título + frase + ação opcional. Vermelho recebe `role="alert"`.

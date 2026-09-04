@@ -93,13 +93,13 @@ export function StatusStrip({ online, pending }: { online: boolean; pending: num
     <View
       accessible
       accessibilityLiveRegion="polite"
-      accessibilityLabel={`${online ? "Com conexão" : "Sem conexão"}. ${pending ? `${pending} ações na fila` : "Fila local vazia"}.`}
+      accessibilityLabel={`${online ? "Com conexão" : "Sem conexão"}. ${pending ? `${pending} registros para enviar` : "Nada para enviar"}.`}
       style={styles.statusStrip}
     >
       <View style={[styles.dot, { backgroundColor: online ? colors.green : colors.amber }]} />
       <Text style={styles.statusText}>{online ? "Com conexão" : "Sem conexão"}</Text>
       <Text style={styles.statusQueue}>
-        {pending ? `${pending} na fila` : "Fila local vazia"}
+        {pending ? `${pending} para enviar` : "Nada para enviar"}
       </Text>
     </View>
   );
@@ -111,7 +111,7 @@ export function BottomNavigation() {
   const items = [
     { id: "today" as const, label: "Hoje", path: "/" as const },
     { id: "evidence" as const, label: "Evidências", path: "/evidence" as const },
-    { id: "queue" as const, label: "Fila", path: "/queue" as const },
+    { id: "queue" as const, label: "Envios", path: "/queue" as const },
   ];
   const current = pathname.startsWith("/evidence")
     ? "evidence"
@@ -167,12 +167,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
   },
-  headerTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 24, fontWeight: "700", marginTop: 1 },
+  headerTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 22, fontWeight: "700", letterSpacing: -0.2, marginTop: 1 },
   card: {
     backgroundColor: colors.surface,
     borderColor: colors.line,
     borderWidth: 1,
-    borderRadius: 15,
+    borderRadius: 16,
     padding: 16,
     ...shadow,
   },

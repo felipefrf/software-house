@@ -16,6 +16,7 @@ import {
   Truck,
   Users,
   X,
+  Plus,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import Image from "next/image";
@@ -311,43 +312,46 @@ function OperationRow({
   const place = placeParts(operation);
   const scale = scaleText(snapshot, operation);
   const risk = operationSignals(operation, snapshot.incidents).risk;
+  const when = showDate ? formatWhen(operation.scheduled_at) : formatTime(operation.scheduled_at);
+  const stage = (
+    <>
+      <RouteDots operation={operation} />
+      <span className="font-medium text-imp-ink">{stageLabels[operation.stage]}</span>
+    </>
+  );
+  const scaleNode = scale.complete ? (
+    <span className="text-imp-muted">{scale.team} · {scale.vehicle} · {scale.driver}</span>
+  ) : operation.status === "active" ? (
+    <span className="font-semibold text-imp-amber">Escala incompleta</span>
+  ) : (
+    <span className="text-imp-muted">{[scale.team, scale.vehicle, scale.driver].filter(Boolean).join(" · ") || "Sem escala"}</span>
+  );
   return (
     <li>
       <button
         type="button"
         onClick={onOpen}
         aria-current={selected ? "true" : undefined}
-        className={`grid w-full gap-x-4 gap-y-2 border-l-4 px-4 py-3 text-left hover:bg-imp-ground/70 ${
-          compact ? "grid-cols-[minmax(0,1fr)_auto]" : "@3xl:grid-cols-[88px_minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)_20px] @3xl:items-center"
+        className={`grid w-full grid-cols-[minmax(0,1fr)_20px] items-center gap-x-4 border-l-4 px-4 py-3.5 text-left transition-colors hover:bg-imp-ground/70 ${
+          compact ? "" : "@3xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)_20px]"
         } ${risk === "critical" ? "border-l-imp-red" : risk === "attention" ? "border-l-imp-amber" : "border-l-transparent"} ${selected ? "bg-imp-green-tint/50" : ""}`}
       >
-        <span className={`${compact ? "col-span-2 text-[13px] font-semibold text-imp-green" : "text-[14px] font-semibold leading-5 text-imp-green"} tabular-nums`}>
-          {showDate ? formatWhen(operation.scheduled_at) : formatTime(operation.scheduled_at)}
-        </span>
-        <span className={`min-w-0 ${compact ? "col-span-2" : ""}`}>
+        <span className="min-w-0">
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <strong className="break-words font-imp-display text-[18px] leading-5">{operation.event_name}</strong>
+            <strong className="break-words text-[16px] font-semibold leading-5">{operation.event_name}</strong>
             {risk === "critical" && <Pill tone="red">Crítica</Pill>}
             {operation.status !== "active" && <Pill tone={operation.status === "completed" ? "green" : "red"}>{statusLabel[operation.status]}</Pill>}
           </span>
           <span className="mt-0.5 line-clamp-1 block text-[14px] text-imp-muted">{place.address}</span>
+          <span className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[14px]">
+            <time className="font-semibold tabular-nums" dateTime={operation.scheduled_at}>{when}</time>
+            <span className={`flex items-center gap-2 ${compact ? "" : "@3xl:hidden"}`}>{stage}</span>
+            {!compact && <span className="@3xl:hidden">{scaleNode}</span>}
+          </span>
         </span>
-        <span className={`flex flex-wrap items-center gap-x-2 gap-y-1 text-[14px] ${compact ? "min-w-0" : ""}`}>
-          <RouteDots operation={operation} />
-          <span className="font-medium">{stageLabels[operation.stage]}</span>
-        </span>
-        <span className={`text-[14px] ${compact ? "hidden" : ""}`}>
-          {scale.complete ? (
-            <span className="text-imp-muted">
-              {scale.team} · {scale.vehicle} · {scale.driver}
-            </span>
-          ) : operation.status === "active" ? (
-            <span className="font-semibold text-imp-amber">Escala incompleta</span>
-          ) : (
-            <span className="text-imp-muted">{[scale.team, scale.vehicle, scale.driver].filter(Boolean).join(" · ") || "Sem escala"}</span>
-          )}
-        </span>
-        <ChevronRight size={18} className={`${compact ? "self-center justify-self-end" : "hidden justify-self-end @3xl:block"} text-imp-muted`} aria-hidden="true" />
+        {!compact && <span className="hidden items-center gap-2 text-[14px] @3xl:flex">{stage}</span>}
+        {!compact && <span className="hidden text-[14px] @3xl:block">{scaleNode}</span>}
+        <ChevronRight size={18} className="justify-self-end text-imp-muted" aria-hidden="true" />
       </button>
     </li>
   );
@@ -373,8 +377,7 @@ function OperationList({
   if (!operations.length) return <Empty>{emptyText}</Empty>;
   return (
     <Card className="@container overflow-hidden">
-      <div className={`${compact ? "hidden" : "hidden @3xl:grid"} grid-cols-[88px_minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)_20px] gap-x-4 border-b border-imp-line px-4 py-2 text-[13px] font-semibold text-imp-muted`}>
-        <span>{showDate ? "Quando" : "Hora"}</span>
+      <div className={`${compact ? "hidden" : "hidden @3xl:grid"} grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)_20px] gap-x-4 border-b border-imp-line px-4 py-2 text-[13px] font-semibold text-imp-muted`}>
         <span>Operação</span>
         <span>Etapa</span>
         <span>Escala</span>
@@ -501,6 +504,7 @@ function OperationDetail({
   refresh,
   onOpenEvidence,
   onOpenIncidents,
+  onClose,
 }: {
   snapshot: LogisticsSnapshot;
   operation?: Operation;
@@ -509,6 +513,7 @@ function OperationDetail({
   refresh: () => Promise<void>;
   onOpenEvidence?: () => void;
   onOpenIncidents?: () => void;
+  onClose?: () => void;
 }) {
   const [focusedStage, setFocusedStage] = useState<OperationStage>(operation?.stage ?? "preparation");
   if (!operation) return <Empty>Selecione uma operação para ver o detalhe.</Empty>;
@@ -540,12 +545,26 @@ function OperationDetail({
 
   return (
     <article className="min-w-0 rounded-2xl border border-imp-line/70 bg-imp-surface shadow-imp-card">
-      <header className="px-5 pt-5">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-[15px] font-medium tabular-nums text-imp-muted">{formatWhen(operation.scheduled_at)}</p>
+      <header className="px-5 pt-4">
+        <div className="flex items-center justify-between gap-2">
+          {onClose ? (
+            <button
+              type="button"
+              onClick={onClose}
+              className="-ml-2 inline-flex min-h-10 items-center gap-1 rounded-lg px-2 text-[14px] font-semibold text-imp-green hover:bg-imp-green-tint"
+            >
+              <ChevronLeft size={16} aria-hidden="true" className="xl:hidden" />
+              <span className="xl:hidden">Voltar à lista</span>
+              <X size={16} aria-hidden="true" className="hidden xl:block" />
+              <span className="hidden xl:inline">Fechar detalhe</span>
+            </button>
+          ) : (
+            <span />
+          )}
           <Pill tone={operation.status === "completed" ? "green" : operation.status === "cancelled" ? "red" : "neutral"}>{statusLabel[operation.status]}</Pill>
         </div>
-        <h2 className="mt-1 break-words font-imp-display text-[26px] font-semibold leading-tight md:text-[30px]">
+        <p className="mt-3 text-[14px] font-semibold tabular-nums text-imp-muted">{formatWhen(operation.scheduled_at)}</p>
+        <h2 className="mt-0.5 break-words text-[22px] font-semibold leading-tight tracking-[-0.01em] md:text-[24px]">
           {operation.event_name}
         </h2>
         <p className="mt-1 text-[15px] leading-5 text-imp-muted">{place.address}</p>
@@ -771,7 +790,7 @@ function TodayView(props: Props & { onOpenOperation: (id: string) => void; onOpe
                   >
                     <time className="text-[14px] font-semibold tabular-nums text-imp-green">{formatTime(operation.scheduled_at)}</time>
                     <div className="min-w-0">
-                      <h3 className="truncate font-imp-display text-[18px] font-semibold leading-5">{operation.event_name}</h3>
+                      <h3 className="truncate text-[16px] font-semibold leading-5">{operation.event_name}</h3>
                       <p className="mt-1 line-clamp-1 text-[14px] text-imp-muted">
                         {topIncident
                           ? `${incidentTypeLabel[topIncident.type]}, gravidade ${severityLabel[topIncident.severity]}: ${topIncident.description}`
@@ -860,6 +879,7 @@ function OperationsView(
   const [endDate, setEndDate] = useState("");
   const [detailOpen, setDetailOpen] = useState(Boolean(props.openSelected));
   const [filtersOpen, setFiltersOpen] = useState(!props.openSelected);
+  const [createOpen, setCreateOpen] = useState(!props.snapshot.operations.length);
   const detailRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const closeDetail = () => {
@@ -937,12 +957,33 @@ function OperationsView(
       <PageTitle
         title="Operações"
         lead={`${filtered.length} de ${plural(props.snapshot.operations.length, "operação", "operações")}.`}
-        aside={detailOpen && (
-          <Button variant="secondary" aria-controls="operation-filters" aria-expanded={filtersOpen} onClick={() => setFiltersOpen((open) => !open)}>
-            Filtros{hasFilters ? " ativos" : ""}
-          </Button>
-        )}
+        aside={
+          <>
+            {detailOpen && (
+              <Button variant="secondary" aria-controls="operation-filters" aria-expanded={filtersOpen} onClick={() => setFiltersOpen((open) => !open)}>
+                Filtros{hasFilters ? " ativos" : ""}
+              </Button>
+            )}
+            <Button variant={createOpen ? "secondary" : "primary"} aria-controls="operation-create" aria-expanded={createOpen} onClick={() => setCreateOpen((open) => !open)}>
+              <Plus size={16} aria-hidden="true" /> Criar operação interna
+            </Button>
+          </>
+        }
       />
+      {createOpen && (
+        <FormPanel id="operation-create" title="Criar operação interna" lead="Para eventos que não existem no EstoqueNOW. Fica marcada como cadastro interno." onClose={() => setCreateOpen(false)}>
+          <form onSubmit={create} className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <Input name="eventName" label="Evento" />
+            <Input name="destination" label="Destino completo" />
+            <Input name="scheduledAt" label="Data e horário" type="datetime-local" />
+            <Select name="teamId" label="Equipe" required={false} options={props.snapshot.teams.map((team) => [team.id, team.name])} />
+            <Select name="vehicleId" label="Veículo" required={false} options={props.snapshot.vehicles.map((vehicle) => [vehicle.id, `${vehicle.name} · ${vehicle.plate}`])} />
+            <Select name="driverId" label="Motorista" required={false} options={props.snapshot.people.map((person) => [person.id, person.full_name])} />
+            <div className="md:col-span-2 xl:col-span-2"><Input name="notes" label="Observações" required={false} /></div>
+            <div className="self-end"><Submit busy={props.busy} configured={props.snapshot.configured} label="Criar operação interna" /></div>
+          </form>
+        </FormPanel>
+      )}
       <div id="operation-filters" className={detailOpen && !filtersOpen ? "hidden" : ""} aria-label="Filtros">
       <Card className="mt-5 p-4">
         <div className="grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
@@ -1024,36 +1065,9 @@ function OperationsView(
             emptyText={hasFilters ? "Nenhuma operação corresponde aos filtros." : "Nenhuma operação cadastrada ou importada."}
             compact={detailOpen}
           />
-          <Card className="px-5">
-            <Disclosure className="border-t-0" summary="Criar operação interna" open={!props.snapshot.operations.length}>
-              <p className="text-[15px] text-imp-muted">Para eventos que não existem no EstoqueNOW. Fica marcada como cadastro interno.</p>
-              <form onSubmit={create} className="mt-3 grid gap-3 md:grid-cols-2">
-                <Input name="eventName" label="Evento" />
-                <Input name="destination" label="Destino completo" />
-                <Input name="scheduledAt" label="Data e horário" type="datetime-local" />
-                <Select name="teamId" label="Equipe" required={false} options={props.snapshot.teams.map((team) => [team.id, team.name])} />
-                <Select name="vehicleId" label="Veículo" required={false} options={props.snapshot.vehicles.map((vehicle) => [vehicle.id, `${vehicle.name} · ${vehicle.plate}`])} />
-                <Select name="driverId" label="Motorista" required={false} options={props.snapshot.people.map((person) => [person.id, person.full_name])} />
-                <div className="md:col-span-2"><Input name="notes" label="Observações" required={false} /></div>
-                <div className="md:col-span-2"><Submit busy={props.busy} configured={props.snapshot.configured} label="Criar operação interna" /></div>
-              </form>
-            </Disclosure>
-          </Card>
         </div>
         {detailOpen && (
-          <div ref={detailRef} tabIndex={-1} className="min-w-0 scroll-mt-20 space-y-3 outline-none xl:sticky xl:top-20">
-            <div className="flex justify-between xl:justify-end">
-              <span className="xl:hidden">
-                <Button variant="ghost" className="-ml-3" onClick={closeDetail}>
-                  <ChevronLeft size={16} aria-hidden="true" /> Voltar à lista
-                </Button>
-              </span>
-              <span className="hidden xl:block">
-                <Button variant="ghost" onClick={closeDetail}>
-                  <X size={16} aria-hidden="true" /> Fechar detalhe
-                </Button>
-              </span>
-            </div>
+          <div ref={detailRef} tabIndex={-1} className="min-w-0 scroll-mt-20 outline-none xl:sticky xl:top-[76px]">
             {selected ? (
               <OperationDetail
                 key={`${selected.id}-${selected.stage}`}
@@ -1064,9 +1078,17 @@ function OperationsView(
                 refresh={props.refresh}
                 onOpenEvidence={() => props.onOpenEvidence(selected.id)}
                 onOpenIncidents={() => props.onOpenIncidents(selected.id)}
+                onClose={closeDetail}
               />
             ) : (
-              <Empty action={<Button variant="secondary" onClick={resetFilters}>Limpar filtros</Button>}>
+              <Empty
+                action={
+                  <>
+                    <Button variant="secondary" onClick={resetFilters}>Limpar filtros</Button>
+                    <Button variant="ghost" onClick={closeDetail}>Fechar detalhe</Button>
+                  </>
+                }
+              >
                 A operação selecionada está fora dos filtros.
               </Empty>
             )}
@@ -1184,101 +1206,139 @@ function CalendarView({ snapshot, onOpenOperation }: Props & { onOpenOperation: 
   );
 }
 
+function FormPanel({
+  id,
+  title,
+  lead,
+  onClose,
+  children,
+}: {
+  id: string;
+  title: string;
+  lead?: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <Card id={id} className="imp-rise mt-5 p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-[17px] font-semibold">{title}</h2>
+          {lead && <p className="mt-0.5 text-[14px] text-imp-muted">{lead}</p>}
+        </div>
+        <Button variant="ghost" onClick={onClose} aria-label="Fechar formulário"><X size={16} aria-hidden="true" /></Button>
+      </div>
+      {children}
+    </Card>
+  );
+}
+
 function PeopleView(props: Props) {
+  const [form, setForm] = useState<"person" | "team" | null>(
+    !props.snapshot.people.length ? "person" : !props.snapshot.teams.length ? "team" : null,
+  );
   const submit = (action: string, success: string, body: (form: FormData) => object) => (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const element = event.currentTarget;
-    const form = new FormData(element);
+    const data = new FormData(element);
     void props.run(async () => {
-      await postJson(action, body(form));
+      await postJson(action, body(data));
       element.reset();
       await props.refresh();
+      setForm(null);
     }, success);
   };
   return (
     <div>
-      <PageTitle title="Pessoas e equipes" lead="Quem pode entrar na escala. Cadastro interno da Império, sem relação com o EstoqueNOW." />
+      <PageTitle
+        title="Pessoas e equipes"
+        lead="Quem pode entrar na escala. Cadastro interno da Império, sem relação com o EstoqueNOW."
+        aside={
+          <>
+            <Button variant={form === "person" ? "secondary" : "primary"} aria-expanded={form === "person"} aria-controls="people-form" onClick={() => setForm(form === "person" ? null : "person")}>
+              <Plus size={16} aria-hidden="true" /> Cadastrar pessoa
+            </Button>
+            <Button variant="secondary" aria-expanded={form === "team"} aria-controls="people-form" onClick={() => setForm(form === "team" ? null : "team")}>
+              <Plus size={16} aria-hidden="true" /> Criar equipe
+            </Button>
+          </>
+        }
+      />
 
-      <div className="mt-6 grid items-start gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-        <div className="space-y-6">
-          <section>
-            <SectionTitle count={props.snapshot.people.length}>Pessoas</SectionTitle>
-            {props.snapshot.people.length ? (
-              <Card className="mt-3 overflow-hidden">
-                <ul className="divide-y divide-imp-line">
-                  {props.snapshot.people.map((person) => (
-                    <li key={person.id} className="grid gap-x-4 gap-y-1 px-4 py-3 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] sm:items-center">
-                      <span className="min-w-0">
-                        <strong className="block break-words text-[16px]">{person.full_name}</strong>
-                        <span className="text-[14px] text-imp-muted">{person.job_title} · {person.role === "manager" ? "coordenação" : "campo"}</span>
-                      </span>
-                      <span className="text-[14px] tabular-nums text-imp-muted">{person.phone ?? "Sem telefone"}</span>
-                      <Pill tone={person.availability === "available" ? "green" : "amber"}>{person.availability === "available" ? "Disponível" : "Indisponível"}</Pill>
-                    </li>
-                  ))}
-                </ul>
-              </Card>
-            ) : (
-              <div className="mt-3"><Empty>Cadastre a primeira pessoa para formar uma equipe.</Empty></div>
-            )}
-          </section>
-          <section>
-            <SectionTitle count={props.snapshot.teams.length}>Equipes</SectionTitle>
-            {props.snapshot.teams.length ? (
-              <Card className="mt-3 overflow-hidden">
-                <ul className="divide-y divide-imp-line">
-                  {props.snapshot.teams.map((team) => (
-                    <li key={team.id} className="px-4 py-3">
-                      <strong className="text-[16px]">{team.name}</strong>
-                      <p className="text-[14px] text-imp-muted">
-                        Líder {props.snapshot.people.find((person) => person.id === team.leader_id)?.full_name ?? "não informado"} · {team.member_ids.length} integrante(s)
-                      </p>
-                    </li>
-                  ))}
-                </ul>
-              </Card>
-            ) : (
-              <div className="mt-3"><Empty>Crie uma equipe para escalar as pessoas juntas.</Empty></div>
-            )}
-          </section>
-        </div>
+      {form === "person" && (
+        <FormPanel id="people-form" title="Cadastrar pessoa" lead="Cria o acesso. A senha temporária é trocada no primeiro login." onClose={() => setForm(null)}>
+          <form className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3" onSubmit={submit("create-person", "Pessoa e acesso criados.", (data) => ({ fullName: formValue(data, "fullName"), email: formValue(data, "email"), phone: formValue(data, "phone"), jobTitle: formValue(data, "jobTitle"), temporaryPassword: formValue(data, "temporaryPassword") }))}>
+            <Input name="fullName" label="Nome completo" />
+            <Input name="email" label="E-mail" type="email" />
+            <Input name="jobTitle" label="Função" />
+            <Input name="phone" label="Telefone" required={false} />
+            <Input name="temporaryPassword" label="Senha temporária" type="password" minLength={10} />
+            <div className="self-end"><Submit busy={props.busy} configured={props.snapshot.configured} label="Cadastrar pessoa" /></div>
+          </form>
+        </FormPanel>
+      )}
+      {form === "team" && (
+        <FormPanel id="people-form" title="Criar equipe" lead="Uma equipe agrupa as pessoas que saem juntas na escala." onClose={() => setForm(null)}>
+          <form className="mt-3 grid gap-3 md:grid-cols-2" onSubmit={submit("create-team", "Equipe criada.", (data) => ({ name: formValue(data, "name"), leaderId: formValue(data, "leaderId"), memberIds: data.getAll("memberIds").map(String) }))}>
+            <Input name="name" label="Nome da equipe" />
+            <Select name="leaderId" label="Líder" options={props.snapshot.people.map((person) => [person.id, person.full_name])} />
+            <fieldset className="md:col-span-2">
+              <legend className="text-sm font-medium">Integrantes</legend>
+              <div className="mt-1.5 grid gap-1.5 sm:grid-cols-2 xl:grid-cols-3">
+                {props.snapshot.people.map((person) => (
+                  <label key={person.id} className="flex min-h-11 items-center gap-3 rounded-xl border border-imp-line px-3 text-[15px]">
+                    <input type="checkbox" name="memberIds" value={person.id} className="size-5" />
+                    <span className="min-w-0 break-words">{person.full_name}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            <div className="md:col-span-2 md:max-w-xs"><Submit busy={props.busy} configured={props.snapshot.configured} label="Criar equipe" /></div>
+          </form>
+        </FormPanel>
+      )}
 
-        <div className="space-y-4">
-          <Card className="px-5">
-            <Disclosure className="border-t-0" summary="Cadastrar pessoa" open={!props.snapshot.people.length}>
-              <form className="space-y-3" onSubmit={submit("create-person", "Pessoa e acesso criados.", (form) => ({ fullName: formValue(form, "fullName"), email: formValue(form, "email"), phone: formValue(form, "phone"), jobTitle: formValue(form, "jobTitle"), temporaryPassword: formValue(form, "temporaryPassword") }))}>
-                <p className="text-[15px] text-imp-muted">Cria o acesso. A senha temporária é trocada no primeiro login.</p>
-                <Input name="fullName" label="Nome completo" />
-                <Input name="email" label="E-mail" type="email" />
-                <Input name="jobTitle" label="Função" />
-                <Input name="phone" label="Telefone" required={false} />
-                <Input name="temporaryPassword" label="Senha temporária" type="password" minLength={10} />
-                <Submit busy={props.busy} configured={props.snapshot.configured} label="Cadastrar pessoa" />
-              </form>
-            </Disclosure>
+      <section className="mt-6">
+        <SectionTitle count={props.snapshot.people.length}>Pessoas</SectionTitle>
+        {props.snapshot.people.length ? (
+          <Card className="mt-3 overflow-hidden">
+            <ul className="divide-y divide-imp-line">
+              {props.snapshot.people.map((person) => (
+                <li key={person.id} className="grid gap-x-4 gap-y-1 px-4 py-3 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] sm:items-center">
+                  <span className="min-w-0">
+                    <strong className="block break-words text-[16px]">{person.full_name}</strong>
+                    <span className="text-[14px] text-imp-muted">{person.job_title} · {person.role === "manager" ? "coordenação" : "campo"}</span>
+                  </span>
+                  <span className="text-[14px] tabular-nums text-imp-muted">{person.phone ?? "Sem telefone"}</span>
+                  <Pill tone={person.availability === "available" ? "green" : "amber"}>{person.availability === "available" ? "Disponível" : "Indisponível"}</Pill>
+                </li>
+              ))}
+            </ul>
           </Card>
-          <Card className="px-5">
-            <Disclosure className="border-t-0" summary="Criar equipe" open={!props.snapshot.teams.length && props.snapshot.people.length > 0}>
-              <form className="space-y-3" onSubmit={submit("create-team", "Equipe criada.", (form) => ({ name: formValue(form, "name"), leaderId: formValue(form, "leaderId"), memberIds: form.getAll("memberIds").map(String) }))}>
-                <Input name="name" label="Nome da equipe" />
-                <Select name="leaderId" label="Líder" options={props.snapshot.people.map((person) => [person.id, person.full_name])} />
-                <fieldset>
-                  <legend className="text-sm font-medium">Integrantes</legend>
-                  <div className="mt-1.5 grid gap-1.5">
-                    {props.snapshot.people.map((person) => (
-                      <label key={person.id} className="flex min-h-11 items-center gap-3 rounded-xl border border-imp-line px-3 text-[15px]">
-                        <input type="checkbox" name="memberIds" value={person.id} className="size-5" />
-                        <span className="min-w-0 break-words">{person.full_name}</span>
-                      </label>
-                    ))}
-                  </div>
-                </fieldset>
-                <Submit busy={props.busy} configured={props.snapshot.configured} label="Criar equipe" />
-              </form>
-            </Disclosure>
+        ) : (
+          <div className="mt-3"><Empty>Cadastre a primeira pessoa para formar uma equipe.</Empty></div>
+        )}
+      </section>
+      <section className="mt-6">
+        <SectionTitle count={props.snapshot.teams.length}>Equipes</SectionTitle>
+        {props.snapshot.teams.length ? (
+          <Card className="mt-3 overflow-hidden">
+            <ul className="divide-y divide-imp-line">
+              {props.snapshot.teams.map((team) => (
+                <li key={team.id} className="grid gap-x-4 gap-y-1 px-4 py-3 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] sm:items-center">
+                  <strong className="text-[16px]">{team.name}</strong>
+                  <span className="text-[14px] text-imp-muted">
+                    Líder {props.snapshot.people.find((person) => person.id === team.leader_id)?.full_name ?? "não informado"}
+                  </span>
+                  <span className="text-[14px] text-imp-muted">{plural(team.member_ids.length, "integrante", "integrantes")}</span>
+                </li>
+              ))}
+            </ul>
           </Card>
-        </div>
-      </div>
+        ) : (
+          <div className="mt-3"><Empty>Crie uma equipe para escalar as pessoas juntas.</Empty></div>
+        )}
+      </section>
     </div>
   );
 }
@@ -1295,10 +1355,30 @@ function FleetView(props: Props) {
     }, "Veículo cadastrado.");
   };
   const statusTone: Record<string, Tone> = { available: "green", in_use: "neutral", maintenance: "amber" };
+  const [formOpen, setFormOpen] = useState(!props.snapshot.vehicles.length);
   return (
     <div>
-      <PageTitle title="Frota" lead="Veículos disponíveis para a escala. Cadastro interno." />
-      <div className="mt-6 grid items-start gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+      <PageTitle
+        title="Frota"
+        lead="Veículos disponíveis para a escala. Cadastro interno."
+        aside={
+          <Button variant={formOpen ? "secondary" : "primary"} aria-expanded={formOpen} aria-controls="fleet-form" onClick={() => setFormOpen((open) => !open)}>
+            <Plus size={16} aria-hidden="true" /> Cadastrar veículo
+          </Button>
+        }
+      />
+      {formOpen && (
+        <FormPanel id="fleet-form" title="Cadastrar veículo" onClose={() => setFormOpen(false)}>
+          <form onSubmit={create} className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+            <Input name="name" label="Nome" />
+            <Input name="plate" label="Placa" />
+            <Input name="vehicleType" label="Tipo" />
+            <Input name="capacityLabel" label="Capacidade" required={false} />
+            <div className="self-end"><Submit busy={props.busy} configured={props.snapshot.configured} label="Cadastrar veículo" /></div>
+          </form>
+        </FormPanel>
+      )}
+      <div className="mt-6">
         <div>
           {props.snapshot.vehicles.length ? (
             <Card className="overflow-hidden">
@@ -1334,17 +1414,6 @@ function FleetView(props: Props) {
             <Empty>Cadastre o primeiro veículo para completar uma escala.</Empty>
           )}
         </div>
-        <Card className="px-5">
-          <Disclosure className="border-t-0" summary="Cadastrar veículo" open={!props.snapshot.vehicles.length}>
-            <form onSubmit={create} className="space-y-3">
-              <Input name="name" label="Nome" />
-              <Input name="plate" label="Placa" />
-              <Input name="vehicleType" label="Tipo" />
-              <Input name="capacityLabel" label="Capacidade" required={false} />
-              <Submit busy={props.busy} configured={props.snapshot.configured} label="Cadastrar veículo" />
-            </form>
-          </Disclosure>
-        </Card>
       </div>
     </div>
   );
@@ -1492,7 +1561,7 @@ function Stat({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="rounded-xl bg-imp-ground p-3">
       <p className="text-[13px] text-imp-muted">{label}</p>
-      <p className="mt-0.5 break-words font-imp-display text-[22px] font-semibold leading-7">{value}</p>
+      <p className="mt-0.5 break-words text-[22px] font-semibold leading-7 tabular-nums">{value}</p>
     </div>
   );
 }
