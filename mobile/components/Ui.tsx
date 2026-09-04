@@ -78,9 +78,9 @@ export function Button({
       ]}
     >
       {busy ? (
-        <ActivityIndicator color={primary ? colors.surface : colors.greenDark} />
+        <ActivityIndicator color={disabled ? colors.muted : primary ? colors.surface : colors.greenDark} />
       ) : (
-        <Text style={[styles.buttonText, primary && styles.buttonTextPrimary]}>
+        <Text style={[styles.buttonText, primary && styles.buttonTextPrimary, disabled && styles.buttonTextDisabled]}>
           {label}
         </Text>
       )}
@@ -184,13 +184,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
   },
-  buttonPrimary: { backgroundColor: colors.purple, borderColor: colors.purple },
+  buttonPrimary: { backgroundColor: colors.green, borderColor: colors.green },
   buttonSecondary: { backgroundColor: colors.surface, borderColor: colors.line },
   buttonDanger: { borderColor: "#e1bbb7", backgroundColor: "#fff8f7" },
-  buttonDisabled: { opacity: 0.45 },
+  buttonDisabled: { backgroundColor: colors.line, borderColor: colors.line },
   buttonPressed: { opacity: 0.78 },
   buttonText: { color: colors.greenDark, fontWeight: "700", fontSize: 15 },
   buttonTextPrimary: { color: colors.surface },
+  buttonTextDisabled: { color: colors.muted },
   statusStrip: {
     minHeight: 48,
     marginHorizontal: 16,

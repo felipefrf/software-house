@@ -9,8 +9,6 @@ export const colors = {
   green: "#237452",
   greenDark: "#173d34",
   sage: "#edf3ee",
-  purple: "#237452",
-  purpleSoft: "#edf3ee",
   amber: "#8a5a00",
   amberSoft: "#fff7e6",
   danger: "#9b3b32",

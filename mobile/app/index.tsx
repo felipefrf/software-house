@@ -182,7 +182,7 @@ export default function TodayScreen() {
     return (
       <Screen>
         <View style={styles.centered}>
-          <ActivityIndicator color={colors.purple} size="large" />
+          <ActivityIndicator color={colors.green} size="large" />
           <Text style={styles.loading}>Abrindo seu turno...</Text>
         </View>
       </Screen>
@@ -211,7 +211,7 @@ export default function TodayScreen() {
       <Screen>
         <BrandHeader title="App de campo" />
         <View style={styles.centered}>
-          <ActivityIndicator color={colors.purple} size="large" />
+          <ActivityIndicator color={colors.green} size="large" />
           <Text style={styles.loading}>Carregando operações...</Text>
         </View>
       </Screen>
@@ -298,7 +298,7 @@ export default function TodayScreen() {
                 ),
               )
             }
-            tintColor={colors.purple}
+            tintColor={colors.green}
           />
         }
       >
@@ -422,7 +422,7 @@ const styles = StyleSheet.create({
     maxWidth: 120,
     textAlign: "right",
   },
-  freshness: { color: colors.muted, fontSize: 11, marginTop: 10 },
+  freshness: { color: colors.muted, fontSize: 12, marginTop: 10 },
   sectionTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 19, fontWeight: "700", marginTop: 22 },
   notice: {
     backgroundColor: colors.amberSoft,
@@ -457,7 +457,7 @@ const styles = StyleSheet.create({
   operationName: { color: colors.ink, fontFamily: fonts.display, fontSize: 17, fontWeight: "700" },
   operationDestination: {
     color: colors.muted,
-    fontSize: 12,
+    fontSize: 13,
     lineHeight: 17,
     marginTop: 3,
   },
@@ -469,17 +469,17 @@ const styles = StyleSheet.create({
     marginTop: 9,
   },
   stagePill: {
-    color: colors.purple,
-    backgroundColor: colors.purpleSoft,
+    color: colors.greenDark,
+    backgroundColor: colors.sage,
     borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    fontSize: 11,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "700",
   },
-  manual: { color: colors.amber, fontSize: 11, fontWeight: "700" },
-  imported: { color: colors.green, fontSize: 11, fontWeight: "700" },
-  chevron: { color: colors.purple, fontSize: 28, fontWeight: "300" },
+  manual: { color: colors.amber, fontSize: 12, fontWeight: "700" },
+  imported: { color: colors.green, fontSize: 12, fontWeight: "700" },
+  chevron: { color: colors.greenDark, fontSize: 28, fontWeight: "300" },
   empty: { marginTop: 10, alignItems: "stretch" },
   emptyTitle: {
     color: colors.ink,

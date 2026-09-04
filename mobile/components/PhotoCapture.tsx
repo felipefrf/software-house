@@ -168,7 +168,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: colors.surface,
   },
-  shutterText: { color: colors.ink, fontWeight: "800" },
+  shutterText: { color: colors.ink, fontWeight: "700" },
   disabled: { opacity: 0.5 },
   preview: { height: 200, width: "100%", borderRadius: 12, marginBottom: 10 },
   captureButton: {
@@ -180,7 +180,7 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
     borderWidth: 1,
   },
-  captureTitle: { color: colors.greenDark, fontWeight: "800", fontSize: 15 },
+  captureTitle: { color: colors.greenDark, fontWeight: "700", fontSize: 15 },
   captureCopy: { color: colors.muted, fontSize: 12, marginTop: 3 },
   permissionError: { color: colors.danger, fontSize: 12, marginTop: 8 },
   settingsBlock: { marginTop: 8 },
@@ -194,5 +194,5 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: colors.surface,
   },
-  settingsButtonText: { color: colors.greenDark, fontSize: 13, fontWeight: "800" },
+  settingsButtonText: { color: colors.greenDark, fontSize: 13, fontWeight: "700" },
 });

@@ -15,11 +15,11 @@ import type { OutboxState } from "@/lib/types";
 
 const stateColor: Record<OutboxState, string> = {
   pending: colors.amber,
-  sending: colors.purple,
+  sending: colors.green,
   confirmed: colors.green,
   conflict: colors.danger,
   failed: colors.amber,
-  discarding: colors.purple,
+  discarding: colors.green,
 };
 
 const formatDate = (value: string) =>
@@ -177,16 +177,16 @@ const styles = StyleSheet.create({
   itemHead: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
   itemCopy: { flex: 1 },
   operation: { color: colors.ink, fontFamily: fonts.display, fontSize: 17, fontWeight: "700" },
-  stage: { color: colors.purple, fontSize: 12, fontWeight: "800", marginTop: 3 },
-  state: { maxWidth: 135, textAlign: "right", fontSize: 11, lineHeight: 15, fontWeight: "900" },
-  meta: { color: colors.muted, fontSize: 11, marginTop: 8 },
-  failure: { color: colors.danger, backgroundColor: "#fff8f7", borderRadius: 8, padding: 10, marginTop: 10, fontSize: 11, lineHeight: 16 },
+  stage: { color: colors.greenDark, fontSize: 13, fontWeight: "700", marginTop: 3 },
+  state: { maxWidth: 135, textAlign: "right", fontSize: 12, lineHeight: 16, fontWeight: "700" },
+  meta: { color: colors.muted, fontSize: 12, marginTop: 8 },
+  failure: { color: colors.danger, backgroundColor: "#fff8f7", borderRadius: 8, padding: 10, marginTop: 10, fontSize: 12, lineHeight: 17 },
   conflictHelp: { color: colors.danger, fontSize: 12, lineHeight: 18, marginTop: 9 },
   retryGap: { marginTop: 12 },
   empty: { marginTop: 18, alignItems: "center" },
   emptyTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 20, fontWeight: "700" },
   emptyCopy: { color: colors.muted, fontSize: 13, lineHeight: 19, textAlign: "center", marginTop: 6 },
   boundary: { marginTop: 22, backgroundColor: colors.amberSoft, borderColor: "#ecd49d", borderWidth: 1, borderRadius: 12, padding: 14 },
-  boundaryTitle: { color: colors.amber, fontSize: 12, fontWeight: "900" },
+  boundaryTitle: { color: colors.amber, fontSize: 13, fontWeight: "700" },
   boundaryCopy: { color: "#705f3d", fontSize: 12, lineHeight: 18, marginTop: 4 },
 });
