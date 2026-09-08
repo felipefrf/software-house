@@ -1,7 +1,7 @@
 import { File } from "expo-file-system";
 
 import { claimAction, listActions, transitionAction } from "./database";
-import { classifySyncFailure, isAutoRetryable, isRetryable } from "./outbox-state";
+import { classifySyncFailure, drainOutbox, orderedUnconfirmedActions } from "./outbox-state";
 import { supabase } from "./supabase";
 import type { IncidentDraft, OutboxAction } from "./types";
 
@@ -37,15 +37,6 @@ const deleteLocalFile = (uri: string | null) => {
   }
 };
 
-const removeRemoteEvidence = async (path: string | null) => {
-  if (!supabase || !path) return;
-  try {
-    await supabase.storage.from("operation-evidence").remove([path]);
-  } catch {
-    // A política do bucket impede apagar evidência já referenciada pelo servidor.
-  }
-};
-
 export async function removeDiscardedRemoteEvidence(action: OutboxAction) {
   if (!supabase) throw new Error("Supabase não configurado.");
   const removed = await supabase.storage
@@ -65,6 +56,9 @@ export async function syncOne(
   manual = false,
 ) {
   if (!supabase) throw new Error("Supabase não configurado.");
+  const first = orderedUnconfirmedActions(await listActions(userId))
+    .find((pending) => pending.operationId === action.operationId);
+  if (first?.deviceActionId !== action.deviceActionId) return "skipped" as const;
   const claimed = await claimAction(userId, action.deviceActionId, manual);
   if (!claimed) return "skipped" as const;
   try {
@@ -101,7 +95,6 @@ export async function syncOne(
   } catch (error) {
     const message = errorMessage(error);
     const state = classifySyncFailure(message);
-    if (state === "conflict") await removeRemoteEvidence(claimed.photoPath);
     await transitionAction(
       userId,
       claimed.deviceActionId,
@@ -115,11 +108,7 @@ export async function syncOne(
 
 export async function syncPending(userId: string, manual = false) {
   const actions = await listActions(userId);
-  for (const action of actions.filter(
-    (item) =>
-      manual ? isRetryable(item.state) : isAutoRetryable(item.state, item.attempts),
-  ))
-    await syncOne(userId, action, manual);
+  await drainOutbox(actions, (action) => syncOne(userId, action, manual), manual);
 }
 
 export async function createIncident(userId: string, draft: IncidentDraft) {

@@ -1,4 +1,28 @@
-import type { OutboxState } from "./types";
+import { operationStages, type OutboxAction, type OutboxState } from "./types";
+
+// A etapa é a ordem operacional; o relógio do aparelho pode ser ajustado offline.
+export const orderedUnconfirmedActions = (actions: OutboxAction[]) =>
+  actions.filter((action) => action.state !== "confirmed").sort((left, right) =>
+    operationStages.indexOf(left.stage) - operationStages.indexOf(right.stage) ||
+    left.deviceCapturedAt.localeCompare(right.deviceCapturedAt) ||
+    left.deviceActionId.localeCompare(right.deviceActionId),
+  );
+
+export async function drainOutbox(
+  actions: OutboxAction[],
+  send: (action: OutboxAction) => Promise<OutboxState | "skipped">,
+  manual = false,
+) {
+  const blocked = new Set<string>();
+  for (const action of orderedUnconfirmedActions(actions)) {
+    if (blocked.has(action.operationId)) continue;
+    const retryable = manual
+      ? isRetryable(action.state)
+      : isAutoRetryable(action.state, action.attempts);
+    if (!retryable || await send(action) !== "confirmed")
+      blocked.add(action.operationId);
+  }
+}
 
 export const AUTO_RETRY_LIMIT = 3;
 
