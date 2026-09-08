@@ -110,9 +110,24 @@ npx expo export --platform android
 
 ## Builds EAS
 
-Em 08/09/2026, `eas whoami` retornou `Not logged in` neste ambiente. O responsável
-precisa autenticar o CLI e confirmar a conta/projeto antes da geração de builds;
-nenhum build pago, assinatura ou submissão foi iniciado.
+Em 08/09/2026, o CLI foi autenticado e o projeto
+`@felipefrf/imperio-logistica` foi criado e vinculado em `app.json`.
+O primeiro alvo é o APK Android; iOS aguarda conta Apple Developer.
+As duas variáveis públicas de conexão foram configuradas no ambiente `preview`,
+com visibilidade `sensitive` para evitar valores nos logs. Nenhuma chave
+administrativa ou credencial do EstoqueNOW foi enviada.
+O EAS gerou a assinatura Android. O primeiro build
+`cf780feb-fc57-41d3-b5c9-0112821b56ed` foi cancelado para atualizar quatro patches
+recomendados pelo Expo. Após a atualização, passaram 25 testes, TypeScript e
+21/21 verificações do Expo Doctor. O novo APK preview é
+`6f3684eb-751d-42bb-a90a-49fcb15a5d66`; iniciar o build não confirma que o APK
+esteja pronto. Nenhuma submissão foi feita.
+
+O `.easignore` na raiz limita o upload ao código e assets do app. O pacote foi
+inspecionado antes do envio: 32 arquivos, sem ambientes, credenciais de assinatura,
+site ou documentos internos. Ao adicionar novas pastas necessárias ao app,
+atualize esse filtro e repita `eas build:inspect --platform android --profile
+preview --stage archive --output <diretorio-temporario-novo>`.
 
 O `eas.json` mantém três perfis mínimos:
 
