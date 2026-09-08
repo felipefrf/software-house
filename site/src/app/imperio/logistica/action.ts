@@ -3,7 +3,22 @@ import type {
   Operation,
   OperationStage,
   OperationStatus,
+  EstoqueNowSyncRun,
 } from "./types";
+
+export function automaticRunStatus(run: Pick<EstoqueNowSyncRun, "status" | "startedAt" | "finishedAt"> | null, now = Date.now()): {
+  label: string; tone: "neutral" | "amber" | "red" | "green";
+} {
+  if (!run) return { label: "Ainda não executado", tone: "neutral" };
+  const lastActivity = Date.parse(run.finishedAt ?? run.startedAt);
+  if (!Number.isFinite(lastActivity) || now - lastActivity > 45 * 60_000 || lastActivity - now > 5 * 60_000)
+    return { label: "Desatualizado", tone: "amber" };
+  if (run.status === "running") return { label: "Em andamento", tone: "amber" };
+  if (run.status === "failed" || run.status === "abandoned") return { label: "Falha", tone: "red" };
+  if (run.status === "partial") return { label: "Parcial", tone: "amber" };
+  if (run.status === "skipped") return { label: "Ignorado", tone: "amber" };
+  return { label: "Saudável", tone: "green" };
+}
 
 export const operationStages: OperationStage[] = [
   "preparation",

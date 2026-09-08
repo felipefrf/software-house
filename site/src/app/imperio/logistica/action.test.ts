@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  automaticRunStatus,
   checklistForStage,
   isChecklistComplete,
   isOperationalToday,
@@ -16,6 +17,16 @@ import {
   stageState,
 } from "./action.ts";
 import type { Incident, Operation } from "./types.ts";
+
+test("saúde da automação não mantém lote travado ou parcial como recente", () => {
+  const now = Date.parse("2026-09-08T12:00:00Z");
+  for (const status of ["running", "partial", "succeeded", "failed"] as const) {
+    assert.equal(automaticRunStatus({ status, startedAt: "2026-09-08T11:00:00Z", finishedAt: null }, now).label, "Desatualizado");
+  }
+  assert.equal(automaticRunStatus({ status: "partial", startedAt: "2026-09-08T11:59:00Z", finishedAt: "2026-09-08T11:59:20Z" }, now).label, "Parcial");
+  assert.equal(automaticRunStatus({ status: "succeeded", startedAt: "invalid", finishedAt: null }, now).label, "Desatualizado");
+  assert.equal(automaticRunStatus(null, now).label, "Ainda não executado");
+});
 
 test("exige todos os itens da etapa", () => {
   const checks = Object.fromEntries(checklistForStage("preparation").map((item) => [item, true]));

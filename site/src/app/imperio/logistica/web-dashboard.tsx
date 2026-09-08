@@ -23,6 +23,7 @@ import Image from "next/image";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import {
+  automaticRunStatus,
   checklistForStage,
   isOperationalToday,
   matchesOperationFilters,
@@ -37,6 +38,7 @@ import {
 } from "./action";
 import { ItemManifest, manifestSummary } from "./item-manifest";
 import { StageRail } from "./stage-rail";
+import { OperationRoute } from "./operation-route";
 import type {
   Incident,
   LogisticsSnapshot,
@@ -170,24 +172,6 @@ type EstoqueNowDetailPreview = {
 };
 
 type PreviewRequestState = "idle" | "loading" | "succeeded" | "failed";
-
-const automaticRunStatus = (
-  run: EstoqueNowSyncRun | null,
-  stale: boolean,
-): { label: string; tone: Tone } => {
-  if (!run) return { label: "Ainda não executado", tone: "neutral" };
-  if (run.status === "running") return { label: "Em andamento", tone: "amber" };
-  if (run.status === "failed" || run.status === "abandoned") return { label: "Falha", tone: "red" };
-  if (run.status === "partial") return { label: "Parcial", tone: "amber" };
-  if (run.status === "skipped") return { label: "Ignorado", tone: "amber" };
-  if (stale) return { label: "Desatualizado", tone: "amber" };
-  return { label: "Saudável", tone: "green" };
-};
-
-const isAutomaticRunStale = (run: EstoqueNowSyncRun | null) => {
-  const finishedAt = run?.finishedAt;
-  return Boolean(finishedAt && Date.now() - Date.parse(finishedAt) > 45 * 60 * 1000);
-};
 
 const formatSyncWindowDate = (value: string) =>
   /^\d{4}-\d{2}-\d{2}$/.test(value) ? value.split("-").reverse().join("/") : formatDate(value);
@@ -618,6 +602,7 @@ function OperationDetail({
       <div className="px-5 pt-5">
         <StageRail operation={operation} selectedStage={focusedStage} onStageSelect={setFocusedStage} />
         <StageFocus operation={operation} stage={focusedStage} />
+        {snapshot.configured && <OperationRoute key={operation.id} operationId={operation.id} />}
       </div>
 
       <div className="mt-4 px-5 pb-2">
@@ -1568,6 +1553,11 @@ function Stat({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 function IntegrationsView(props: Props) {
+  const [healthClock, setHealthClock] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setHealthClock(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
   const today = new Date();
   const future = new Date(today);
   future.setDate(today.getDate() + 90);
@@ -1583,7 +1573,7 @@ function IntegrationsView(props: Props) {
   const latestAutomaticRun = automaticRuns[0] ?? null;
   const latestAutomaticApplication = syncHealth?.lastAppliedScheduledRun ?? null;
   const automaticStatus = syncHealth
-    ? automaticRunStatus(latestAutomaticRun, isAutomaticRunStale(latestAutomaticRun))
+    ? automaticRunStatus(latestAutomaticRun, healthClock)
     : { label: "Indisponível", tone: "neutral" as const };
   const est = props.snapshot.estoquenow;
   const connectorStatus: { label: string; tone: Tone } = !est.configured

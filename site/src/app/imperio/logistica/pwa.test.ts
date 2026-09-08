@@ -219,13 +219,12 @@ test("integrações separam aplicação, quarentena, falha e fila", async () => 
   assert.match(dashboard, /Na próxima rodada/);
   assert.match(dashboard, /Em quarentena/);
   assert.match(dashboard, /Falhas técnicas/);
-  assert.match(dashboard, /45 \* 60 \* 1000/);
+  assert.match(dashboard, /automaticRunStatus\(latestAutomaticRun, healthClock\)/);
   assert.doesNotMatch(server, /demo-item-/);
   assert.match(dashboard, /Buscar alterações sem importar/);
   assert.match(dashboard, /Fila de revisão/);
   assert.match(dashboard, /aria-busy=\{previewRequestState === "loading"\}/);
   assert.match(dashboard, /role="alert"/);
-  assert.match(dashboard, /Desatualizado/);
   assert.match(dashboard, /grid-cols-2 gap-3/);
   assert.match(cron, /result\.status === "failed" \? 502 : 200/);
 });
