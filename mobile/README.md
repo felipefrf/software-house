@@ -65,8 +65,11 @@ Se a resposta da RPC for perdida ou ambígua, as evidências local e remota são
 ## Limites explícitos
 
 - A saída exige conexão para registrar o consentimento no servidor. Ações de etapa
-  podem ser preservadas offline, mas a interface ainda não projeta uma sequência
-  completa de etapas pendentes; não considerar uma operação inteira offline homologada.
+  são preservadas offline e a interface projeta a próxima etapa a partir da fila
+  contígua. Etapas locais aparecem como “Local”, sem alterar eventos, horário ou
+  status do servidor. Conflitos, lacunas e chegada com acesso bloqueado interrompem
+  essa projeção. A inspeção local permanece aguardando confirmação final. Não
+  considerar uma operação inteira offline homologada antes do teste em aparelho.
 - Checklist de itens e ocorrências ainda exigem conexão nesta versão.
 - O rastreamento em background não funciona no Expo Go e pode ser encerrado pelo
   sistema se o usuário matar o app; precisa ser homologado nos aparelhos reais.
@@ -86,8 +89,14 @@ Se a resposta da RPC for perdida ou ambígua, as evidências local e remota são
 
 ## Validar
 
-Em 08/09/2026: 18 testes locais passaram, incluindo ordem da fila, confirmação de
-GPS, concorrência e falha do banco durante logout; TypeScript e export dos bundles
+Execute a suíte com Node.js 24; o teste de persistência usa `node:sqlite` do runtime.
+
+Em 08/09/2026: 25 testes locais passaram, incluindo ordem e projeção da fila,
+conciliação após avanço de outro aparelho, evidência imutável no retry, GPS recente,
+concorrência e falha do banco durante logout. Um teste com SQLite real confirmou
+durabilidade após reabertura e isolamento entre usuários, sem simular criptografia.
+Falhas na obtenção da chave segura não deixam a inicialização permanentemente rejeitada.
+TypeScript e export dos bundles
 iOS/Android passaram. Esses testes usam mocks; bundles não são builds assinados
 e não substituem o gate de aparelho físico abaixo.
 
@@ -100,6 +109,10 @@ npx expo export --platform android
 ```
 
 ## Builds EAS
+
+Em 08/09/2026, `eas whoami` retornou `Not logged in` neste ambiente. O responsável
+precisa autenticar o CLI e confirmar a conta/projeto antes da geração de builds;
+nenhum build pago, assinatura ou submissão foi iniciado.
 
 O `eas.json` mantém três perfis mínimos:
 
