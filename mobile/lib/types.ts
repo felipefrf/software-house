@@ -78,6 +78,7 @@ export type OperationItemCheck = {
 };
 
 export type Operation = {
+  local_progress?: { serverStage: OperationStage; pending: number; blocked: boolean; awaitingCompletion: boolean };
   id: string;
   source: "manual" | "estoquenow";
   external_id: string | null;

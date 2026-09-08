@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   endsRouteTracking,
+  currentLocationEvidence,
   operationEndedForTracking,
   routeTrackingAcknowledgement,
   ROUTE_TRACKING_TERMS_TEXT,
@@ -10,6 +11,15 @@ import {
   startsRouteTracking,
   validRouteTrackingPoint,
 } from "../lib/route-tracking-policy";
+
+test("evidência pontual exige GPS recente e não converte precisão desconhecida em zero", () => {
+  const position = { timestamp: 1_000_000, coords: { latitude: 0, longitude: 0, accuracy: 20 } };
+  assert.deepEqual(currentLocationEvidence(position, 1_000_100), position.coords);
+  assert.equal(currentLocationEvidence(position, 1_120_001), null);
+  assert.equal(currentLocationEvidence(position, 800_000), null);
+  assert.equal(currentLocationEvidence({ ...position, coords: { ...position.coords, accuracy: null } }, position.timestamp), null);
+  assert.equal(currentLocationEvidence({ ...position, coords: { ...position.coords, latitude: 91 } }, position.timestamp), null);
+});
 
 test("confirma só IDs do lote enviado e respeita parada mesmo sem pontos aceitos", () => {
   assert.deepEqual(routeTrackingAcknowledgement({ accepted_ids: ["a", "a"], should_stop: false }, ["a"]), {

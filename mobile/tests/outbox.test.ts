@@ -9,7 +9,15 @@ import {
   isRetryable,
   drainOutbox,
 } from "../lib/outbox-state";
-import type { OutboxAction } from "../lib/types";
+import type { Operation, OperationEvent, OutboxAction } from "../lib/types";
+import { projectOperationProgress, sameActionEvidence } from "../lib/outbox-state";
+
+const operation: Operation = {
+  id: "operation-a", source: "manual", external_id: null, event_name: "Teste", destination: "Base",
+  scheduled_at: "2026-09-08T12:00:00Z", stage: "travel", status: "active", stage_started_at: "2026-09-08T12:00:00Z",
+  completed_at: null, cancel_reason: null, manager_id: "manager", team_id: "team", vehicle_id: "vehicle", driver_id: "worker",
+  notes: null, imported_at: null, waiting_since: null, item_checks: [],
+};
 
 const queued = (id: string, stage: OutboxAction["stage"], state: OutboxAction["state"] = "pending"): OutboxAction => ({
   deviceActionId: id, operationId: "operation-a", operationName: "Teste", stage, state,
@@ -18,6 +26,55 @@ const queued = (id: string, stage: OutboxAction["stage"], state: OutboxAction["s
   photoUri: "file:///test.jpg", photoPath: "test.jpg", arrivalAccess: "",
   arrivalReason: "", acceptanceName: "", attempts: 0, lastError: null,
   updatedAt: "2026-09-08T12:00:00Z",
+});
+
+test("retry com mesmo ID preserva toda a evidência, não só foto e etapa", () => {
+  const action = { ...queued("one", "travel"), checklist: { second: true, first: true } };
+  assert.equal(sameActionEvidence(action, { ...action, checklist: { first: true, second: true }, state: "failed", attempts: 2 }), true);
+  for (const changed of [
+    { ...action, note: "diferente" }, { ...action, responsibleId: "other" },
+    { ...action, location: { ...action.location, latitude: 1 } },
+    { ...action, deviceCapturedAt: "2026-09-08T13:00:00Z" },
+    { ...action, checklist: { first: true, second: false } },
+  ]) assert.equal(sameActionEvidence(action, changed), false);
+});
+
+test("projeção offline segue etapas contíguas sem alterar confirmação do servidor", () => {
+  const projected = projectOperationProgress(operation, [
+    { ...queued("arrival", "arrival"), arrivalAccess: "released" }, queued("travel", "travel"),
+  ], []);
+  assert.equal(projected.stage, "assembly");
+  assert.equal(operation.stage, "travel");
+  assert.equal(projected.stage_started_at, operation.stage_started_at);
+  assert.deepEqual(projected.local_progress, { serverStage: "travel", pending: 2, blocked: false, awaitingCompletion: false });
+});
+
+test("conflito, lacuna e acesso bloqueado não liberam próxima etapa", () => {
+  for (const action of [queued("conflict", "travel", "conflict"), queued("gap", "assembly")]) {
+    const projected = projectOperationProgress(operation, [action], []);
+    assert.equal(projected.stage, "travel");
+    assert.equal(projected.local_progress?.blocked, true);
+  }
+  const waiting = projectOperationProgress({ ...operation, stage: "arrival" }, [{ ...queued("blocked", "arrival"), arrivalAccess: "blocked" }], []);
+  assert.equal(waiting.stage, "arrival");
+  assert.equal(waiting.local_progress?.blocked, true);
+});
+
+test("conclusão local não finaliza operação nem ignora cancelamento remoto", () => {
+  const projected = projectOperationProgress({ ...operation, stage: "inspection" }, [queued("end", "inspection")], []);
+  assert.equal(projected.status, "active");
+  assert.equal(projected.local_progress?.awaitingCompletion, true);
+  const cancelled = { ...operation, status: "cancelled" as const };
+  assert.equal(projectOperationProgress(cancelled, [queued("travel", "travel")], []), cancelled);
+});
+
+test("refresh concilia por ID confirmado sem ocultar avanço de outro aparelho", () => {
+  const advanced = { ...operation, stage: "arrival" as const };
+  const action = queued("travel", "travel");
+  assert.equal(projectOperationProgress(advanced, [action], []).local_progress?.blocked, true);
+  const event = { operation_id: operation.id, device_action_id: "travel" } as OperationEvent;
+  assert.equal(projectOperationProgress(advanced, [action], [event]), advanced);
+  assert.equal(projectOperationProgress(advanced, [{ ...action, state: "confirmed" }], []), advanced);
 });
 
 test("envia etapas em ordem mesmo com fila invertida e relógio ajustado", async () => {

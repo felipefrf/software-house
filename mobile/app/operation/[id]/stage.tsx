@@ -2,7 +2,7 @@ import * as Crypto from "expo-crypto";
 import * as Linking from "expo-linking";
 import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -23,11 +23,19 @@ import {
   stageRequirementProgress,
   stageLabels,
 } from "@/lib/checklist";
-import { ROUTE_TRACKING_TERMS_TEXT } from "@/lib/route-tracking-policy";
+import { currentLocationEvidence, ROUTE_TRACKING_TERMS_TEXT } from "@/lib/route-tracking-policy";
 import { colors, fonts } from "@/lib/theme";
 import type { LocationEvidence, OutboxAction } from "@/lib/types";
 
 export default function StageScreen() {
+  const { work } = useApp();
+  const params = useLocalSearchParams<{ id: string }>();
+  const id = Array.isArray(params.id) ? params.id[0] : params.id;
+  const operation = work?.operations.find(item => item.id === id);
+  return <StageForm key={`${id}:${operation?.stage}`} />;
+}
+
+function StageForm() {
   const router = useRouter();
   const params = useLocalSearchParams<{ id: string }>();
   const { work, outbox, online, busy, enqueue, setMessage } = useApp();
@@ -37,6 +45,10 @@ export default function StageScreen() {
   const [checklist, setChecklist] = useState<Record<string, boolean>>({});
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [location, setLocation] = useState<LocationEvidence | null>(null);
+  const locationCapturedAt = useRef(0);
+  const locationRequest = useRef(0);
+  const submitInFlight = useRef(false);
+  useEffect(() => () => { locationRequest.current++; }, []);
   const [locationBusy, setLocationBusy] = useState(false);
   const [locationDenied, setLocationDenied] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -49,11 +61,15 @@ export default function StageScreen() {
   const [error, setError] = useState("");
 
   const captureLocation = useCallback(async () => {
+    const request = ++locationRequest.current;
+    setLocation(null);
+    locationCapturedAt.current = 0;
     setError("");
     setLocationDenied(false);
     setLocationBusy(true);
     try {
       const permission = await Location.requestForegroundPermissionsAsync();
+      if (request !== locationRequest.current) return null;
       if (!permission.granted) {
         setLocationDenied(true);
         throw new Error("Libere a localização durante o uso para registrar a ação.");
@@ -61,15 +77,18 @@ export default function StageScreen() {
       const position = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.High,
       });
-      setLocation({
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
-        accuracy: position.coords.accuracy ?? 0,
-      });
+      if (request !== locationRequest.current) return null;
+      const evidence = currentLocationEvidence(position);
+      if (!evidence)
+        throw new Error("GPS antigo ou sem precisão suficiente. Aguarde um novo sinal.");
+      setLocation(evidence);
+      locationCapturedAt.current = position.timestamp;
+      return evidence;
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : "GPS indisponível.");
+      if (request === locationRequest.current) setError(failure instanceof Error ? failure.message : "GPS indisponível.");
+      return null;
     } finally {
-      setLocationBusy(false);
+      if (request === locationRequest.current) setLocationBusy(false);
     }
   }, []);
 
@@ -86,10 +105,11 @@ export default function StageScreen() {
   }, [operation, work]);
 
   useEffect(() => {
-    if (!operation || operation.stage === "preparation") return;
+    if (!operation?.id || operation.stage === "preparation" || operation.status !== "active"
+      || missingRequiredAssignments(operation).length || operation.local_progress?.blocked || operation.local_progress?.awaitingCompletion) return;
     if (operation.stage === "departure" && !trackingTermsAccepted) return;
     void captureLocation();
-  }, [captureLocation, operation, trackingTermsAccepted]);
+  }, [captureLocation, operation?.id, operation?.stage, operation?.status, operation?.team_id, operation?.driver_id, operation?.vehicle_id, operation?.local_progress?.blocked, operation?.local_progress?.awaitingCompletion, trackingTermsAccepted]);
 
   if (!operation || !work)
     return (
@@ -104,7 +124,7 @@ export default function StageScreen() {
   const missingAssignments = missingRequiredAssignments(operation);
   const pending = outbox.filter((item) => item.state !== "confirmed").length;
 
-  if (missingAssignments.length)
+  if (missingAssignments.length || operation.local_progress?.blocked || operation.local_progress?.awaitingCompletion || operation.status !== "active")
     return (
       <Screen>
         <BrandHeader
@@ -114,10 +134,9 @@ export default function StageScreen() {
         <StatusStrip online={online} pending={pending} />
         <View style={styles.centered}>
           <Card>
-            <Text style={styles.warningTitle}>Complete a escala na torre</Text>
+            <Text style={styles.warningTitle}>{missingAssignments.length ? "Complete a escala na torre" : "Revise a operação e a fila"}</Text>
             <Text style={styles.warningCopy}>
-              Esta etapa exige equipe, veículo e motorista antes de qualquer foto ou
-              GPS.
+              {missingAssignments.length ? "Esta etapa exige equipe, veículo e motorista antes de qualquer foto ou GPS." : "A operação está encerrada, aguardando confirmação final ou tem uma pendência que impede novas etapas. Nenhuma ação será sobrescrita."}
             </Text>
             {missingAssignments.map((item) => (
               <Text key={item} style={styles.missingItem}>
@@ -172,9 +191,12 @@ export default function StageScreen() {
   const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(operation.destination)}`;
 
   const submit = async () => {
-    if (!complete || !photoUri || !location || duplicate || submitting) return;
+    if (!complete || !photoUri || !location || duplicate || submitInFlight.current) return;
+    submitInFlight.current = true;
     setSubmitting(true);
     setError("");
+    const freshLocation = Math.abs(Date.now() - locationCapturedAt.current) <= 120_000 ? location : await captureLocation();
+    if (!freshLocation) { submitInFlight.current = false; setSubmitting(false); return; }
     const action: OutboxAction = {
       deviceActionId,
       operationId: operation.id,
@@ -182,7 +204,7 @@ export default function StageScreen() {
       stage: operation.stage,
       state: "pending",
       checklist,
-      location,
+      location: freshLocation,
       deviceCapturedAt: new Date().toISOString(),
       responsibleId: effectiveResponsible,
       note: note.trim(),
@@ -211,6 +233,7 @@ export default function StageScreen() {
           : "A ação não pôde ser salva neste aparelho.",
       );
     } finally {
+      submitInFlight.current = false;
       setSubmitting(false);
     }
   };
@@ -218,7 +241,7 @@ export default function StageScreen() {
   return (
     <Screen>
       <BrandHeader
-        eyebrow={`Etapa atual · ${operation.event_name}`}
+        eyebrow={`${operation.local_progress ? "Etapa local · confirmação pendente" : "Etapa atual"} · ${operation.event_name}`}
         title={stageLabels[operation.stage]}
         action={
           <Pressable

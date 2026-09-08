@@ -1,4 +1,13 @@
-import type { Operation, OperationStage, RouteTrackingPoint, RouteTrackingStopReason } from "./types";
+import type { LocationEvidence, Operation, OperationStage, RouteTrackingPoint, RouteTrackingStopReason } from "./types";
+
+export function currentLocationEvidence(position: {
+  timestamp: number; coords: { latitude: number; longitude: number; accuracy: number | null };
+}, now = Date.now()): LocationEvidence | null {
+  if (!Number.isFinite(position.timestamp) || Math.abs(now - position.timestamp) > 120_000
+    || position.coords.accuracy === null) return null;
+  const evidence = { latitude: position.coords.latitude, longitude: position.coords.longitude, accuracy: position.coords.accuracy };
+  return validRouteTrackingPoint(evidence) ? evidence : null;
+}
 
 export function routeTrackingAcknowledgement(value: unknown, sentIds: string[]) {
   if (!value || typeof value !== "object") return null;

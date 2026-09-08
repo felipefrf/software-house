@@ -1,4 +1,44 @@
-import { operationStages, type OutboxAction, type OutboxState } from "./types";
+import { operationStages, type Operation, type OperationEvent, type OutboxAction, type OutboxState } from "./types";
+
+export function sameActionEvidence(left: OutboxAction, right: OutboxAction) {
+  const evidence = (action: OutboxAction) => [
+    action.deviceActionId, action.operationId, action.operationName, action.stage,
+    Object.entries(action.checklist).sort(([a], [b]) => a.localeCompare(b)),
+    action.location.latitude, action.location.longitude, action.location.accuracy,
+    action.deviceCapturedAt, action.responsibleId, action.note, action.photoUri,
+    action.photoPath, action.arrivalAccess, action.arrivalReason, action.acceptanceName,
+    action.trackingTermsAccepted === true,
+  ];
+  return JSON.stringify(evidence(left)) === JSON.stringify(evidence(right));
+}
+
+export function projectOperationProgress(operation: Operation, actions: OutboxAction[], events: OperationEvent[]): Operation {
+  if (operation.status !== "active") return operation;
+  const recorded = new Set(events.filter(event => event.operation_id === operation.id).map(event => event.device_action_id));
+  const queue = actions.filter(action => action.operationId === operation.id && !recorded.has(action.deviceActionId))
+    .sort((a, b) => operationStages.indexOf(a.stage) - operationStages.indexOf(b.stage)
+      || a.deviceCapturedAt.localeCompare(b.deviceCapturedAt) || a.deviceActionId.localeCompare(b.deviceActionId));
+  if (!queue.length) return operation;
+  let stage = operation.stage;
+  let blocked = false;
+  let awaitingCompletion = false;
+  for (const action of queue) {
+    if (action.state === "confirmed" && operationStages.indexOf(action.stage) < operationStages.indexOf(operation.stage)) continue;
+    if (action.stage !== stage || ["conflict", "discarding"].includes(action.state)) { blocked = true; break; }
+    if (action.stage === "arrival" && action.arrivalAccess === "blocked") { blocked = true; break; }
+    const next = operationStages[operationStages.indexOf(stage) + 1];
+    if (!next) { awaitingCompletion = true; break; }
+    stage = next;
+  }
+  const pending = queue.filter(action => action.state !== "confirmed").length;
+  if (stage === operation.stage && !pending && !blocked && !awaitingCompletion) return operation;
+  // Projeção de tela somente: nunca altera cache, eventos, status ou relógio do servidor.
+  return { ...operation, stage, local_progress: {
+    serverStage: operation.stage,
+    pending,
+    blocked, awaitingCompletion,
+  } };
+}
 
 // A etapa é a ordem operacional; o relógio do aparelho pode ser ajustado offline.
 export const orderedUnconfirmedActions = (actions: OutboxAction[]) =>

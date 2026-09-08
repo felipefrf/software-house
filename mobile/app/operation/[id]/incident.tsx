@@ -1,7 +1,7 @@
 import * as Crypto from "expo-crypto";
 import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -20,6 +20,7 @@ import { BrandHeader, Button, Card, Screen, StatusStrip } from "@/components/Ui"
 import { useApp } from "@/context/AppContext";
 import { stageLabels } from "@/lib/checklist";
 import { colors, fonts } from "@/lib/theme";
+import { currentLocationEvidence } from "@/lib/route-tracking-policy";
 import type { IncidentDraft, LocationEvidence } from "@/lib/types";
 
 const incidentTypes: Array<[IncidentDraft["type"], string]> = [
@@ -49,6 +50,8 @@ export default function IncidentScreen() {
   const [description, setDescription] = useState("");
   const [responsibleId, setResponsibleId] = useState("");
   const [location, setLocation] = useState<LocationEvidence | null>(null);
+  const locationCapturedAt = useRef(0);
+  const submitInFlight = useRef(false);
   const [locationBusy, setLocationBusy] = useState(false);
   const [locationDenied, setLocationDenied] = useState(false);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
@@ -82,6 +85,8 @@ export default function IncidentScreen() {
     online && description.trim().length >= 3 && (!photoRequired || Boolean(photoUri));
 
   const captureLocation = async () => {
+    setLocation(null);
+    locationCapturedAt.current = 0;
     setLocationBusy(true);
     setLocationDenied(false);
     setError("");
@@ -94,21 +99,27 @@ export default function IncidentScreen() {
       const position = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.High,
       });
-      setLocation({
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
-        accuracy: position.coords.accuracy ?? 0,
-      });
+      const evidence = currentLocationEvidence(position);
+      if (!evidence) throw new Error("GPS antigo ou sem precisão suficiente. Aguarde um novo sinal.");
+      setLocation(evidence);
+      locationCapturedAt.current = position.timestamp;
+      return evidence;
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "GPS indisponível.");
+      return null;
     } finally {
       setLocationBusy(false);
     }
   };
 
   const submit = async () => {
+    if (!canSubmit || submitInFlight.current) return;
+    submitInFlight.current = true;
     setError("");
     try {
+      const freshLocation = location && Math.abs(Date.now() - locationCapturedAt.current) > 120_000
+        ? await captureLocation() : location;
+      if (location && !freshLocation) return;
       await createIncident({
         id: incidentId,
         operationId: operation.id,
@@ -118,7 +129,7 @@ export default function IncidentScreen() {
         impact: impact.trim(),
         description: description.trim(),
         responsibleId,
-        location,
+        location: freshLocation,
         photoUri,
       });
       Alert.alert(
@@ -130,6 +141,8 @@ export default function IncidentScreen() {
       setError(
         failure instanceof Error ? failure.message : "Não foi possível registrar a ocorrência.",
       );
+    } finally {
+      submitInFlight.current = false;
     }
   };
 

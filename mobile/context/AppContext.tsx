@@ -28,6 +28,7 @@ import {
   saveCachedWork,
 } from "@/lib/database";
 import { loadRemoteWork } from "@/lib/repository";
+import { projectOperationProgress } from "@/lib/outbox-state";
 import {
   reconcileOperationRouteTracking,
   startOperationRouteTracking,
@@ -90,6 +91,7 @@ export function AppProvider({ children }: PropsWithChildren) {
   const [workError, setWorkError] = useState("");
   const identity = useRef({ userId: null as string | null, generation: 0 });
   const onlineRef = useRef(true);
+  const enqueueInFlight = useRef(false);
   const syncInFlight = useRef<{
     userId: string;
     promise: Promise<void>;
@@ -297,7 +299,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     busy,
     online,
     session,
-    work,
+    work: work && { ...work, operations: work.operations.map(operation => projectOperationProgress(operation, outbox, work.events)) },
     outbox,
     message,
     workResolved,
@@ -343,8 +345,16 @@ export function AppProvider({ children }: PropsWithChildren) {
         await refreshRemote();
       }),
     enqueue: async (action) => {
+      if (enqueueInFlight.current) throw new Error("Aguarde o salvamento da ação anterior.");
+      enqueueInFlight.current = true;
+      try {
       if (!session) throw new Error("Sessão encerrada.");
       const userId = session.user.id;
+      const source = work?.operations.find(operation => operation.id === action.operationId);
+      if (!source || !work || work.user.id !== userId) throw new Error("Operação indisponível nesta sessão.");
+      const progress = projectOperationProgress(source, await listActions(userId), work.events);
+      if (progress.status !== "active" || progress.stage !== action.stage || progress.local_progress?.blocked || progress.local_progress?.awaitingCompletion)
+        throw new Error("A etapa mudou ou possui conflito. Revise a operação e a fila antes de continuar.");
       let trackingStarted = false;
       if (startsRouteTracking(action.stage)) {
         if (!onlineRef.current)
@@ -382,6 +392,7 @@ export function AppProvider({ children }: PropsWithChildren) {
           setMessage("A ação está na fila, mas a escala não pôde ser atualizada agora."),
         );
       }
+      } finally { enqueueInFlight.current = false; }
     },
     retry: async (deviceActionId) => {
       if (!session || !online) throw new Error("Conecte o aparelho antes de reenviar.");

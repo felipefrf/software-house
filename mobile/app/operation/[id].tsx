@@ -63,7 +63,7 @@ export default function OperationScreen() {
   const team = work?.teams.find((item) => item.id === operation.team_id);
   const vehicle = work?.vehicles.find((item) => item.id === operation.vehicle_id);
   const driver = work?.people.find((item) => item.id === operation.driver_id);
-  const hasCurrentAction = outbox.some(
+  const hasCurrentAction = Boolean(operation.local_progress?.blocked || operation.local_progress?.awaitingCompletion) || outbox.some(
     (item) =>
       item.operationId === operation.id &&
       item.stage === operation.stage &&
@@ -117,6 +117,10 @@ export default function OperationScreen() {
         <Text style={styles.eventName}>{operation.event_name}</Text>
         <Text style={styles.destination}>{operation.destination}</Text>
         <Text style={styles.schedule}>{formatDate(operation.scheduled_at)}</Text>
+        {operation.local_progress && <Text style={styles.offlineNote}>
+          Progresso deste aparelho. No servidor: {stageLabels[operation.local_progress.serverStage]}.
+          {operation.local_progress.awaitingCompletion ? " Conclusão aguardando confirmação." : operation.local_progress.blocked ? " Revise a fila antes de continuar." : ` ${operation.local_progress.pending} ação(ões) aguardando confirmação.`}
+        </Text>}
         {operation.estoquenow_context ? (
           <Text style={styles.cacheAge}>
             Pedido {operation.estoquenow_context.order_id ?? "não informado"}
@@ -236,8 +240,10 @@ export default function OperationScreen() {
           onLayout={(event) => setRailWidth(event.nativeEvent.layout.width)}
         >
           {operationStages.map((stage, index) => {
+            const local = operation.local_progress && index >= operationStages.indexOf(operation.local_progress.serverStage)
+              && index < currentIndex;
             const state =
-              operation.status === "completed" || index < currentIndex
+              local ? "local" : operation.status === "completed" || index < currentIndex
                 ? "done"
                 : index === currentIndex
                   ? "active"
@@ -246,13 +252,14 @@ export default function OperationScreen() {
               <View
                 key={stage}
                 accessible
-                accessibilityLabel={`${stageLabels[stage]}, ${state === "done" ? "concluída" : state === "active" ? "etapa atual" : "pendente"}`}
+                accessibilityLabel={`${stageLabels[stage]}, ${state === "local" ? "salva neste aparelho, confirmação pendente" : state === "done" ? "concluída" : state === "active" ? "etapa atual" : "pendente"}`}
                 style={styles.stage}
               >
                 <View
                   style={[
                     styles.node,
                     state === "done" && styles.nodeDone,
+                    state === "local" && styles.nodeLocal,
                     state === "active" && styles.nodeActive,
                   ]}
                 >
@@ -263,7 +270,7 @@ export default function OperationScreen() {
                       state === "active" && styles.nodeTextActive,
                     ]}
                   >
-                    {state === "done" ? "OK" : index + 1}
+                    {state === "local" ? "Local" : state === "done" ? "OK" : index + 1}
                   </Text>
                 </View>
                 <Text style={[styles.stageLabel, state === "active" && styles.stageLabelActive]}>
@@ -397,6 +404,7 @@ const styles = StyleSheet.create({
   stage: { width: 82, alignItems: "center" },
   node: { width: 44, height: 44, borderRadius: 22, borderColor: colors.line, borderWidth: 2, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface },
   nodeDone: { borderColor: colors.green, backgroundColor: colors.sage },
+  nodeLocal: { borderColor: colors.amber, backgroundColor: colors.amberSoft },
   nodeActive: { borderColor: colors.green, backgroundColor: colors.green },
   nodeText: { color: colors.muted, fontSize: 12, fontWeight: "700" },
   nodeTextDone: { color: colors.green },

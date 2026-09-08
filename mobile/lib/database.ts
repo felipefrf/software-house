@@ -1,6 +1,7 @@
 import * as Crypto from "expo-crypto";
 import * as SecureStore from "expo-secure-store";
 import * as SQLite from "expo-sqlite";
+import { sameActionEvidence } from "./outbox-state";
 
 import type {
   OutboxAction,
@@ -32,12 +33,11 @@ const databaseKey = async () => {
 };
 
 const database = async () => {
-  databasePromise ??= Promise.all([
-    SQLite.openDatabaseAsync("imperio-logistica.db"),
-    databaseKey(),
-  ]).then(
-    async ([db, key]) => {
-      await db.execAsync(`
+  databasePromise ??= databaseKey().then(
+    async (key) => {
+      const db = await SQLite.openDatabaseAsync("imperio-logistica.db");
+      try {
+        await db.execAsync(`
         PRAGMA key = '${key}';
         PRAGMA journal_mode = WAL;
         CREATE TABLE IF NOT EXISTS cache (
@@ -88,18 +88,25 @@ const database = async () => {
         );
         CREATE INDEX IF NOT EXISTS route_tracking_points_session_idx
           ON route_tracking_points(session_id, captured_at);
-      `);
-      await db.runAsync(
-        "UPDATE outbox SET state = 'pending' WHERE state = 'sending'",
-      );
-      await db.runAsync(
-        `UPDATE outbox
+        `);
+        await db.runAsync(
+          "UPDATE outbox SET state = 'pending' WHERE state = 'sending'",
+        );
+        await db.runAsync(
+          `UPDATE outbox
          SET state = 'conflict', last_error = 'Descarte interrompido. Revise e tente novamente.'
          WHERE state = 'discarding'`,
-      );
-      return db;
+        );
+        return db;
+      } catch (error) {
+        await db.closeAsync().catch(() => undefined);
+        throw error;
+      }
     },
-  );
+  ).catch(error => {
+    databasePromise = null;
+    throw error;
+  });
   return databasePromise;
 };
 
@@ -159,11 +166,7 @@ export async function enqueueAction(userId: string, action: OutboxAction) {
     throw new Error("Identificador local indisponível. Capture a ação novamente.");
   try {
     const payload = JSON.parse(existing.payload) as OutboxAction;
-    if (
-      payload.operationId !== action.operationId ||
-      payload.stage !== action.stage ||
-      payload.photoPath !== action.photoPath
-    )
+    if (!sameActionEvidence(payload, action))
       throw new Error("mismatch");
   } catch {
     throw new Error("A ação local divergiu do registro existente.");
