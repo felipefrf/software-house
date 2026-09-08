@@ -1,0 +1,22 @@
+# Only the standalone mobile app belongs in the EAS upload.
+/*
+!/mobile
+/mobile/*
+!/mobile/app
+!/mobile/components
+!/mobile/context
+!/mobile/lib
+!/mobile/assets
+!/mobile/app.json
+!/mobile/eas.json
+!/mobile/package.json
+!/mobile/package-lock.json
+!/mobile/tsconfig.json
+**/.env*
+**/node_modules/
+**/*.jks
+**/*.key
+**/*.pem
+**/*.p12
+**/*.p8
+**/*.mobileprovision
