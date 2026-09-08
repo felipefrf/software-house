@@ -4,11 +4,24 @@ import test from "node:test";
 import {
   endsRouteTracking,
   operationEndedForTracking,
+  routeTrackingAcknowledgement,
   ROUTE_TRACKING_TERMS_TEXT,
   ROUTE_TRACKING_TERMS_VERSION,
   startsRouteTracking,
   validRouteTrackingPoint,
 } from "../lib/route-tracking-policy";
+
+test("confirma só IDs do lote enviado e respeita parada mesmo sem pontos aceitos", () => {
+  assert.deepEqual(routeTrackingAcknowledgement({ accepted_ids: ["a", "a"], should_stop: false }, ["a"]), {
+    accepted: ["a"], stoppedAt: null, stopReason: null,
+  });
+  assert.equal(routeTrackingAcknowledgement({ accepted_ids: ["another-session"], should_stop: false }, ["a"]), null);
+  assert.equal(routeTrackingAcknowledgement({ accepted_ids: ["a"] }, ["a"]), null);
+  assert.equal(routeTrackingAcknowledgement({ accepted_ids: [], should_stop: true, stopped_at: "invalid", stop_reason: "completed" }, []), null);
+  assert.deepEqual(routeTrackingAcknowledgement({ accepted_ids: [], should_stop: true, stopped_at: "2026-09-08T12:00:00Z", stop_reason: "completed" }, ["a"]), {
+    accepted: [], stoppedAt: "2026-09-08T12:00:00Z", stopReason: "completed",
+  });
+});
 
 test("rota exige termos versionados e cobre somente saída até retorno", () => {
   assert.equal(ROUTE_TRACKING_TERMS_VERSION, "imperio-route-tracking-v1");

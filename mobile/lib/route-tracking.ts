@@ -17,6 +17,7 @@ import {
 } from "./database";
 import {
   operationEndedForTracking,
+  routeTrackingAcknowledgement,
   ROUTE_TRACKING_TERMS_VERSION,
   validRouteTrackingPoint,
 } from "./route-tracking-policy";
@@ -141,13 +142,24 @@ async function requireBackgroundLocationPermission() {
     );
 }
 
-export async function syncRouteTracking(userId: string) {
+const routeSyncs = new Map<string, Promise<boolean>>();
+
+export function syncRouteTracking(userId: string): Promise<boolean> {
+  const pending = routeSyncs.get(userId);
+  if (pending) return pending;
+  const promise = drainRouteTracking(userId).finally(() => routeSyncs.delete(userId));
+  routeSyncs.set(userId, promise);
+  return promise;
+}
+
+async function drainRouteTracking(userId: string) {
   if (!supabase) return false;
   const sessions = await listRouteTrackingSessions(userId);
   let shouldStopNativeTask = false;
   for (const session of sessions) {
     let batch = await listPendingRouteTrackingPoints(session.sessionId);
-    while (batch.length) {
+    // Até quatro lotes por sessão; o restante permanece durável para o próximo ciclo.
+    for (let sentBatches = 0; batch.length && sentBatches < 4; sentBatches++) {
       const pointIds = batch.map((point) => point.id);
       const response = await supabase.rpc("append_operation_route_points", {
         p_session_id: session.sessionId,
@@ -170,15 +182,12 @@ export async function syncRouteTracking(userId: string) {
         );
         break;
       }
-      const result = response.data as {
-        accepted_ids?: string[];
-        should_stop?: boolean;
-        stopped_at?: string | null;
-        stop_reason?: RouteTrackingStopReason | null;
-      } | null;
-      const accepted = Array.isArray(result?.accepted_ids)
-        ? result.accepted_ids.filter((id): id is string => typeof id === "string")
-        : [];
+      const result = routeTrackingAcknowledgement(response.data, pointIds);
+      if (result?.stoppedAt) {
+        await markRouteTrackingStopped(session.sessionId, result.stoppedAt, result.stopReason!, true);
+        shouldStopNativeTask = true;
+      }
+      const accepted = result?.accepted ?? [];
       if (!accepted.length) {
         await markRouteTrackingSyncAttempt(
           session.sessionId,
@@ -189,15 +198,6 @@ export async function syncRouteTracking(userId: string) {
       }
       await confirmRouteTrackingPoints(session.sessionId, accepted);
       await markRouteTrackingSyncAttempt(session.sessionId, [], null);
-      if (result?.should_stop && result.stopped_at) {
-        await markRouteTrackingStopped(
-          session.sessionId,
-          result.stopped_at,
-          result.stop_reason ?? "operation_ended",
-          true,
-        );
-        shouldStopNativeTask = true;
-      }
       batch = await listPendingRouteTrackingPoints(session.sessionId);
     }
 
@@ -222,8 +222,9 @@ export async function syncRouteTracking(userId: string) {
     }
     await removeRouteTrackingSessionIfSettled(session.sessionId);
   }
-  if (shouldStopNativeTask) await stopNativeTask();
-  return shouldStopNativeTask;
+  const shouldStop = shouldStopNativeTask && !(await readActiveRouteTrackingSession());
+  if (shouldStop) await stopNativeTask();
+  return shouldStop;
 }
 
 export async function startOperationRouteTracking({
@@ -316,20 +317,21 @@ export async function stopOperationRouteTracking(
 ) {
   const active = await readActiveRouteTrackingSession(userId);
   if (!active || active.operationId !== operationId) return;
-  await markRouteTrackingStopped(active.sessionId, new Date().toISOString(), reason);
-  await stopNativeTask();
+  try {
+    await markRouteTrackingStopped(active.sessionId, new Date().toISOString(), reason);
+  } finally {
+    await stopNativeTask();
+  }
   await syncRouteTracking(userId).catch(() => false);
 }
 
 export async function stopRouteTrackingForSignOut(userId: string) {
-  const active = await readActiveRouteTrackingSession(userId);
-  if (!active) return;
-  await markRouteTrackingStopped(
-    active.sessionId,
-    new Date().toISOString(),
-    "sign_out",
-  );
-  await stopNativeTask();
+  try {
+    const active = await readActiveRouteTrackingSession(userId);
+    if (active) await markRouteTrackingStopped(active.sessionId, new Date().toISOString(), "sign_out");
+  } finally {
+    await stopNativeTask();
+  }
   await syncRouteTracking(userId).catch(() => false);
 }
 
@@ -337,7 +339,7 @@ export async function reconcileOperationRouteTracking(
   userId: string,
   operations: Operation[],
 ) {
-  const serverEnded = await syncRouteTracking(userId).catch(() => false);
+  await syncRouteTracking(userId).catch(() => false);
   let active = await readActiveRouteTrackingSession(userId);
   if (active) {
     const operation = operations.find((candidate) => candidate.id === active?.operationId);
@@ -352,7 +354,7 @@ export async function reconcileOperationRouteTracking(
       active = null;
     }
   }
-  if (serverEnded || !active) {
+  if (!active) {
     await stopNativeTask();
     return false;
   }

@@ -1,4 +1,20 @@
-import type { Operation, OperationStage, RouteTrackingPoint } from "./types";
+import type { Operation, OperationStage, RouteTrackingPoint, RouteTrackingStopReason } from "./types";
+
+export function routeTrackingAcknowledgement(value: unknown, sentIds: string[]) {
+  if (!value || typeof value !== "object") return null;
+  const row = value as Record<string, unknown>;
+  const sent = new Set(sentIds);
+  if (!Array.isArray(row.accepted_ids) || row.accepted_ids.some(id => typeof id !== "string" || !sent.has(id))
+    || typeof row.should_stop !== "boolean") return null;
+  const reasons: RouteTrackingStopReason[] = ["returned", "completed", "cancelled", "sign_out", "departure_failed", "operation_ended"];
+  if (row.should_stop && (typeof row.stopped_at !== "string" || !Number.isFinite(Date.parse(row.stopped_at))
+    || !reasons.includes(row.stop_reason as RouteTrackingStopReason))) return null;
+  return {
+    accepted: [...new Set(row.accepted_ids as string[])],
+    stoppedAt: row.should_stop ? row.stopped_at as string : null,
+    stopReason: row.should_stop ? row.stop_reason as RouteTrackingStopReason : null,
+  };
+}
 
 export const ROUTE_TRACKING_TERMS_VERSION = "imperio-route-tracking-v1";
 

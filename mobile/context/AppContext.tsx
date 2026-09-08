@@ -322,7 +322,7 @@ export function AppProvider({ children }: PropsWithChildren) {
             ? syncInFlight.current.promise
             : null;
         await activeSync?.catch(() => undefined);
-        await stopRouteTrackingForSignOut(currentSession.user.id).catch(() => undefined);
+        await stopRouteTrackingForSignOut(currentSession.user.id);
         const result = await client.auth.signOut({ scope: "local" });
         const reconciled = await client.auth.getSession();
         adoptSession(reconciled.data.session);
