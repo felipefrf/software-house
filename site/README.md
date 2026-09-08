@@ -98,6 +98,36 @@ Nenhum run armazena payload bruto, nome de cliente, endereço, token, URL assina
 ou mensagem livre do provedor. `ESTOQUENOW_WRITE_ENABLED=false` permanece um gate
 independente e obrigatório.
 
+### Localização operacional da equipe
+
+O detalhe da operação consulta a última sessão de GPS do app nativo, separada
+dos dados do EstoqueNOW. A rota `/api/imperio/operation-route` exige gestor
+autenticado e senha regularizada, usa o cliente sujeito a RLS e responde com
+`private, no-store`. Não usa service role para ler coordenadas.
+
+A consulta ocorre a cada 30 segundos com a tela visível, sem sobreposição, com
+timeout e cancelamento ao fechar/trocar o detalhe. São exibidas até 100 posições
+da última sessão, horário de captura, precisão e indicação de localização simulada.
+Após cinco minutos sem captura recente, a tela alerta; falha de atualização não
+transforma a posição anterior em atual. Erros de autorização retiram os dados.
+O mapa é um link acionado pelo gestor; ainda não há mapa embutido com a linha do
+trajeto completo nem múltiplas sessões simultâneas no painel.
+
+Na integração, lotes parados há mais de 45 minutos aparecem como desatualizados,
+inclusive quando o último estado era `running` ou `partial`. Isso é um alerta na
+tela; não há envio de notificações externas configurado.
+
+Validação em 08/09/2026: 65 testes web, TypeScript e build webpack aprovados;
+lint sem erros, com cinco avisos preexistentes fora da logística. QA browser local
+com GPS sintético cobriu desktop/mobile, estado antigo, erro, 403, vazio e fechamento
+durante consulta. Os 177 testes pgTAP passaram no banco local, carregando a migration
+de quarentena dentro da mesma transação e executando rollback ao final.
+
+Consulta de produção na mesma data: cron ativo a cada 15 minutos, 36 operações
+importadas e 36 IDs externos distintos; quatro registros em quarentena no último
+lote. Havia 35 operações ativas com escala incompleta e nenhuma sessão/ponto GPS
+registrado. Esses números são um retrato, não uma garantia permanente de saúde.
+
 ### Matriz de integração
 
 | Capacidade | Produto | Evidência atual | Escrita externa |

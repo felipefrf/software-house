@@ -40,18 +40,34 @@ de instalar o primeiro preview cifrado.
 6. O app tenta a fila ao abrir, voltar ao primeiro plano, recuperar conexão e por ação manual. O retry automático para após três tentativas; o manual continua disponível.
 7. A tela Evidências lê `operation_events` do servidor e cria URLs privadas com validade de 60 segundos.
 
+A fila envia etapas na ordem operacional, mesmo se o relógio do aparelho mudar.
+Uma etapa com falha, conflito ou envio em andamento bloqueia somente as etapas
+seguintes da mesma operação. O retry individual segue a mesma regra. Fotos locais
+e remotas não são apagadas automaticamente em conflito; a limpeza exige confirmação
+do servidor ou descarte explícito.
+
 Ao confirmar a saída, o app exige aceite explícito dos termos versionados e as
 permissões de localização em primeiro e segundo plano. Depois disso, registra a
-rota automaticamente a cada 60 segundos ou 100 metros, inclusive com o app em
+rota automaticamente, solicitando ao sistema intervalos de 60 segundos ou 100 metros, inclusive com o app em
 segundo plano, e encerra no retorno, conclusão, cancelamento ou logout. Sessões e
 pontos ficam em uma outbox SQLite e são enviados em lotes idempotentes. O aceite
 registra usuário, operação, versão e horários do aparelho e do servidor.
+
+O sistema operacional pode adiar a coleta: esses intervalos não são uma garantia
+de frequência. A sincronização compartilha uma execução por usuário, limita cada
+sessão a quatro lotes por ciclo e confirma somente IDs presentes no lote enviado.
+No logout, o app tenta interromper a tarefa nativa mesmo se o banco local falhar;
+uma falha de encerramento não é ocultada como logout bem-sucedido.
 
 Ocorrências usam a RPC idempotente `create_operation_incident` e exigem conexão nesta versão. Avaria e item faltante exigem foto.
 Se a resposta da RPC for perdida ou ambígua, as evidências local e remota são preservadas para retry ou reconciliação; o app não tenta apagá-las automaticamente.
 
 ## Limites explícitos
 
+- A saída exige conexão para registrar o consentimento no servidor. Ações de etapa
+  podem ser preservadas offline, mas a interface ainda não projeta uma sequência
+  completa de etapas pendentes; não considerar uma operação inteira offline homologada.
+- Checklist de itens e ocorrências ainda exigem conexão nesta versão.
 - O rastreamento em background não funciona no Expo Go e pode ser encerrado pelo
   sistema se o usuário matar o app; precisa ser homologado nos aparelhos reais.
 - O texto versionado de consentimento é um contrato técnico e ainda precisa de
@@ -69,6 +85,11 @@ Se a resposta da RPC for perdida ou ambígua, as evidências local e remota são
 - Não há dado simulado no aplicativo.
 
 ## Validar
+
+Em 08/09/2026: 18 testes locais passaram, incluindo ordem da fila, confirmação de
+GPS, concorrência e falha do banco durante logout; TypeScript e export dos bundles
+iOS/Android passaram. Esses testes usam mocks; bundles não são builds assinados
+e não substituem o gate de aparelho físico abaixo.
 
 ```bash
 npm test
