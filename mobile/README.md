@@ -89,6 +89,18 @@ Se a resposta da RPC for perdida ou ambígua, as evidências local e remota são
 
 ## Validar
 
+Em 09/09/2026, a versão 1.0.1 (Android 2) recebeu nova hierarquia visual:
+superfícies neutras, ação azul, textos maiores de apoio, próxima ação antes dos
+itens e detalhes secundários recolhíveis. O login usa KeyboardAvoidingView,
+ScrollView e resize no Android. Passaram 27 testes, TypeScript, Expo Doctor 21/21
+e export Android. Sete telas foram revisadas em browser com componentes reais e
+dependências nativas/dados substituídos por mocks: próxima ação visível, conferência
+preservada ao abrir/fechar etapas, ausência de overflow e login em 320 × 420.
+Isso não simula o teclado Android. Instalar o APK atualizado sobre o anterior,
+sem desinstalar, e validar teclado, aumento de fonte do sistema, câmera e GPS reais.
+Build dessa versão: `4464dc4b-1b48-452e-9f29-cb2cb7c551f2` (iniciado no EAS;
+verificar conclusão antes de instalar).
+
 Execute a suíte com Node.js 24; o teste de persistência usa `node:sqlite` do runtime.
 
 Em 08/09/2026: 25 testes locais passaram, incluindo ordem e projeção da fila,
