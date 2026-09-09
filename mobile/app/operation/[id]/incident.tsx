@@ -163,13 +163,13 @@ export default function IncidentScreen() {
         }
       />
       <StatusStrip online={online} pending={pending} />
-      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : "height"}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           {!online ? (
             <View style={styles.warning}>
               <Text style={styles.warningTitle}>Ocorrência exige conexão</Text>
               <Text style={styles.warningCopy}>
-                Neste corte, somente etapas entram na fila offline. O relato não será simulado nem armazenado parcialmente.
+                Conecte-se à internet antes de enviar. Este relato ainda não está salvo; não feche a tela.
               </Text>
             </View>
           ) : null}
@@ -192,7 +192,7 @@ export default function IncidentScreen() {
               ))}
             </View>
 
-            <Text style={styles.eyebrowGap}>Severidade</Text>
+            <Text style={styles.eyebrowGap}>Qual é a gravidade?</Text>
             <View style={styles.chips}>
               {severities.map(([value, label]) => (
                 <Pressable
@@ -314,27 +314,27 @@ export default function IncidentScreen() {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   centered: { flex: 1, padding: 20, justifyContent: "center" },
-  content: { padding: 16, paddingBottom: 42 },
+  content: { padding: 20, paddingBottom: 42 },
   backButton: { minHeight: 46, minWidth: 58, borderColor: colors.line, borderWidth: 1, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  backLabel: { color: colors.greenDark, fontSize: 13, fontWeight: "700" },
+  backLabel: { color: colors.greenDark, fontSize: 15, fontWeight: "600" },
   warning: { backgroundColor: colors.amberSoft, borderColor: "#ecd49d", borderWidth: 1, borderRadius: 14, padding: 15, marginBottom: 12 },
-  warningTitle: { color: colors.amber, fontSize: 15, fontWeight: "700" },
-  warningCopy: { color: "#705f3d", fontSize: 12, lineHeight: 18, marginTop: 5 },
-  eyebrow: { color: colors.muted, fontSize: 13, fontWeight: "600" },
-  eyebrowGap: { color: colors.muted, fontSize: 13, fontWeight: "600", marginTop: 20 },
+  warningTitle: { color: colors.amber, fontSize: 15, fontWeight: "600" },
+  warningCopy: { color: "#705f3d", fontSize: 14, lineHeight: 22, marginTop: 5 },
+  eyebrow: { color: colors.muted, fontSize: 15, fontWeight: "600" },
+  eyebrowGap: { color: colors.muted, fontSize: 15, fontWeight: "600", marginTop: 20 },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 11 },
   chip: { minHeight: 44, borderRadius: 22, paddingHorizontal: 14, borderColor: colors.line, borderWidth: 1, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" },
   chipSelected: { borderColor: colors.green, backgroundColor: colors.sage },
-  chipText: { color: colors.muted, fontSize: 12, fontWeight: "700" },
+  chipText: { color: colors.muted, fontSize: 14, fontWeight: "600" },
   chipTextSelected: { color: colors.greenDark },
-  label: { color: colors.ink, fontSize: 13, fontWeight: "700", marginTop: 18 },
+  label: { color: colors.ink, fontSize: 15, fontWeight: "600", marginTop: 18 },
   input: { minHeight: 50, borderColor: colors.line, borderWidth: 1, borderRadius: 11, paddingHorizontal: 13, color: colors.ink, backgroundColor: colors.surface, fontSize: 15, marginTop: 8 },
   textarea: { minHeight: 105, paddingTop: 13, textAlignVertical: "top" },
-  sectionCard: { marginTop: 12 },
-  sectionTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 22, fontWeight: "700", marginTop: 4 },
-  sectionCopy: { color: colors.muted, fontSize: 12, lineHeight: 18, marginTop: 4 },
+  sectionCard: { marginTop: 24 },
+  sectionTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 20, fontWeight: "600", marginTop: 4 },
+  sectionCopy: { color: colors.muted, fontSize: 14, lineHeight: 22, marginTop: 4 },
   captureGap: { marginTop: 13 },
   buttonGap: { marginTop: 16 },
   buttonGapSmall: { marginTop: 10 },
-  error: { color: colors.danger, fontSize: 13, lineHeight: 19, marginTop: 14 },
+  error: { color: colors.danger, fontSize: 15, lineHeight: 23, marginTop: 14 },
 });

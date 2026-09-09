@@ -3,6 +3,8 @@ import { useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -16,6 +18,7 @@ import {
   BrandHeader,
   Button,
   Card,
+  Disclosure,
   Screen,
   StatusStrip,
 } from "@/components/Ui";
@@ -53,7 +56,8 @@ function Login() {
 
   return (
     <Screen>
-      <View style={styles.centered}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.loginContent}>
         <Card style={styles.loginCard}>
           <Text style={styles.eyebrow}>Império logística</Text>
           <Text style={styles.loginTitle}>Acesse sua operação</Text>
@@ -94,7 +98,8 @@ function Login() {
             </Text>
           ) : null}
         </Card>
-      </View>
+      </ScrollView>
+      </KeyboardAvoidingView>
     </Screen>
   );
 }
@@ -109,31 +114,21 @@ function OperationList({
   return (
     <View style={styles.operationList}>
       {operations.map((operation) => (
-        <Pressable
-          key={operation.id}
-          accessibilityRole="button"
+        <Pressable key={operation.id} accessibilityRole="button"
           accessibilityLabel={`Abrir ${operation.event_name}, etapa ${stageLabels[operation.stage]}`}
           style={({ pressed }) => [styles.operationRow, pressed && styles.pressed]}
-          onPress={() => onOpen(operation)}
-        >
-          <View style={styles.timeColumn}>
-            <Text style={styles.time}>{formatDate(operation.scheduled_at)}</Text>
+          onPress={() => onOpen(operation)}>
+          <View style={styles.metaRow}>
+            <Text style={styles.time}>{new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit" }).format(new Date(operation.scheduled_at))}</Text>
+            <Text style={styles.operationDestination}>{new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short" }).format(new Date(operation.scheduled_at))}</Text>
+            <Text style={styles.stagePill}>{stageLabels[operation.stage]}</Text>
           </View>
-          <View style={styles.operationCopy}>
-            <Text style={styles.operationName}>{operation.event_name}</Text>
-            <Text style={styles.operationDestination} numberOfLines={2}>
-              {operation.destination}
-            </Text>
-            <View style={styles.metaRow}>
-              <Text style={styles.stagePill}>{stageLabels[operation.stage]}</Text>
-              <Text
-                style={operation.source === "manual" ? styles.manual : styles.imported}
-              >
-                {operation.source === "manual" ? "Origem manual" : "EstoqueNOW"}
-              </Text>
-            </View>
+          <Text style={styles.operationName}>{operation.event_name}</Text>
+          <Text style={styles.operationDestination} numberOfLines={2}>{operation.destination}</Text>
+          <View style={styles.openRow}>
+            <Text style={styles.openLabel}>Ver operação</Text>
+            <Text style={styles.chevron}>›</Text>
           </View>
-          <Text style={styles.chevron}>›</Text>
         </Pressable>
       ))}
     </View>
@@ -259,8 +254,7 @@ export default function TodayScreen() {
             <Text style={styles.eyebrow}>Acesso protegido</Text>
             <Text style={styles.loginTitle}>Defina sua senha no portal</Text>
             <Text style={styles.loginCopy}>
-              A política atual do backend exige que a primeira troca seja concluída na
-              torre web. Volte ao app depois disso.
+              Para proteger sua conta, escolha uma nova senha no portal. Depois, volte e entre novamente no app.
             </Text>
             <View style={styles.buttonGap}>
               <Button
@@ -282,7 +276,7 @@ export default function TodayScreen() {
 
   return (
     <Screen>
-      <BrandHeader title="Seu turno" />
+      <BrandHeader eyebrow="Império Logística" title="Meu turno" />
       <StatusStrip online={online} pending={pending} />
       <ScrollView
         contentContainerStyle={styles.content}
@@ -304,10 +298,10 @@ export default function TodayScreen() {
       >
         <View style={styles.pageTitleRow}>
           <View style={styles.pageTitleCopy}>
-            <Text style={styles.pageTitle}>Operações escaladas</Text>
-            <Text style={styles.pageCopy}>Abra uma operação e siga a próxima ação.</Text>
+            <Text accessibilityRole="header" style={styles.pageTitle}>Olá, {work.user.full_name.split(" ")[0]}</Text>
+            <Text style={styles.pageCopy}>Escolha a operação. Nós mostramos o próximo passo.</Text>
           </View>
-          <Text style={styles.identity}>{work.user.full_name}</Text>
+
         </View>
         <Text style={styles.freshness}>
           {online && !workError
@@ -324,7 +318,7 @@ export default function TodayScreen() {
           </View>
         ) : null}
 
-        <Text style={styles.sectionTitle}>Hoje e atrasadas</Text>
+        <Text style={styles.sectionTitle}>Para fazer agora</Text>
         {operationGroups.current.length ? (
           <OperationList operations={operationGroups.current} onOpen={openOperation} />
         ) : (
@@ -357,6 +351,7 @@ export default function TodayScreen() {
           </>
         ) : null}
 
+        <Disclosure title="Sobre os envios e sua conta">
         <Text style={styles.boundary}>
           A fila de ações sincroniza com o app aberto ou ao voltar para o primeiro
           plano. Durante uma rota iniciada com aceite, o GPS continua em segundo plano.
@@ -369,20 +364,24 @@ export default function TodayScreen() {
           variant="secondary"
           onPress={() => void logout()}
         />
+        </Disclosure>
       </ScrollView>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  loginContent: { flexGrow: 1, justifyContent: "center", alignItems: "center", padding: 24, paddingVertical: 48 },
+  openRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderTopWidth: 1, borderTopColor: colors.line, marginTop: 16, paddingTop: 8 },
+  openLabel: { color: colors.green, fontSize: 15, fontWeight: "600" },
   centered: { flex: 1, alignItems: "center", justifyContent: "center", padding: 20 },
   loginCard: { width: "100%", maxWidth: 430, padding: 24 },
   eyebrow: {
     color: colors.muted,
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: "600",
   },
-  loginTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 29, fontWeight: "700", marginTop: 7 },
+  loginTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 26, fontWeight: "600", marginTop: 7 },
   loginCopy: { color: colors.muted, fontSize: 14, lineHeight: 21, marginTop: 8 },
   label: {
     color: colors.ink,
@@ -405,7 +404,7 @@ const styles = StyleSheet.create({
   loading: { color: colors.muted, fontSize: 14, marginTop: 14, textAlign: "center" },
   buttonGap: { marginTop: 22 },
   buttonGapSmall: { marginTop: 10 },
-  content: { padding: 16, paddingBottom: 36 },
+  content: { padding: 20, paddingBottom: 36 },
   pageTitleRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -413,17 +412,17 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   pageTitleCopy: { flex: 1 },
-  pageTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 29, lineHeight: 34, fontWeight: "700" },
+  pageTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 29, lineHeight: 33, fontWeight: "700" },
   pageCopy: { color: colors.muted, fontSize: 13, marginTop: 4 },
   identity: {
     color: colors.green,
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "700",
     maxWidth: 120,
     textAlign: "right",
   },
   freshness: { color: colors.muted, fontSize: 12, marginTop: 10 },
-  sectionTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 19, fontWeight: "700", marginTop: 22 },
+  sectionTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 19, fontWeight: "700", marginTop: 28 },
   notice: {
     backgroundColor: colors.amberSoft,
     borderColor: "#ecd49d",
@@ -433,32 +432,17 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   noticeText: { color: colors.amber, fontSize: 13, lineHeight: 19 },
-  operationList: {
-    marginTop: 10,
-    borderColor: colors.line,
-    borderWidth: 1,
-    borderRadius: 15,
-    backgroundColor: colors.surface,
-    overflow: "hidden",
-  },
-  operationRow: {
-    minHeight: 112,
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 14,
-    borderBottomColor: colors.line,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: 12,
-  },
+  operationList: { marginTop: 14, gap: 16 },
+  operationRow: { padding: 20, borderWidth: 1, borderColor: colors.line, borderRadius: 16, backgroundColor: colors.surface },
   pressed: { backgroundColor: colors.sage },
   timeColumn: { width: 72 },
-  time: { color: colors.green, fontSize: 12, fontWeight: "700", lineHeight: 17 },
+  time: { color: colors.ink, fontSize: 20, fontWeight: "500", lineHeight: 26, fontVariant: ["tabular-nums"] },
   operationCopy: { flex: 1 },
-  operationName: { color: colors.ink, fontFamily: fonts.display, fontSize: 17, fontWeight: "700" },
+  operationName: { color: colors.ink, fontFamily: fonts.display, fontSize: 18, lineHeight: 25, fontWeight: "600", marginTop: 14 },
   operationDestination: {
     color: colors.muted,
     fontSize: 13,
-    lineHeight: 17,
+    lineHeight: 22,
     marginTop: 3,
   },
   metaRow: {
@@ -469,6 +453,7 @@ const styles = StyleSheet.create({
     marginTop: 9,
   },
   stagePill: {
+    marginLeft: "auto",
     color: colors.greenDark,
     backgroundColor: colors.sage,
     borderRadius: 8,

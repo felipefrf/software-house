@@ -1,15 +1,16 @@
-// Tokens alinhados ao DESIGN.md da torre web: papel quente, verde Império como única cor
-// de ação, âmbar para atenção, vermelho para crítico. Uma família tipográfica (sistema).
+// App de campo: superfícies neutras, azul para ação e cores de estado com contraste.
+// Os nomes legados green/sage são mantidos para não alterar os consumidores.
 export const colors = {
-  ground: "#f6f4ef",
+  ground: "#f2f5f8",
   surface: "#ffffff",
-  ink: "#17211d",
-  muted: "#5a645e",
-  line: "#e3dfd6",
-  lineStrong: "#c4bfb3",
-  green: "#1f5c46",
-  greenDark: "#173d34",
-  sage: "#e3efe8",
+  ink: "#243247",
+  muted: "#59697b",
+  line: "#dce3eb",
+  lineStrong: "#8796a8",
+  green: "#245a91",
+  greenDark: "#204b76",
+  sage: "#eaf1f9",
+  success: "#28705a",
   amber: "#8f4c00",
   amberSoft: "#fbf0dc",
   danger: "#a63a30",
@@ -26,7 +27,7 @@ export const radius = { control: 12, card: 16, pill: 999 } as const;
 export const shadow = {
   shadowColor: "#17211d",
   shadowOffset: { width: 0, height: 4 },
-  shadowOpacity: 0.06,
+  shadowOpacity: 0,
   shadowRadius: 12,
-  elevation: 2,
+  elevation: 0,
 } as const;

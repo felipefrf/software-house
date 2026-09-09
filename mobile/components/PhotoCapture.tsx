@@ -119,7 +119,7 @@ export function PhotoCapture({
       >
         <Text style={styles.captureTitle}>{value ? "Refazer foto" : "Tirar foto"}</Text>
         <Text style={styles.captureCopy}>
-          {value ? "Foto salva neste aparelho" : "A câmera abre em primeiro plano"}
+          {value ? "Foto salva neste aparelho" : "Enquadre os itens e confirme a captura"}
         </Text>
       </Pressable>
       {permission && !permission.granted && !permission.canAskAgain ? (
@@ -159,7 +159,7 @@ const styles = StyleSheet.create({
     borderColor: "#55635d",
     borderWidth: 1,
   },
-  cancelText: { color: colors.surface, fontWeight: "700" },
+  cancelText: { color: colors.surface, fontWeight: "600" },
   shutter: {
     flex: 1,
     minHeight: 48,
@@ -168,7 +168,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: colors.surface,
   },
-  shutterText: { color: colors.ink, fontWeight: "700" },
+  shutterText: { color: colors.ink, fontWeight: "600" },
   disabled: { opacity: 0.5 },
   preview: { height: 200, width: "100%", borderRadius: 12, marginBottom: 10 },
   captureButton: {
@@ -180,9 +180,9 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
     borderWidth: 1,
   },
-  captureTitle: { color: colors.greenDark, fontWeight: "700", fontSize: 15 },
-  captureCopy: { color: colors.muted, fontSize: 12, marginTop: 3 },
-  permissionError: { color: colors.danger, fontSize: 12, marginTop: 8 },
+  captureTitle: { color: colors.greenDark, fontWeight: "600", fontSize: 15 },
+  captureCopy: { color: colors.muted, fontSize: 14, marginTop: 3 },
+  permissionError: { color: colors.danger, fontSize: 14, marginTop: 8 },
   settingsBlock: { marginTop: 8 },
   settingsButton: {
     minHeight: 44,
@@ -194,5 +194,5 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: colors.surface,
   },
-  settingsButtonText: { color: colors.greenDark, fontSize: 13, fontWeight: "700" },
+  settingsButtonText: { color: colors.greenDark, fontSize: 15, fontWeight: "600" },
 });

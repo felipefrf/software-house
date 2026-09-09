@@ -53,12 +53,12 @@ export default function QueueScreen() {
 
   return (
     <Screen>
-      <BrandHeader eyebrow="Deste aparelho" title="Envios pendentes" />
+      <BrandHeader title="Envios" />
       <StatusStrip online={online} pending={pending} />
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.title}>Cada ação tem um estado claro.</Text>
+        <Text style={styles.title}>{pending ? `${pending} registro(s) aguardando envio` : "Nenhum envio pendente"}</Text>
         <Text style={styles.copy}>
-          O app tenta enviar ao abrir, ao voltar para o primeiro plano, quando a conexão retorna e quando você solicita.
+          Se estiver sem internet, seus registros de etapa ficam neste aparelho. Abra o app com conexão para enviá-los.
         </Text>
 
         {message ? (
@@ -155,9 +155,9 @@ export default function QueueScreen() {
         )}
 
         <View style={styles.boundary}>
-          <Text style={styles.boundaryTitle}>Limite operacional</Text>
+          <Text style={styles.boundaryTitle}>Precisa revisar um registro?</Text>
           <Text style={styles.boundaryCopy}>
-            Não existe sincronização em background neste corte. Conflitos ficam parados para decisão humana.
+            Se houver conflito, fale com o gestor antes de descartar. Mantenha o app aberto até confirmar os envios.
           </Text>
         </View>
       </ScrollView>
@@ -166,27 +166,27 @@ export default function QueueScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: { padding: 16, paddingBottom: 40 },
-  title: { color: colors.ink, fontFamily: fonts.display, fontSize: 29, lineHeight: 34, fontWeight: "700" },
-  copy: { color: colors.muted, fontSize: 13, lineHeight: 19, marginTop: 6 },
+  content: { padding: 20, paddingBottom: 40 },
+  title: { color: colors.ink, fontFamily: fonts.display, fontSize: 24, lineHeight: 31, fontWeight: "600" },
+  copy: { color: colors.muted, fontSize: 15, lineHeight: 23, marginTop: 6 },
   notice: { backgroundColor: colors.sage, borderColor: colors.line, borderWidth: 1, borderRadius: 12, padding: 13, marginTop: 15 },
-  noticeText: { color: colors.greenDark, fontSize: 13, lineHeight: 19 },
+  noticeText: { color: colors.greenDark, fontSize: 15, lineHeight: 23 },
   buttonGap: { marginTop: 17 },
   list: { marginTop: 14, gap: 10 },
   item: { padding: 15 },
   itemHead: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
   itemCopy: { flex: 1 },
-  operation: { color: colors.ink, fontFamily: fonts.display, fontSize: 17, fontWeight: "700" },
-  stage: { color: colors.greenDark, fontSize: 13, fontWeight: "700", marginTop: 3 },
-  state: { maxWidth: 135, textAlign: "right", fontSize: 12, lineHeight: 16, fontWeight: "700" },
-  meta: { color: colors.muted, fontSize: 12, marginTop: 8 },
-  failure: { color: colors.danger, backgroundColor: "#fff8f7", borderRadius: 8, padding: 10, marginTop: 10, fontSize: 12, lineHeight: 17 },
-  conflictHelp: { color: colors.danger, fontSize: 12, lineHeight: 18, marginTop: 9 },
+  operation: { color: colors.ink, fontFamily: fonts.display, fontSize: 17, fontWeight: "600" },
+  stage: { color: colors.greenDark, fontSize: 15, fontWeight: "600", marginTop: 3 },
+  state: { maxWidth: 135, textAlign: "right", fontSize: 14, lineHeight: 16, fontWeight: "600" },
+  meta: { color: colors.muted, fontSize: 14, marginTop: 8 },
+  failure: { color: colors.danger, backgroundColor: "#fff8f7", borderRadius: 8, padding: 10, marginTop: 10, fontSize: 14, lineHeight: 21 },
+  conflictHelp: { color: colors.danger, fontSize: 14, lineHeight: 22, marginTop: 9 },
   retryGap: { marginTop: 12 },
   empty: { marginTop: 18, alignItems: "center" },
-  emptyTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 20, fontWeight: "700" },
-  emptyCopy: { color: colors.muted, fontSize: 13, lineHeight: 19, textAlign: "center", marginTop: 6 },
+  emptyTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 20, fontWeight: "600" },
+  emptyCopy: { color: colors.muted, fontSize: 15, lineHeight: 23, textAlign: "center", marginTop: 6 },
   boundary: { marginTop: 22, backgroundColor: colors.amberSoft, borderColor: "#ecd49d", borderWidth: 1, borderRadius: 12, padding: 14 },
-  boundaryTitle: { color: colors.amber, fontSize: 13, fontWeight: "700" },
-  boundaryCopy: { color: "#705f3d", fontSize: 12, lineHeight: 18, marginTop: 4 },
+  boundaryTitle: { color: colors.amber, fontSize: 15, fontWeight: "600" },
+  boundaryCopy: { color: "#705f3d", fontSize: 14, lineHeight: 22, marginTop: 4 },
 });

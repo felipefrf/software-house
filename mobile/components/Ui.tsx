@@ -1,4 +1,4 @@
-import type { PropsWithChildren, ReactNode } from "react";
+import { useState, type PropsWithChildren, type ReactNode } from "react";
 import { usePathname, useRouter } from "expo-router";
 import {
   ActivityIndicator,
@@ -33,8 +33,8 @@ export function BrandHeader({
   return (
     <View style={styles.header}>
       <View style={styles.headerCopy}>
-        <Text style={styles.eyebrow}>{eyebrow}</Text>
-        <Text style={styles.headerTitle}>{title}</Text>
+        <Text numberOfLines={1} style={styles.eyebrow}>{eyebrow}</Text>
+        <Text accessibilityRole="header" style={styles.headerTitle}>{title}</Text>
       </View>
       {action}
     </View>
@@ -78,9 +78,9 @@ export function Button({
       ]}
     >
       {busy ? (
-        <ActivityIndicator color={disabled ? colors.muted : primary ? colors.surface : colors.greenDark} />
+        <ActivityIndicator color={colors.muted} />
       ) : (
-        <Text style={[styles.buttonText, primary && styles.buttonTextPrimary, disabled && styles.buttonTextDisabled]}>
+        <Text style={[styles.buttonText, primary && styles.buttonTextPrimary, variant === "danger" && styles.buttonTextDanger, disabled && styles.buttonTextDisabled]}>
           {label}
         </Text>
       )}
@@ -96,7 +96,7 @@ export function StatusStrip({ online, pending }: { online: boolean; pending: num
       accessibilityLabel={`${online ? "Com conexão" : "Sem conexão"}. ${pending ? `${pending} registros para enviar` : "Nada para enviar"}.`}
       style={styles.statusStrip}
     >
-      <View style={[styles.dot, { backgroundColor: online ? colors.green : colors.amber }]} />
+      <View style={[styles.dot, { backgroundColor: online ? colors.success : colors.amber }]} />
       <Text style={styles.statusText}>{online ? "Com conexão" : "Sem conexão"}</Text>
       <Text style={styles.statusQueue}>
         {pending ? `${pending} para enviar` : "Nada para enviar"}
@@ -105,12 +105,25 @@ export function StatusStrip({ online, pending }: { online: boolean; pending: num
   );
 }
 
+export function Disclosure({ title, children }: PropsWithChildren<{ title: string }>) {
+  const [expanded, setExpanded] = useState(false);
+  return <View style={styles.disclosure}>
+    <Pressable accessibilityRole="button" accessibilityState={{ expanded }} aria-expanded={expanded}
+      accessibilityLabel={title} onPress={() => setExpanded(value => !value)}
+      style={styles.disclosureToggle}>
+      <Text style={styles.disclosureTitle}>{title}</Text>
+      <Text accessibilityElementsHidden importantForAccessibility="no" style={styles.disclosureTitle}>{expanded ? "−" : "+"}</Text>
+    </Pressable>
+    {expanded ? <View style={styles.disclosureBody}>{children}</View> : null}
+  </View>;
+}
+
 export function BottomNavigation() {
   const router = useRouter();
   const pathname = usePathname();
   const items = [
-    { id: "today" as const, label: "Hoje", path: "/" as const },
-    { id: "evidence" as const, label: "Evidências", path: "/evidence" as const },
+    { id: "today" as const, label: "Meu turno", path: "/" as const },
+    { id: "evidence" as const, label: "Histórico", path: "/evidence" as const },
     { id: "queue" as const, label: "Envios", path: "/queue" as const },
   ];
   const current = pathname.startsWith("/evidence")
@@ -148,11 +161,15 @@ export function BottomNavigation() {
 }
 
 const styles = StyleSheet.create({
+  disclosure: { marginTop: 20, borderTopWidth: 1, borderTopColor: colors.line },
+  disclosureToggle: { minHeight: 56, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 16 },
+  disclosureTitle: { color: colors.greenDark, fontSize: 16, lineHeight: 23, fontWeight: "500", flexShrink: 1 },
+  disclosureBody: { paddingBottom: 12 },
   screen: { flex: 1, backgroundColor: colors.ground },
   header: {
     minHeight: 72,
-    paddingHorizontal: 18,
-    paddingVertical: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
     backgroundColor: colors.surface,
     borderBottomColor: colors.line,
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -167,19 +184,20 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
   },
-  headerTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 22, fontWeight: "700", letterSpacing: -0.2, marginTop: 1 },
+  headerTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 22, lineHeight: 28, fontWeight: "600", letterSpacing: -0.2, marginTop: 1 },
   card: {
     backgroundColor: colors.surface,
     borderColor: colors.line,
     borderWidth: 1,
     borderRadius: 16,
-    padding: 16,
+    padding: 20,
     ...shadow,
   },
   button: {
     minHeight: 50,
     borderRadius: 12,
     paddingHorizontal: 18,
+    paddingVertical: 12,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
@@ -189,24 +207,24 @@ const styles = StyleSheet.create({
   buttonDanger: { borderColor: "#e1bbb7", backgroundColor: "#fff8f7" },
   buttonDisabled: { backgroundColor: colors.line, borderColor: colors.line },
   buttonPressed: { opacity: 0.78 },
-  buttonText: { color: colors.greenDark, fontWeight: "700", fontSize: 15 },
+  buttonText: { color: colors.greenDark, fontWeight: "600", fontSize: 16, lineHeight: 22 },
   buttonTextPrimary: { color: colors.surface },
+  buttonTextDanger: { color: colors.danger },
   buttonTextDisabled: { color: colors.muted },
   statusStrip: {
-    minHeight: 48,
-    marginHorizontal: 16,
-    marginTop: 14,
-    paddingHorizontal: 14,
-    backgroundColor: colors.surface,
-    borderColor: colors.line,
-    borderWidth: 1,
-    borderRadius: 12,
+    minHeight: 40,
+    marginHorizontal: 20,
+    marginTop: 0,
+    paddingHorizontal: 0,
+    backgroundColor: colors.ground,
+    flexWrap: "wrap",
+    gap: 4,
     flexDirection: "row",
     alignItems: "center",
   },
   dot: { width: 8, height: 8, borderRadius: 4, marginRight: 8 },
-  statusText: { color: colors.ink, fontWeight: "700", fontSize: 12 },
-  statusQueue: { marginLeft: "auto", color: colors.muted, fontSize: 12 },
+  statusText: { color: colors.ink, fontWeight: "400", fontSize: 13 },
+  statusQueue: { marginLeft: "auto", color: colors.muted, fontSize: 13 },
   navigationSafeArea: {
     backgroundColor: colors.surface,
     borderTopColor: colors.line,
@@ -226,7 +244,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  navigationItemActive: { backgroundColor: colors.sage },
-  navigationLabel: { color: colors.muted, fontSize: 12, fontWeight: "600" },
+  navigationItemActive: { backgroundColor: colors.sage, borderTopWidth: 3, borderTopColor: colors.green },
+  navigationLabel: { color: colors.muted, fontSize: 14, fontWeight: "600" },
   navigationLabelActive: { color: colors.greenDark },
 });

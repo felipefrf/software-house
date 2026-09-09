@@ -257,7 +257,7 @@ function StageForm() {
       <StatusStrip online={online} pending={pending} />
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           {duplicate ? (
@@ -273,7 +273,7 @@ function StageForm() {
           ) : null}
 
           <Card>
-            <Text style={styles.sectionEyebrow}>1 · Checklist obrigatório</Text>
+            <Text style={styles.sectionEyebrow}>1. Confira antes de continuar</Text>
             <Text style={styles.sectionTitle}>O que precisa estar pronto</Text>
             <View style={styles.checklist}>
               {checklistByStage[operation.stage].map((item) => {
@@ -301,51 +301,14 @@ function StageForm() {
           </Card>
 
           <Card style={styles.sectionCard}>
-            <Text style={styles.sectionEyebrow}>2 · Evidência fotográfica</Text>
+            <Text style={styles.sectionEyebrow}>2. Tire uma foto</Text>
             <Text style={styles.sectionTitle}>Registre o estado agora</Text>
             <Text style={styles.sectionCopy}>
-              A foto é guardada no armazenamento persistente antes de entrar na fila.
+              Fotografe os itens ou o serviço realizado nesta etapa.
             </Text>
             <View style={styles.captureGap}>
               <PhotoCapture captureId={deviceActionId} value={photoUri} onChange={setPhotoUri} />
             </View>
-          </Card>
-
-          <Card style={styles.sectionCard}>
-            <Text style={styles.sectionEyebrow}>3 · Local e horário</Text>
-            <Text style={styles.sectionTitle}>
-              {operation.stage === "preparation" ? "Registre o ponto inicial" : "GPS automático"}
-            </Text>
-            <Text style={styles.sectionCopy}>
-              {operation.stage === "departure"
-                ? "Ao aceitar os termos, o app captura este ponto e continua em segundo plano até o retorno."
-                : operation.stage === "preparation"
-                  ? "Este ponto comprova o local e a precisão da preparação."
-                  : "O app captura o local desta etapa sem exigir uma ação manual."}
-            </Text>
-            <View style={styles.captureGap}>
-              <Button
-                label={
-                  location
-                    ? `GPS capturado · precisão ${Math.round(location.accuracy)} m`
-                    : operation.stage === "preparation"
-                      ? "Registrar GPS"
-                      : "Atualizar GPS"
-                }
-                variant="secondary"
-                busy={locationBusy}
-                onPress={() => void captureLocation()}
-              />
-            </View>
-            {locationDenied ? (
-              <View style={styles.buttonGap}>
-                <Button
-                  label="Abrir Ajustes de localização"
-                  variant="secondary"
-                  onPress={() => void Linking.openSettings()}
-                />
-              </View>
-            ) : null}
           </Card>
 
           {trackingConsentRequired ? (
@@ -382,7 +345,44 @@ function StageForm() {
           ) : null}
 
           <Card style={styles.sectionCard}>
-            <Text style={styles.sectionEyebrow}>4 · Responsável</Text>
+            <Text style={styles.sectionEyebrow}>3. Localização</Text>
+            <Text style={styles.sectionTitle}>
+              {operation.stage === "preparation" ? "Registre o ponto inicial" : "GPS automático"}
+            </Text>
+            <Text style={styles.sectionCopy}>
+              {operation.stage === "departure"
+                ? "Ao aceitar os termos, o app captura este ponto e continua em segundo plano até o retorno."
+                : operation.stage === "preparation"
+                  ? "Este ponto comprova o local e a precisão da preparação."
+                  : "O app captura o local desta etapa sem exigir uma ação manual."}
+            </Text>
+            <View style={styles.captureGap}>
+              <Button
+                label={
+                  location
+                    ? `GPS capturado · precisão ${Math.round(location.accuracy)} m`
+                    : operation.stage === "preparation"
+                      ? "Registrar GPS"
+                      : "Atualizar GPS"
+                }
+                variant="secondary"
+                busy={locationBusy}
+                onPress={() => void captureLocation()}
+              />
+            </View>
+            {locationDenied ? (
+              <View style={styles.buttonGap}>
+                <Button
+                  label="Abrir Ajustes de localização"
+                  variant="secondary"
+                  onPress={() => void Linking.openSettings()}
+                />
+              </View>
+            ) : null}
+          </Card>
+
+          <Card style={styles.sectionCard}>
+            <Text style={styles.sectionEyebrow}>4. Confirme o responsável</Text>
             <Text style={styles.sectionTitle}>Quem responde por esta ação?</Text>
             <View style={styles.chips}>
               {responsiblePeople.map((person) => {
@@ -500,7 +500,7 @@ function StageForm() {
           </Text>
           {missingRequirements.length ? (
             <Text style={styles.missingRequirements}>
-              Falta: {missingRequirements.join(" · ")}
+              Próximo: {missingRequirements[0]}{missingRequirements.length > 1 ? ` (+${missingRequirements.length - 1})` : ""}
             </Text>
           ) : null}
           <Text style={styles.submitHint}>
@@ -531,39 +531,39 @@ function StageForm() {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   centered: { flex: 1, padding: 20, justifyContent: "center" },
-  content: { padding: 16, paddingBottom: 42 },
+  content: { padding: 20, paddingBottom: 42 },
   backButton: { minHeight: 46, minWidth: 58, borderColor: colors.line, borderWidth: 1, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  backLabel: { color: colors.greenDark, fontSize: 13, fontWeight: "700" },
+  backLabel: { color: colors.greenDark, fontSize: 15, fontWeight: "600" },
   warning: { backgroundColor: colors.amberSoft, borderColor: "#ecd49d", borderWidth: 1, borderRadius: 14, padding: 16, marginBottom: 12 },
-  warningTitle: { color: colors.amber, fontSize: 16, fontWeight: "700" },
-  warningCopy: { color: "#705f3d", fontSize: 13, lineHeight: 19, marginTop: 4 },
-  missingItem: { color: colors.danger, fontSize: 13, fontWeight: "700", marginTop: 9 },
-  sectionCard: { marginTop: 12 },
-  sectionEyebrow: { color: colors.muted, fontSize: 13, fontWeight: "600" },
-  sectionTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 22, fontWeight: "700", marginTop: 4 },
-  sectionCopy: { color: colors.muted, fontSize: 12, lineHeight: 18, marginTop: 5 },
+  warningTitle: { color: colors.amber, fontSize: 16, fontWeight: "600" },
+  warningCopy: { color: "#705f3d", fontSize: 15, lineHeight: 23, marginTop: 4 },
+  missingItem: { color: colors.danger, fontSize: 15, fontWeight: "600", marginTop: 9 },
+  sectionCard: { marginTop: 24 },
+  sectionEyebrow: { color: colors.muted, fontSize: 15, fontWeight: "600" },
+  sectionTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 20, fontWeight: "600", marginTop: 4 },
+  sectionCopy: { color: colors.muted, fontSize: 14, lineHeight: 22, marginTop: 5 },
   checklist: { marginTop: 13, borderTopColor: colors.line, borderTopWidth: StyleSheet.hairlineWidth },
   trackingConsent: { minHeight: 66, flexDirection: "row", alignItems: "center", gap: 12, marginTop: 14, borderTopColor: colors.line, borderTopWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line, borderBottomWidth: StyleSheet.hairlineWidth },
-  termsNotice: { color: colors.muted, fontSize: 12, lineHeight: 17, marginTop: 10 },
+  termsNotice: { color: colors.muted, fontSize: 14, lineHeight: 21, marginTop: 10 },
   checkRow: { minHeight: 66, flexDirection: "row", alignItems: "center", gap: 12, borderBottomColor: colors.line, borderBottomWidth: StyleSheet.hairlineWidth },
-  check: { width: 30, height: 30, borderColor: colors.amber, borderWidth: 2, alignItems: "center", justifyContent: "center" },
+  check: { width: 30, height: 30, borderColor: colors.lineStrong, borderRadius: 6, borderWidth: 2, alignItems: "center", justifyContent: "center" },
   checkDone: { borderColor: colors.green, backgroundColor: colors.green },
-  checkMark: { fontSize: 12, fontWeight: "700" },
+  checkMark: { fontSize: 14, fontWeight: "600" },
   checkMarkDone: { color: colors.surface },
-  checkLabel: { flex: 1, color: colors.ink, fontSize: 13, lineHeight: 18, fontWeight: "700" },
+  checkLabel: { flex: 1, color: colors.ink, fontSize: 15, lineHeight: 22, fontWeight: "600" },
   captureGap: { marginTop: 14 },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 13 },
   chip: { minHeight: 44, borderRadius: 22, paddingHorizontal: 14, borderColor: colors.line, borderWidth: 1, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" },
   chipSelected: { borderColor: colors.green, backgroundColor: colors.sage },
-  chipText: { color: colors.muted, fontSize: 12, fontWeight: "700" },
+  chipText: { color: colors.muted, fontSize: 14, fontWeight: "600" },
   chipTextSelected: { color: colors.greenDark },
   input: { minHeight: 50, borderColor: colors.line, borderWidth: 1, borderRadius: 11, paddingHorizontal: 13, color: colors.ink, backgroundColor: colors.surface, fontSize: 15, marginTop: 14 },
   textarea: { minHeight: 96, paddingTop: 13, textAlignVertical: "top" },
-  blockedHelp: { color: colors.amber, fontSize: 12, lineHeight: 18, marginTop: 12 },
+  blockedHelp: { color: colors.amber, fontSize: 14, lineHeight: 22, marginTop: 12 },
   buttonGap: { marginTop: 14 },
-  error: { color: colors.danger, fontSize: 13, lineHeight: 19, marginTop: 14 },
-  submitCard: { padding: 14, backgroundColor: colors.ink, gap: 8, borderTopColor: "#31423b", borderTopWidth: 1 },
-  requirementCount: { color: colors.surface, fontSize: 13, fontWeight: "700" },
-  missingRequirements: { color: "#f0cfa2", fontSize: 12, lineHeight: 17 },
-  submitHint: { color: "#cbd5d0", fontSize: 12, lineHeight: 18 },
+  error: { color: colors.danger, fontSize: 15, lineHeight: 23, marginTop: 14 },
+  submitCard: { padding: 16, backgroundColor: colors.surface, gap: 8, borderTopColor: colors.line, borderTopWidth: 1 },
+  requirementCount: { color: colors.ink, fontSize: 15, fontWeight: "600" },
+  missingRequirements: { color: colors.muted, fontSize: 14, lineHeight: 21 },
+  submitHint: { color: colors.muted, fontSize: 14, lineHeight: 22 },
 });

@@ -6,6 +6,7 @@ import {
   BrandHeader,
   Button,
   Card,
+  Disclosure,
   Screen,
   StatusStrip,
 } from "@/components/Ui";
@@ -50,14 +51,12 @@ export default function EvidenceScreen() {
 
   return (
     <Screen>
-      <BrandHeader eyebrow="Confirmações persistidas" title="Evidências" />
+      <BrandHeader title="Histórico" />
       <StatusStrip online={online} pending={pending} />
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.title}>Ações confirmadas pelo servidor.</Text>
+        <Text style={styles.title}>Registros recebidos</Text>
         <Text style={styles.copy}>
-          Esta lista vem de operation_events e pode incluir ações enviadas por outros
-          aparelhos autorizados. As fotos privadas abrem com um link válido por 60
-          segundos.
+          Veja as etapas confirmadas e suas fotos. Registros que ainda não chegaram ficam na aba Envios.
         </Text>
         {work ? (
           <Text style={styles.freshness}>
@@ -110,6 +109,7 @@ export default function EvidenceScreen() {
                   <Text style={styles.meta}>
                     Capturada em {formatDate(event.device_captured_at)}
                   </Text>
+                  <Disclosure title="Detalhes do registro">
                   <Text style={styles.meta}>
                     Servidor recebeu em {formatDate(event.server_received_at)}
                   </Text>
@@ -123,10 +123,11 @@ export default function EvidenceScreen() {
                     GPS {event.latitude.toFixed(5)}, {event.longitude.toFixed(5)} ·
                     precisão {Math.round(event.accuracy)} m
                   </Text>
+                  </Disclosure>
                   {event.note ? <Text style={styles.note}>{event.note}</Text> : null}
                   <View style={styles.buttonGap}>
                     <Button
-                      label="Abrir foto privada"
+                      label="Ver foto"
                       variant="secondary"
                       disabled={!online}
                       busy={openingId === event.id}
@@ -141,8 +142,7 @@ export default function EvidenceScreen() {
           <Card style={styles.empty}>
             <Text style={styles.emptyTitle}>Nenhuma evidência confirmada</Text>
             <Text style={styles.emptyCopy}>
-              Uma evidência só aparece aqui depois que a RPC confirma a ação no
-              servidor.
+              Depois de concluir uma etapa e enviar seu registro, a confirmação aparecerá aqui.
             </Text>
           </Card>
         )}
@@ -152,15 +152,15 @@ export default function EvidenceScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: { padding: 16, paddingBottom: 40 },
-  title: { color: colors.ink, fontFamily: fonts.display, fontSize: 29, lineHeight: 34, fontWeight: "700" },
-  copy: { color: colors.muted, fontSize: 13, lineHeight: 19, marginTop: 6 },
-  freshness: { color: colors.green, fontSize: 12, fontWeight: "700", marginTop: 10 },
-  error: { color: colors.danger, fontSize: 13, marginTop: 14 },
+  content: { padding: 20, paddingBottom: 40 },
+  title: { color: colors.ink, fontFamily: fonts.display, fontSize: 24, lineHeight: 31, fontWeight: "600" },
+  copy: { color: colors.muted, fontSize: 15, lineHeight: 23, marginTop: 6 },
+  freshness: { color: colors.green, fontSize: 14, fontWeight: "600", marginTop: 10 },
+  error: { color: colors.danger, fontSize: 15, marginTop: 14 },
   refreshGap: { marginTop: 14 },
   list: { marginTop: 16, gap: 10 },
   item: { padding: 15 },
-  operation: { color: colors.ink, fontFamily: fonts.display, fontSize: 18, fontWeight: "700" },
+  operation: { color: colors.ink, fontFamily: fonts.display, fontSize: 18, fontWeight: "600" },
   row: {
     flexDirection: "row",
     alignItems: "center",
@@ -168,13 +168,13 @@ const styles = StyleSheet.create({
     gap: 10,
     marginTop: 7,
   },
-  stage: { color: colors.greenDark, fontSize: 13, fontWeight: "700" },
-  confirmed: { color: colors.green, fontSize: 12, fontWeight: "700" },
-  meta: { color: colors.muted, fontSize: 12, lineHeight: 18, marginTop: 5 },
+  stage: { color: colors.greenDark, fontSize: 15, fontWeight: "600" },
+  confirmed: { color: colors.green, fontSize: 14, fontWeight: "600" },
+  meta: { color: colors.muted, fontSize: 14, lineHeight: 22, marginTop: 5 },
   note: {
     color: colors.ink,
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 15,
+    lineHeight: 22,
     marginTop: 10,
     padding: 10,
     borderRadius: 9,
@@ -182,11 +182,11 @@ const styles = StyleSheet.create({
   },
   buttonGap: { marginTop: 13 },
   empty: { marginTop: 18, alignItems: "center" },
-  emptyTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 20, fontWeight: "700" },
+  emptyTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 20, fontWeight: "600" },
   emptyCopy: {
     color: colors.muted,
-    fontSize: 13,
-    lineHeight: 19,
+    fontSize: 15,
+    lineHeight: 23,
     textAlign: "center",
     marginTop: 6,
   },
